@@ -1,0 +1,12 @@
+{
+  "name": "formae-mcp",
+  "description": "MCP server and skills for formae infrastructure-as-code: manage cloud resources, handle drift, discover infrastructure, and build plugins",
+  "version": "0.1.0",
+  "author": {
+    "name": "Platform Engineering Labs"
+  },
+  "homepage": "https://github.com/platform-engineering-labs/formae-mcp",
+  "repository": "https://github.com/platform-engineering-labs/formae-mcp",
+  "license": "FSL-1.1-MIT",
+  "keywords": ["formae", "iac", "infrastructure", "cloud", "mcp", "drift", "discovery"]
+}

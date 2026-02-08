@@ -1,0 +1,9 @@
+{
+  "formae": {
+    "command": "formae-mcp",
+    "env": {
+      "FORMAE_AGENT_URL": "${FORMAE_AGENT_URL}",
+      "FORMAE_AGENT_PORT": "${FORMAE_AGENT_PORT}"
+    }
+  }
+}

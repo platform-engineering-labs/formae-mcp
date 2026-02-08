@@ -1,0 +1,9 @@
+# Binary
+/formae-mcp
+
+# Claude Code local settings
+.claude/
+
+# Development docs (plans, handoffs)
+docs/plans/
+CLAUDE.md
