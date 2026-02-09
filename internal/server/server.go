@@ -107,6 +107,12 @@ func (s *Server) registerTools() {
 		Annotations: readOnly,
 	}, s.handleListPlugins)
 
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "extract_resources",
+		Description: tools.ExtractResourcesDescription,
+		Annotations: readOnly,
+	}, s.handleExtractResources)
+
 	// Mutation tools
 	destructive := boolPtr(true)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
@@ -213,6 +219,31 @@ func (s *Server) handleListPlugins(_ context.Context, _ *mcp.CallToolRequest, in
 	return textResult(string(output)), nil, nil
 }
 
+func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolRequest, input tools.ExtractResourcesInput) (*mcp.CallToolResult, any, error) {
+	if input.Query == "" {
+		return errorResult(fmt.Errorf("query is required")), nil, nil
+	}
+
+	tmpDir, err := os.MkdirTemp("", "formae-extract-*")
+	if err != nil {
+		return errorResult(fmt.Errorf("failed to create temp directory: %w", err)), nil, nil
+	}
+	defer os.RemoveAll(tmpDir)
+
+	outFile := tmpDir + "/extracted.pkl"
+	cmd := exec.Command("formae", "extract", "--query", input.Query, "--yes", outFile)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output))), nil, nil
+	}
+
+	content, err := os.ReadFile(outFile)
+	if err != nil {
+		return errorResult(fmt.Errorf("failed to read extracted file: %w", err)), nil, nil
+	}
+
+	return textResult(string(content)), nil, nil
+}
+
 // Tool handlers — mutations
 
 func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, input tools.ApplyFormaInput) (*mcp.CallToolResult, any, error) {
@@ -295,7 +326,7 @@ func evalFormaFile(filePath string) ([]byte, error) {
 		return os.ReadFile(filePath)
 	}
 
-	cmd := exec.Command("formae", "eval", filePath, "--output", "json")
+	cmd := exec.Command("formae", "eval", filePath, "--output-schema", "json")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

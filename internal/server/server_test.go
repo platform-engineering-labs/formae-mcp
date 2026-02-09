@@ -465,6 +465,36 @@ func TestDestroyForma_ByQuery(t *testing.T) {
 	}
 }
 
+// --- Extract resources tests ---
+
+func TestExtractResources_Registered(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.ListTools(context.Background(), &mcp.ListToolsParams{})
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+	found := false
+	for _, tool := range result.Tools {
+		if tool.Name == "extract_resources" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("extract_resources tool not registered")
+	}
+}
+
+func TestExtractResources_MissingQuery(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	_, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "extract_resources",
+	})
+	if err == nil {
+		t.Fatal("expected schema validation error for missing query")
+	}
+}
+
 // --- Agent error handling tests ---
 
 func TestListResources_AgentError(t *testing.T) {

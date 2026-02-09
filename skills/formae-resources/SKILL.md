@@ -7,18 +7,25 @@ description: "Use when the user asks about deployed infrastructure, what resourc
 
 Use the `list_resources` MCP tool to query the formae agent for infrastructure resources.
 
+## Important: Avoid Unbounded Queries
+
+The resources endpoint returns ALL matching resources with full properties. An empty query on a large environment can return hundreds of thousands of characters, overwhelming the context window.
+
+**Always narrow the query** using at least one filter. If the user asks a broad question like "what resources do we have?", start with `get_agent_stats` for counts, then drill down.
+
 ## Workflow
 
-1. Translate the user's natural language request into a Bluge query
-2. Call `list_resources` with the query
-3. Present results grouped logically (by stack, type, or target as appropriate)
+1. For broad questions ("what do we have?"): call `get_agent_stats` first to get resource counts by provider
+2. For specific questions: translate to a Bluge query with at least one filter
+3. Call `list_resources` with the narrowed query
+4. Present results grouped logically (by stack, type, or target as appropriate)
 
 ## Query Examples
 
-| User asks... | Query |
+| User asks... | Approach |
 |---|---|
-| "What resources do we have?" | _(empty)_ |
-| "Show me all S3 buckets" | `type:AWS::S3::Bucket` |
+| "What resources do we have?" | Use `get_agent_stats` for overview, then drill down |
+| "How many S3 buckets?" | `type:AWS::S3::Bucket` |
 | "What's in production?" | `stack:production` |
 | "Show unmanaged resources" | `managed:false` |
 | "S3 buckets in staging" | `type:AWS::S3::Bucket stack:staging` |
@@ -31,4 +38,4 @@ Read the `formae://docs/query-syntax` resource for the full query syntax referen
 - Group by stack or type depending on context
 - Show resource type, label, and key properties
 - Highlight management status (managed vs unmanaged)
-- For large result sets, summarize with counts before showing details
+- Summarize with counts before showing full details

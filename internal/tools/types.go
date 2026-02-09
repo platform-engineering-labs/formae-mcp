@@ -43,3 +43,8 @@ type DestroyFormaInput struct {
 type CancelCommandsInput struct {
 	Query string `json:"query,omitempty" jsonschema:"Optional query to select which commands to cancel. If empty, cancels the most recent in-progress command."`
 }
+
+// ExtractResourcesInput is the input for the extract_resources tool.
+type ExtractResourcesInput struct {
+	Query string `json:"query" jsonschema:"required,Bluge query string to select resources for extraction. Examples: 'managed:false type:AWS::S3::Bucket', 'managed:false stack:production'. Must include at least one filter to avoid extracting all resources."`
+}

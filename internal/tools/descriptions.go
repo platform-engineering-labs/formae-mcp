@@ -7,14 +7,15 @@ const ListResourcesDescription = `Query infrastructure resources managed by the 
 
 Use this tool when the user asks about deployed infrastructure, what resources exist, what's in a specific stack, or to find unmanaged resources discovered by the agent.
 
+IMPORTANT: This endpoint returns ALL matching resources with full properties. On large environments a broad query can return hundreds of thousands of characters and overflow the context window. You MUST always combine 'managed:false' with a type filter (e.g., 'managed:false type:AWS::S3::Bucket'). Never use 'managed:false' alone. For broad questions like "what do we have?" or "what's unmanaged?", use get_agent_stats first for an overview of counts by provider, then drill down with type-filtered queries.
+
 Query syntax uses field:value pairs. Supported fields:
 - stack: filter by stack name (e.g., 'stack:production')
 - type: filter by resource type (e.g., 'type:AWS::S3::Bucket')
 - label: filter by resource label (e.g., 'label:my-bucket')
 - managed: filter by management status (e.g., 'managed:false' for unmanaged/discovered resources)
 
-Multiple filters can be combined: 'stack:production type:AWS::S3::Bucket'
-Leave query empty to list all resources.`
+Multiple filters can be combined: 'stack:production type:AWS::S3::Bucket'`
 
 const ListStacksDescription = `List all infrastructure stacks known to the formae agent. Returns stack metadata including label, description, and resource count.
 
@@ -87,3 +88,11 @@ Note: In environments with many resources, sync may take significant time. The s
 const ForceDiscoverDescription = `Trigger an immediate resource discovery scan across configured cloud targets. The formae agent discovers new (unmanaged) resources periodically, but this forces an immediate discovery cycle.
 
 Newly discovered resources appear as unmanaged resources that can be queried with list_resources using 'managed:false'.`
+
+const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
+
+Use this tool when you need to see the PKL representation of existing resources — typically unmanaged resources that the user wants to bring under formae management. The extracted PKL can then be merged into the user's existing forma files.
+
+The query parameter selects which resources to extract. Always include at least one filter to avoid extracting the entire inventory.
+
+Returns the extracted PKL source code as text.`
