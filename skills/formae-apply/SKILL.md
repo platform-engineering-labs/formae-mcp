@@ -37,6 +37,7 @@ If the simulation reports drift (out-of-band changes detected), the apply may be
 
 ## Important
 
+- NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
 - NEVER skip the simulation step
 - NEVER apply without user confirmation
 - For targeted urgent fixes, use `/formae-patch` instead

@@ -34,6 +34,7 @@ After a successful patch, always remind the user:
 
 ## Important
 
+- NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
 - NEVER skip the simulation step
 - NEVER apply without user confirmation
 - Patches are for urgency. For planned changes, use `/formae-apply`

@@ -33,6 +33,7 @@ Destruction can be specified two ways (mutually exclusive):
 
 ## Important
 
+- NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
 - NEVER skip the simulation step
 - NEVER destroy without explicit user confirmation
 - Destruction is **irreversible**
