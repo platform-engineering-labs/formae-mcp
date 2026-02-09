@@ -44,6 +44,11 @@ type CancelCommandsInput struct {
 	Query string `json:"query,omitempty" jsonschema:"Optional query to select which commands to cancel. If empty, cancels the most recent in-progress command."`
 }
 
+// ListDriftInput is the input for the list_drift tool.
+type ListDriftInput struct {
+	Stack string `json:"stack,omitempty" jsonschema:"Stack label to check for drift. If omitted, checks all stacks."`
+}
+
 // ExtractResourcesInput is the input for the extract_resources tool.
 type ExtractResourcesInput struct {
 	Query string `json:"query" jsonschema:"required,Bluge query string to select resources for extraction. Examples: 'managed:false type:AWS::S3::Bucket', 'managed:false stack:production'. Must include at least one filter to avoid extracting all resources."`

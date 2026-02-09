@@ -108,6 +108,12 @@ func (s *Server) registerTools() {
 	}, s.handleListPlugins)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "list_drift",
+		Description: tools.ListDriftDescription,
+		Annotations: readOnly,
+	}, s.handleListDrift)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "extract_resources",
 		Description: tools.ExtractResourcesDescription,
 		Annotations: readOnly,
@@ -219,6 +225,61 @@ func (s *Server) handleListPlugins(_ context.Context, _ *mcp.CallToolRequest, in
 	return textResult(string(output)), nil, nil
 }
 
+func (s *Server) handleListDrift(_ context.Context, _ *mcp.CallToolRequest, input tools.ListDriftInput) (*mcp.CallToolResult, any, error) {
+	if input.Stack != "" {
+		result, err := s.client.ListDrift(input.Stack)
+		if err != nil {
+			return errorResult(err), nil, nil
+		}
+		return jsonResult(result), nil, nil
+	}
+
+	// No stack specified: fetch all stacks, then get drift for each
+	stacksJSON, err := s.client.ListStacks()
+	if err != nil {
+		return errorResult(fmt.Errorf("failed to list stacks: %w", err)), nil, nil
+	}
+
+	var stacks []struct {
+		Label string `json:"Label"`
+	}
+	if err := json.Unmarshal(stacksJSON, &stacks); err != nil {
+		return errorResult(fmt.Errorf("failed to parse stacks: %w", err)), nil, nil
+	}
+
+	type stackDrift struct {
+		Stack             string          `json:"Stack"`
+		ModifiedResources json.RawMessage `json:"ModifiedResources"`
+	}
+	var results []stackDrift
+
+	for _, stack := range stacks {
+		driftJSON, err := s.client.ListDrift(stack.Label)
+		if err != nil {
+			return errorResult(fmt.Errorf("failed to get drift for stack %s: %w", stack.Label, err)), nil, nil
+		}
+
+		// Parse to check if there are modifications
+		var drift struct {
+			ModifiedResources json.RawMessage `json:"ModifiedResources"`
+		}
+		if err := json.Unmarshal(driftJSON, &drift); err != nil {
+			return errorResult(fmt.Errorf("failed to parse drift for stack %s: %w", stack.Label, err)), nil, nil
+		}
+
+		results = append(results, stackDrift{
+			Stack:             stack.Label,
+			ModifiedResources: drift.ModifiedResources,
+		})
+	}
+
+	aggregated, err := json.Marshal(results)
+	if err != nil {
+		return errorResult(fmt.Errorf("failed to marshal results: %w", err)), nil, nil
+	}
+	return jsonResult(aggregated), nil, nil
+}
+
 func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolRequest, input tools.ExtractResourcesInput) (*mcp.CallToolResult, any, error) {
 	if input.Query == "" {
 		return errorResult(fmt.Errorf("query is required")), nil, nil
@@ -326,7 +387,7 @@ func evalFormaFile(filePath string) ([]byte, error) {
 		return os.ReadFile(filePath)
 	}
 
-	cmd := exec.Command("formae", "eval", filePath, "--output-schema", "json")
+	cmd := exec.Command("formae", "eval", filePath, "--output-schema", "json", "--output-consumer", "machine")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

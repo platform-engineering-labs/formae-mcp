@@ -129,15 +129,28 @@ func (c *FormaeClient) GetCommandStatus(commandID string, clientID string) (json
 	q := url.Values{}
 	q.Set("id", commandID)
 
-	body, status, err := c.get("/api/v1/commands/status", q)
+	req, err := http.NewRequest("GET", c.endpoint+"/api/v1/commands/status"+"?"+q.Encode(), nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	if status == http.StatusNotFound {
+	req.Header.Set("Client-ID", clientID)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("command %s not found", commandID)
 	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return body, nil
@@ -286,6 +299,20 @@ func (c *FormaeClient) CancelCommands(query string, clientID string) (json.RawMe
 	}
 	if resp.StatusCode != http.StatusAccepted {
 		return nil, fmt.Errorf("agent returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return body, nil
+}
+
+// ListDrift retrieves drift (modifications since last reconcile) for a stack.
+func (c *FormaeClient) ListDrift(stack string) (json.RawMessage, error) {
+	path := fmt.Sprintf("/api/v1/stacks/%s/drift", url.PathEscape(stack))
+	body, status, err := c.get(path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
 	return body, nil

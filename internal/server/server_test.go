@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -456,6 +457,87 @@ func TestDestroyForma_ByQuery(t *testing.T) {
 			"query":    "stack:staging",
 			"simulate": true,
 		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+}
+
+// --- Drift tests ---
+
+func TestListDrift_SingleStack(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/stacks/production/drift": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"my-bucket","Operation":"update"}]}`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "list_drift",
+		Arguments: map[string]any{"stack": "production"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if text == "" {
+		t.Error("expected non-empty result")
+	}
+	if !strings.Contains(text, "my-bucket") {
+		t.Errorf("expected result to contain 'my-bucket', got: %s", text)
+	}
+}
+
+func TestListDrift_AllStacks(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/stacks": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[{"Label":"production"},{"Label":"staging"}]`)
+		},
+		"GET /api/v1/stacks/production/drift": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"prod-bucket","Operation":"update"}]}`)
+		},
+		"GET /api/v1/stacks/staging/drift": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"ModifiedResources":[]}`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_drift",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "production") || !strings.Contains(text, "staging") {
+		t.Errorf("expected result to contain both stacks, got: %s", text)
+	}
+}
+
+func TestListDrift_NoDrift(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/stacks/production/drift": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"ModifiedResources":[]}`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "list_drift",
+		Arguments: map[string]any{"stack": "production"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool failed: %v", err)
