@@ -9,27 +9,41 @@ MCP server and AI coding skills for [formae](https://formae.io), a modern infras
 
 ## Installation
 
-### Claude Code
+### Claude Code (via Plugin Marketplace)
 
-1. Install the MCP server binary:
+Register the marketplace:
 
-   ```bash
-   go install github.com/platform-engineering-labs/formae-mcp/cmd/formae-mcp@latest
-   ```
+```
+/plugin marketplace add platform-engineering-labs/formae-marketplace
+```
 
-2. Clone the repo for skills:
+Install the plugin:
+
+```
+/plugin install formae-mcp@formae-marketplace
+```
+
+Restart Claude Code for the plugin to take effect. The MCP server binary is built automatically on first use.
+
+Verify by asking Claude to run `/formae-status`.
+
+### Claude Code (manual)
+
+If you prefer not to use the marketplace:
+
+1. Clone the repo:
 
    ```bash
    git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.claude/plugins/formae-mcp
    ```
 
-3. Start Claude Code with the plugin directory:
+2. Start Claude Code with the plugin directory:
 
    ```bash
    claude --plugin-dir ~/.claude/plugins/formae-mcp
    ```
 
-4. Verify by asking Claude to run `/formae-status`.
+The MCP server binary is built automatically on first use.
 
 ### Codex
 
