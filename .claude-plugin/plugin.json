@@ -8,5 +8,10 @@
   "homepage": "https://github.com/platform-engineering-labs/formae-mcp",
   "repository": "https://github.com/platform-engineering-labs/formae-mcp",
   "license": "FSL-1.1-MIT",
-  "keywords": ["formae", "iac", "infrastructure", "cloud", "mcp", "drift", "discovery"]
+  "keywords": ["formae", "iac", "infrastructure", "cloud", "mcp", "drift", "discovery"],
+  "mcpServers": {
+    "formae": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/start-mcp.sh"
+    }
+  }
 }
