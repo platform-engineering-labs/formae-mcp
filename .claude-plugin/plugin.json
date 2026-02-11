@@ -7,7 +7,7 @@
   },
   "homepage": "https://github.com/platform-engineering-labs/formae-mcp",
   "repository": "https://github.com/platform-engineering-labs/formae-mcp",
-  "license": "FSL-1.1-MIT",
+  "license": "FSL-1.1-ALv2",
   "keywords": ["formae", "iac", "infrastructure", "cloud", "mcp", "drift", "discovery"],
   "mcpServers": {
     "formae": {
