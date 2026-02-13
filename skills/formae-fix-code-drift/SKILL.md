@@ -69,7 +69,10 @@ For resources the user wants to overwrite:
 2. Present the simulation showing what will be pushed back to the cloud
 3. **Ask for explicit confirmation** before proceeding
 4. Run `apply_forma` with `mode: reconcile`, `simulate: false`, `force: true`
-5. Poll `get_command_status` to monitor progress, waiting **5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
+5. Poll `get_command_status` to monitor progress:
+   - **Wait 5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
+   - **Only report state transitions** — silently poll until a resource changes status.
+   - Summarize what changed rather than dumping the full JSON.
 
 ### 7. Post-workflow
 

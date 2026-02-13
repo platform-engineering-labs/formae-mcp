@@ -20,7 +20,10 @@ Destruction can be specified two ways (mutually exclusive):
 3. Present what will be destroyed — clearly and completely
 4. **Ask for explicit confirmation** — destruction is irreversible
 5. If confirmed: call `destroy_forma` with `simulate: false`
-6. Poll `get_command_status` to monitor progress, but **wait 5 seconds between polls** to avoid burning context window. Do NOT poll in a tight loop. Use `sleep 5` between calls.
+6. Poll `get_command_status` to monitor progress:
+   - **Wait 5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
+   - **Only report state transitions** — do NOT print anything unless a resource changed status since the last poll (e.g., in_progress → completed, in_progress → failed). Silently poll until something changes.
+   - When reporting, summarize what changed (e.g., "3 resources deleted, VPC now destroying") rather than dumping the full JSON.
 7. Report results
 
 ## Common Patterns

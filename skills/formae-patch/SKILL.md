@@ -23,7 +23,10 @@ Patch only applies the changes explicitly specified in the forma file. Other res
 4. Show exactly what will change
 5. **Ask for explicit confirmation**
 6. If confirmed: call `apply_forma` with `mode: patch`, `simulate: false`
-7. Poll `get_command_status` to monitor progress, waiting **5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
+7. Poll `get_command_status` to monitor progress:
+   - **Wait 5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
+   - **Only report state transitions** — do NOT print anything unless a resource changed status since the last poll. Silently poll until something changes.
+   - When reporting, summarize what changed rather than dumping the full JSON.
 8. Report results
 
 ## Post-Patch Reminder
