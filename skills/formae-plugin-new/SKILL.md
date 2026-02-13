@@ -15,10 +15,12 @@ After ANY code changes to the plugin, you MUST run `make install` before running
 
 ### 1. Gather requirements
 
+Ask the user an open-ended question: what provider or service do they want to build a plugin for, and which resource types should it support? Do NOT present a multiple-choice list of providers — there are thousands of possible targets and we cannot guess. Just ask.
+
 Collect the following from the user:
 
 - **Provider/service**: e.g., Cloudflare, Datadog, GitHub
-- **Resource types**: e.g., DNS records, monitors, repositories
+- **Resource types**: Once the user names the provider, research the provider's API thoroughly before suggesting resource types. Present a well-researched list organized in implementation waves (e.g., "Wave 1: core resources, Wave 2: networking, Wave 3: IAM/security"). The user should be able to pick individual resources or entire waves. Do NOT present a hastily assembled shortlist — take the time to understand the provider's full resource catalog first.
 - **Credentials**: how should authentication be configured? (env vars, config files, API keys)
 - **Polymorphic structures**: are there resources with different field shapes per subtype? (e.g., DNS records with different fields per record type)
 - **Development mode**: autonomous or guided?
@@ -79,12 +81,21 @@ Tutorial lessons to follow (adapt to target provider):
 9. **Error handling** — use `OperationErrorCode` patterns from the SDK
 10. **Conformance tests** — run `make conformance-test`
 
-**Use TDD for steps 4–8**: write a failing test, implement the minimum code to pass it, verify, then move to the next operation.
+**MANDATORY: TDD for steps 4–8.** Each tutorial lesson includes integration tests (e.g., `TestCreate`, `TestRead`, `TestReadNotFound`, `TestUpdate`, `TestDelete`, `TestDeleteNotFound`, `TestList`). For EVERY CRUD operation you MUST follow this exact loop:
+
+1. **Fetch the tutorial page** for that operation (e.g., `https://docs.formae.io/en/latest/plugin-sdk/tutorial/05-create/`)
+2. **Write the integration test FIRST** — adapt the tutorial's test to the target provider. The test must compile but fail because the operation is not yet implemented.
+3. **Run the test** — confirm it fails for the right reason (not implemented, not a compile error).
+4. **Implement the operation** — write the minimum code to make the test pass.
+5. **Run `make install && go test -tags=integration ./...`** — confirm the test passes.
+6. **Move to the next operation** — do NOT skip ahead.
+
+NEVER write implementation code before its corresponding test. NEVER skip writing tests. If you implement Create without first writing TestCreate, you are doing it wrong.
 
 **Guided mode checkpoints** (skip all in autonomous mode):
 - After step 1 (schema): present PKL resource definitions for review
 - After step 2 (target): present target config approach for review
-- After each CRUD operation (steps 4–8): present the test and implementation for review
+- After each CRUD operation (steps 4–8): present the failing test for review, then present the passing implementation for review
 - After step 8 (list/discovery): present discovery implementation for review
 
 In guided mode, do not proceed past a checkpoint until the user approves. If the user requests changes, make them and re-present.
