@@ -1,6 +1,6 @@
 # formae-mcp
 
-MCP server and AI coding skills for [formae](https://formae.io), a modern infrastructure-as-code tool. Provides 15 MCP tools for querying and managing cloud infrastructure, plus 12 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
+MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 15 MCP tools for querying and managing cloud infrastructure, plus 12 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
 
 ## Prerequisites
 
