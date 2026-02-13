@@ -32,7 +32,7 @@ This is the standard mode for planned deployments.
 ## Force Flag
 
 If the simulation reports drift (out-of-band changes detected), the apply may be rejected. The user can choose to:
-- **Investigate**: Use `/formae-drift` to understand the changes
+- **Investigate**: Use `/formae-fix-code-drift` to understand the changes
 - **Force**: Set `force: true` to overwrite the drift
 
 ## Important

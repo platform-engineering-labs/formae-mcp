@@ -1,5 +1,5 @@
 ---
-name: formae-drift
+name: formae-fix-code-drift
 description: "Use when the user wants to check for infrastructure drift, see what changed out-of-band, or absorb/overwrite out-of-band changes into their IaC codebase"
 ---
 
@@ -13,13 +13,13 @@ When absorbing drift, you MUST run a reconcile simulation immediately after edit
 
 ### 1. Check for drift
 
-Ask the user whether they want to check a specific stack or all stacks. Then call `list_drift` with the appropriate stack parameter (or omit it for all stacks).
+Ask the user whether they want to check a specific stack or all stacks. Then call `list_changes_since_last_reconcile` with the appropriate stack parameter (or omit it for all stacks).
 
 ### 2. Verify drift against IaC code
 
 The drift endpoint reports modifications since the last reconcile. However, drift may have already been absorbed into the IaC code without a reconcile having been run since. To distinguish true drift from already-absorbed drift:
 
-1. If `list_drift` returns modifications, ask the user for the path to their main forma file
+1. If `list_changes_since_last_reconcile` returns modifications, ask the user for the path to their main forma file
 2. Run `apply_forma` with `mode: reconcile`, `simulate: true`, `force: true` on that file
 3. Cross-reference the results:
    - Resources in the drift list that also appear as **updates** in the simulation → **true drift** (code doesn't match cloud)
@@ -73,7 +73,7 @@ For resources the user wants to overwrite:
 
 ### 7. Post-workflow
 
-After handling all drifted resources, re-run the verification from step 2 to confirm all remaining drift has been absorbed. Note that `list_drift` alone may still report drift for absorbed resources — this is expected and will clear on the next reconcile.
+After handling all drifted resources, re-run the verification from step 2 to confirm all remaining drift has been absorbed. Note that `list_changes_since_last_reconcile` alone may still report drift for absorbed resources — this is expected and will clear on the next reconcile.
 
 ## Important
 

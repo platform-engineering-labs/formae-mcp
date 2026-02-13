@@ -44,9 +44,9 @@ type CancelCommandsInput struct {
 	Query string `json:"query,omitempty" jsonschema:"Optional query to select which commands to cancel. If empty, cancels the most recent in-progress command."`
 }
 
-// ListDriftInput is the input for the list_drift tool.
-type ListDriftInput struct {
-	Stack string `json:"stack,omitempty" jsonschema:"Stack label to check for drift. If omitted, checks all stacks."`
+// ListChangesSinceLastReconcileInput is the input for the list_changes_since_last_reconcile tool.
+type ListChangesSinceLastReconcileInput struct {
+	Stack string `json:"stack,omitempty" jsonschema:"Stack label to check for changes. If omitted, checks all stacks."`
 }
 
 // ExtractResourcesInput is the input for the extract_resources tool.

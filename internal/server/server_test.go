@@ -466,11 +466,11 @@ func TestDestroyForma_ByQuery(t *testing.T) {
 	}
 }
 
-// --- Drift tests ---
+// --- Changes since last reconcile tests ---
 
-func TestListDrift_SingleStack(t *testing.T) {
+func TestListChangesSinceLastReconcile_SingleStack(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
-		"GET /api/v1/stacks/production/drift": func(w http.ResponseWriter, r *http.Request) {
+		"GET /api/v1/stacks/production/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"my-bucket","Operation":"update"}]}`)
 		},
 	})
@@ -478,7 +478,7 @@ func TestListDrift_SingleStack(t *testing.T) {
 
 	session := connectTestServer(t, agent.URL)
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "list_drift",
+		Name:      "list_changes_since_last_reconcile",
 		Arguments: map[string]any{"stack": "production"},
 	})
 	if err != nil {
@@ -496,15 +496,15 @@ func TestListDrift_SingleStack(t *testing.T) {
 	}
 }
 
-func TestListDrift_AllStacks(t *testing.T) {
+func TestListChangesSinceLastReconcile_AllStacks(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/stacks": func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `[{"Label":"production"},{"Label":"staging"}]`)
 		},
-		"GET /api/v1/stacks/production/drift": func(w http.ResponseWriter, r *http.Request) {
+		"GET /api/v1/stacks/production/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"prod-bucket","Operation":"update"}]}`)
 		},
-		"GET /api/v1/stacks/staging/drift": func(w http.ResponseWriter, r *http.Request) {
+		"GET /api/v1/stacks/staging/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"ModifiedResources":[]}`)
 		},
 	})
@@ -512,7 +512,7 @@ func TestListDrift_AllStacks(t *testing.T) {
 
 	session := connectTestServer(t, agent.URL)
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "list_drift",
+		Name: "list_changes_since_last_reconcile",
 	})
 	if err != nil {
 		t.Fatalf("CallTool failed: %v", err)
@@ -526,9 +526,9 @@ func TestListDrift_AllStacks(t *testing.T) {
 	}
 }
 
-func TestListDrift_NoDrift(t *testing.T) {
+func TestListChangesSinceLastReconcile_NoChanges(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
-		"GET /api/v1/stacks/production/drift": func(w http.ResponseWriter, r *http.Request) {
+		"GET /api/v1/stacks/production/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"ModifiedResources":[]}`)
 		},
 	})
@@ -536,7 +536,7 @@ func TestListDrift_NoDrift(t *testing.T) {
 
 	session := connectTestServer(t, agent.URL)
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "list_drift",
+		Name:      "list_changes_since_last_reconcile",
 		Arguments: map[string]any{"stack": "production"},
 	})
 	if err != nil {

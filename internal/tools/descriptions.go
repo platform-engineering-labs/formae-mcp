@@ -89,13 +89,13 @@ const ForceDiscoverDescription = `Trigger an immediate resource discovery scan a
 
 Newly discovered resources appear as unmanaged resources that can be queried with list_resources using 'managed:false'.`
 
-const ListDriftDescription = `List infrastructure drift (out-of-band changes) detected since the last reconcile.
+const ListChangesSinceLastReconcileDescription = `List infrastructure changes detected since the last reconcile.
 
-Use this tool when the user asks about drift, out-of-band changes, or what has changed in their infrastructure outside of formae. Returns a list of modified resources grouped by stack, showing the resource type, label, and operation (update/delete).
+Use this tool when the user asks about out-of-band changes, or what has changed in their infrastructure outside of formae since the last reconcile. Returns a list of modified resources grouped by stack, showing the resource type, label, and operation (update/delete).
 
 If a stack is specified, only checks that stack. If no stack is specified, checks all known stacks and aggregates the results.
 
-An empty result means no drift has been detected — the infrastructure matches the last reconciled state.`
+An empty result means no changes have been detected — the infrastructure matches the last reconciled state.`
 
 const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
 

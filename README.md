@@ -65,10 +65,11 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-apply` | Deploy infrastructure by applying a forma file or reconciling a stack |
 | `formae-patch` | Make targeted infrastructure changes without a full reconcile |
 | `formae-destroy` | Tear down infrastructure resources, stacks, or environments |
-| `formae-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
+| `formae-fix-code-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
 | `formae-discover` | Find unmanaged resources in cloud accounts |
 | `formae-import` | Bring unmanaged/discovered resources under formae management |
 | `formae-plugin-new` | Scaffold a new formae resource plugin |
+| `formae-plugin-add-resource` | Add a new resource type to an existing plugin |
 
 ## Available MCP Tools
 
@@ -84,7 +85,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `get_agent_stats` | Retrieve agent statistics |
 | `check_health` | Health check for the formae agent |
 | `list_plugins` | List active plugins |
-| `list_drift` | List infrastructure drift by stack |
+| `list_changes_since_last_reconcile` | List infrastructure changes since last reconcile |
 | `extract_resources` | Extract resources as PKL code |
 
 ### Mutation

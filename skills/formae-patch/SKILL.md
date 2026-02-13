@@ -30,7 +30,7 @@ Patch only applies the changes explicitly specified in the forma file. Other res
 
 After a successful patch, always remind the user:
 
-> This patch will appear as **drift** until you reconcile your IaC code. When the incident is resolved, consider running `/formae-drift` to incorporate this change into your codebase.
+> This patch will appear as **drift** until you reconcile your IaC code. When the incident is resolved, consider running `/formae-fix-code-drift` to incorporate this change into your codebase.
 
 ## Important
 

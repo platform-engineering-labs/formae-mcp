@@ -108,10 +108,10 @@ func (s *Server) registerTools() {
 	}, s.handleListPlugins)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
-		Name:        "list_drift",
-		Description: tools.ListDriftDescription,
+		Name:        "list_changes_since_last_reconcile",
+		Description: tools.ListChangesSinceLastReconcileDescription,
 		Annotations: readOnly,
-	}, s.handleListDrift)
+	}, s.handleListChangesSinceLastReconcile)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "extract_resources",
@@ -225,9 +225,9 @@ func (s *Server) handleListPlugins(_ context.Context, _ *mcp.CallToolRequest, in
 	return textResult(string(output)), nil, nil
 }
 
-func (s *Server) handleListDrift(_ context.Context, _ *mcp.CallToolRequest, input tools.ListDriftInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
 	if input.Stack != "" {
-		result, err := s.client.ListDrift(input.Stack)
+		result, err := s.client.ListChangesSinceLastReconcile(input.Stack)
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -254,7 +254,7 @@ func (s *Server) handleListDrift(_ context.Context, _ *mcp.CallToolRequest, inpu
 	var results []stackDrift
 
 	for _, stack := range stacks {
-		driftJSON, err := s.client.ListDrift(stack.Label)
+		driftJSON, err := s.client.ListChangesSinceLastReconcile(stack.Label)
 		if err != nil {
 			return errorResult(fmt.Errorf("failed to get drift for stack %s: %w", stack.Label, err)), nil, nil
 		}

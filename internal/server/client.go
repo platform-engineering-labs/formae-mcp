@@ -304,9 +304,9 @@ func (c *FormaeClient) CancelCommands(query string, clientID string) (json.RawMe
 	return body, nil
 }
 
-// ListDrift retrieves drift (modifications since last reconcile) for a stack.
-func (c *FormaeClient) ListDrift(stack string) (json.RawMessage, error) {
-	path := fmt.Sprintf("/api/v1/stacks/%s/drift", url.PathEscape(stack))
+// ListChangesSinceLastReconcile retrieves modifications since last reconcile for a stack.
+func (c *FormaeClient) ListChangesSinceLastReconcile(stack string) (json.RawMessage, error) {
+	path := fmt.Sprintf("/api/v1/stacks/%s/changes-since-last-reconcile", url.PathEscape(stack))
 	body, status, err := c.get(path, nil)
 	if err != nil {
 		return nil, err
