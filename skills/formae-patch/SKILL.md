@@ -23,7 +23,7 @@ Patch only applies the changes explicitly specified in the forma file. Other res
 4. Show exactly what will change
 5. **Ask for explicit confirmation**
 6. If confirmed: call `apply_forma` with `mode: patch`, `simulate: false`
-7. Monitor with `get_command_status`
+7. Poll `get_command_status` to monitor progress, waiting **5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
 8. Report results
 
 ## Post-Patch Reminder

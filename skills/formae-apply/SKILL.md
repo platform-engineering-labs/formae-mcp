@@ -26,7 +26,7 @@ This is the standard mode for planned deployments.
    - Resources to be destroyed
 4. **Ask for explicit confirmation** before proceeding
 5. If confirmed: call `apply_forma` with `mode: reconcile`, `simulate: false`
-6. The command runs asynchronously. Use `get_command_status` to monitor progress
+6. The command runs asynchronously. Poll `get_command_status` to monitor progress, but **wait 5 seconds between polls** to avoid burning context window. Do NOT poll in a tight loop. Use `sleep 5` between calls.
 7. Report the final result
 
 ## Force Flag

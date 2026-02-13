@@ -20,7 +20,7 @@ Destruction can be specified two ways (mutually exclusive):
 3. Present what will be destroyed — clearly and completely
 4. **Ask for explicit confirmation** — destruction is irreversible
 5. If confirmed: call `destroy_forma` with `simulate: false`
-6. Monitor with `get_command_status`
+6. Poll `get_command_status` to monitor progress, but **wait 5 seconds between polls** to avoid burning context window. Do NOT poll in a tight loop. Use `sleep 5` between calls.
 7. Report results
 
 ## Common Patterns
