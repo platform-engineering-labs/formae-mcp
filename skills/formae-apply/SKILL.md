@@ -1,36 +1,38 @@
 ---
 name: formae-apply
-description: "Use when the user wants to deploy infrastructure, apply a forma file, reconcile a stack, or make planned infrastructure changes"
+description: "Deploy and reconcile infrastructure using forma files. Simulates changes before applying, monitors async deployment progress, and handles drift detection. Use when the user says 'deploy infrastructure', 'apply forma', 'reconcile stack', 'infrastructure changes', 'deploy changes', 'apply forma file', 'update stack'."
 ---
 
 # Apply Infrastructure (Reconcile Mode)
 
-Use the `apply_forma` MCP tool in **reconcile** mode to deploy or update infrastructure.
-
-## How Reconcile Works
-
-Reconcile guarantees the target infrastructure matches the forma file exactly:
-- Resources in the file but not deployed are **created**
-- Deployed resources not in the file are **destroyed**
-- Differences between file and deployed state are **updated**
-
-This is the standard mode for planned deployments.
+Use the `apply_forma` MCP tool in **reconcile** mode to deploy or update infrastructure. Reconcile ensures deployed state matches the forma file exactly — creating, updating, or destroying resources as needed.
 
 ## Workflow
 
 1. Confirm the forma file path with the user
-2. **Always simulate first**: call `apply_forma` with `mode: reconcile`, `simulate: true`
-3. Present the simulation results clearly:
+2. **Validate the forma file**: run `formae eval --output-consumer machine <file>` to check for syntax or resolution errors before proceeding. If evaluation fails, report the error and stop.
+3. **Always simulate first**: call `apply_forma` with `mode: reconcile`, `simulate: true`
+4. Present the simulation results clearly:
    - Resources to be created
    - Resources to be updated (show what changes)
    - Resources to be destroyed
-4. **Ask for explicit confirmation** before proceeding
-5. If confirmed: call `apply_forma` with `mode: reconcile`, `simulate: false`
-6. The command runs asynchronously. Poll `get_command_status` to monitor progress:
+5. **Ask for explicit confirmation** before proceeding
+6. If confirmed: call `apply_forma` with `mode: reconcile`, `simulate: false`
+7. The command runs asynchronously. Poll `get_command_status` to monitor progress:
    - **Wait 5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
    - **Only report state transitions** — do NOT print anything unless a resource changed status since the last poll (e.g., in_progress → completed, in_progress → failed). Silently poll until something changes.
    - When reporting, summarize what changed (e.g., "3 resources created, VPC now deploying") rather than dumping the full JSON.
-7. Report the final result
+8. Report the final result
+
+## Error Recovery
+
+If `get_command_status` returns a **failed** state:
+1. Report which resources failed and the error messages clearly.
+2. Do NOT automatically retry — ask the user how to proceed.
+3. Common options to offer:
+   - **Fix and retry**: address the root cause (permissions, quotas, naming conflicts) then re-run the workflow from simulation.
+   - **Partial rollback**: if some resources succeeded, offer to run a new reconcile with the previous forma file to revert.
+   - **Investigate**: use `get_command_status` details or provider logs to diagnose further.
 
 ## Force Flag
 
