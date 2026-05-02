@@ -53,3 +53,32 @@ type ListChangesSinceLastReconcileInput struct {
 type ExtractResourcesInput struct {
 	Query string `json:"query" jsonschema:"required,Bluge query string to select resources for extraction. Examples: 'managed:false type:AWS::S3::Bucket', 'managed:false stack:production'. Must include at least one filter to avoid extracting all resources."`
 }
+
+// ForceReconcileStackInput is the input for the force_reconcile_stack tool.
+type ForceReconcileStackInput struct {
+	Stack string `json:"stack" jsonschema:"required,The label of the stack to force-reconcile. The stack must have an auto-reconcile policy attached."`
+}
+
+// CreateInlinePolicyInput is the input for the create_inline_policy tool.
+type CreateInlinePolicyInput struct {
+	Stack           string `json:"stack" jsonschema:"required,The label of the stack to attach the policy to."`
+	PolicyType      string `json:"policy_type" jsonschema:"required,The policy type. Must be 'ttl' or 'auto_reconcile'."`
+	Operation       string `json:"operation" jsonschema:"required,The operation to perform. Must be 'set' (create or update) or 'remove'."`
+	TTLSeconds      int64  `json:"ttl_seconds,omitempty" jsonschema:"Required when policy_type is 'ttl' and operation is 'set'. Time-to-live in seconds. Formatted as a PKL Duration using the largest clean unit (e.g. 1200 -> 20.min, 14400 -> 4.h, 86400 -> 1.d)."`
+	OnDependents    string `json:"on_dependents,omitempty" jsonschema:"Optional, only applies to TTL. 'abort' (default) refuses to expire if other stacks depend on this one; 'cascade' destroys dependents too."`
+	IntervalSeconds int64  `json:"interval_seconds,omitempty" jsonschema:"Required when policy_type is 'auto_reconcile' and operation is 'set'. Reconcile interval in seconds. Default suggested value is 300 (5 minutes)."`
+	FormaFile       string `json:"forma_file,omitempty" jsonschema:"Optional explicit path to the forma file declaring the stack. When omitted the tool searches the workspace using formae eval."`
+}
+
+// CreateInlinePolicyOutput is the structured response from the create_inline_policy tool.
+// The tool does NOT modify the file — the caller (skill / LLM) applies the edit using the Edit tool.
+type CreateInlinePolicyOutput struct {
+	FilePath              string   `json:"file_path"`
+	Operation             string   `json:"operation"`
+	PKLSnippet            string   `json:"pkl_snippet,omitempty"`
+	InsertionAnchorStart  int      `json:"insertion_anchor_start"`
+	InsertionAnchorEnd    int      `json:"insertion_anchor_end"`
+	ExistingPolicySnippet string   `json:"existing_policy_snippet,omitempty"`
+	ImportsToAdd          []string `json:"imports_to_add,omitempty"`
+	Notes                 []string `json:"notes,omitempty"`
+}

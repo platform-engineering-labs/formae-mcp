@@ -15,7 +15,7 @@ import (
 
 const (
 	serverName    = "formae-mcp"
-	serverVersion = "0.1.0"
+	serverVersion = "0.3.0"
 )
 
 // Server wraps the MCP server and the formae API client.
@@ -108,6 +108,12 @@ func (s *Server) registerTools() {
 	}, s.handleListPlugins)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "list_policies",
+		Description: tools.ListPoliciesDescription,
+		Annotations: readOnly,
+	}, s.handleListPolicies)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "list_changes_since_last_reconcile",
 		Description: tools.ListChangesSinceLastReconcileDescription,
 		Annotations: readOnly,
@@ -150,6 +156,24 @@ func (s *Server) registerTools() {
 		Description: tools.ForceDiscoverDescription,
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
 	}, s.handleForceDiscover)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "force_check_ttl",
+		Description: tools.ForceCheckTTLDescription,
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: destructive},
+	}, s.handleForceCheckTTL)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "force_reconcile_stack",
+		Description: tools.ForceReconcileStackDescription,
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
+	}, s.handleForceReconcileStack)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "create_inline_policy",
+		Description: tools.CreateInlinePolicyDescription,
+		Annotations: &mcp.ToolAnnotations{},
+	}, s.handleCreateInlinePolicy)
 }
 
 // Tool handlers — read-only
@@ -223,6 +247,14 @@ func (s *Server) handleListPlugins(_ context.Context, _ *mcp.CallToolRequest, in
 		return errorResult(fmt.Errorf("failed to list plugins: %w\noutput: %s", err, string(output))), nil, nil
 	}
 	return textResult(string(output)), nil, nil
+}
+
+func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
+	result, err := s.client.ListPolicies()
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(result), nil, nil
 }
 
 func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
@@ -378,6 +410,28 @@ func (s *Server) handleForceDiscover(_ context.Context, _ *mcp.CallToolRequest, 
 		return errorResult(err), nil, nil
 	}
 	return textResult("Resource discovery triggered successfully."), nil, nil
+}
+
+func (s *Server) handleForceCheckTTL(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
+	result, err := s.client.ForceCheckTTL()
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(result), nil, nil
+}
+
+func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolRequest, input tools.ForceReconcileStackInput) (*mcp.CallToolResult, any, error) {
+	if input.Stack == "" {
+		return errorResult(fmt.Errorf("stack is required")), nil, nil
+	}
+	body, _, err := s.client.ForceReconcileStack(input.Stack)
+	if err != nil {
+		if body != nil {
+			return errorResult(fmt.Errorf("%s: %s", err.Error(), string(body))), nil, nil
+		}
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(body), nil, nil
 }
 
 // Helpers

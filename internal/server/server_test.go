@@ -174,6 +174,54 @@ func TestListStacks(t *testing.T) {
 	}
 }
 
+func TestListPolicies(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[{"Label":"ephemeral-1h","Type":"ttl","Config":{"TTLSeconds":3600,"OnDependents":"abort"},"AttachedStacks":["dev-stack-1"]}]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_policies",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "ephemeral-1h") {
+		t.Errorf("expected response to contain policy label, got: %s", text)
+	}
+}
+
+func TestListPoliciesEmpty(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_policies",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success on 404, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if text != "[]" {
+		t.Errorf("expected empty array, got: %s", text)
+	}
+}
+
 func TestListTargets(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/targets": func(w http.ResponseWriter, r *http.Request) {
@@ -340,6 +388,93 @@ func TestForceDiscover(t *testing.T) {
 	text := textContent(t, result)
 	if text != "Resource discovery triggered successfully." {
 		t.Errorf("unexpected result: %s", text)
+	}
+}
+
+func TestForceCheckTTL(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"POST /api/v1/admin/check-ttl": func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"ExpiredStacks":["dev-feature"],"DestroyedCommands":["cmd-42"]}`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "force_check_ttl",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "dev-feature") {
+		t.Errorf("expected response to contain expired stack, got: %s", text)
+	}
+}
+
+func TestForceReconcileStack(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"POST /api/v1/stacks/lifeline/reconcile": func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+			fmt.Fprint(w, `{"CommandID":"cmd-99","Stack":"lifeline"}`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "force_reconcile_stack",
+		Arguments: map[string]any{"stack": "lifeline"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "cmd-99") {
+		t.Errorf("expected response to contain command id, got: %s", text)
+	}
+}
+
+func TestForceReconcileStackNoPolicy(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"POST /api/v1/stacks/lifeline/reconcile": func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"error":"stack 'lifeline' does not have an auto-reconcile policy attached"}`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "force_reconcile_stack",
+		Arguments: map[string]any{"stack": "lifeline"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected error result, got success: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "auto-reconcile policy") {
+		t.Errorf("expected agent error message, got: %s", text)
+	}
+}
+
+func TestForceReconcileStackMissingArg(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	_, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "force_reconcile_stack",
+	})
+	if err == nil {
+		t.Fatal("expected schema validation error for missing stack argument")
 	}
 }
 

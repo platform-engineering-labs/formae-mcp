@@ -21,6 +21,15 @@ const serverInstructions = `You are connected to a formae MCP server that provid
 3. **Discovery**: The agent discovers unmanaged resources that can be imported under management.
 4. **Commands are async**: Apply and destroy operations run asynchronously. Use get_command_status or list_commands to monitor progress.
 
+## Policies
+
+Stacks can carry policies that govern their lifecycle:
+
+- **TTL** — destroys the stack after a duration. Fields: ttl, onDependents ("abort" | "cascade").
+- **Auto-reconcile** — periodically reverts out-of-band changes. Field: interval.
+
+Policies live in the user's PKL forma files (inline on a Stack, or as reusable standalone objects). To set or change one, use the create_inline_policy tool to plan the file edit, then apply_forma to deploy. The /formae-policy skill orchestrates this end to end.
+
 ## Query Syntax
 
 Queries use field:value pairs separated by spaces (AND-combined). Read the formae://docs/query-syntax resource for full reference.
