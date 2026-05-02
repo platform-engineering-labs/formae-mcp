@@ -1,6 +1,6 @@
 # formae-mcp
 
-MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 15 MCP tools for querying and managing cloud infrastructure, plus 12 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
+MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 15 MCP tools for querying and managing cloud infrastructure, plus 13 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
 
 ## Prerequisites
 
@@ -70,6 +70,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-import` | Bring unmanaged/discovered resources under formae management |
 | `formae-plugin-new` | Scaffold a new formae resource plugin |
 | `formae-plugin-add-resource` | Add a new resource type to an existing plugin |
+| `formae-config` | Manage named formae configuration profiles in `~/.config/formae/` via the `fcfg` CLI |
 
 ## Available MCP Tools
 
