@@ -53,6 +53,16 @@ Steps to follow:
 7. **List** — implement resource discovery
 8. **Error handling** — use `OperationErrorCode` patterns from the SDK
 
+**Errors go in the result, not the `error` return.** Every CRUD result type (`CreateResult`, `ReadResult`, `UpdateResult`, `DeleteResult`, `ListResult`, `StatusResult`) carries its own `ErrorCode` field typed as `resource.OperationErrorCode`. Domain-level failures — NotFound, AlreadyExists, InvalidRequest, ServiceInternalError — go there. The Go `error` return is reserved for transport-level failures where you can't construct a meaningful result at all (e.g., `transport.NewClient` failing, context cancellation).
+
+Concretely:
+
+- `Read` against a missing resource: return `&resource.ReadResult{ErrorCode: resource.OperationErrorCodeNotFound}, nil` — **not** `nil, errors.New("not found")`.
+- `Create` with bad input properties: return `&resource.CreateResult{ProgressResult: &resource.ProgressResult{OperationStatus: OperationStatusFailure, ErrorCode: OperationErrorCodeInvalidRequest, StatusMessage: "..."}}, nil`.
+- Helper funcs that return errors are fine internally, but the outer CRUD method must translate them into the result type's `ErrorCode` before returning.
+
+Returning a non-nil `error` from a CRUD method bypasses formae's retry/state-machine logic and the agent treats it as an unrecoverable plugin bug. Review every `return nil, err` and ask "could this be a result with `ErrorCode` instead?"
+
 **MANDATORY: TDD for steps 3–7.** Each tutorial lesson includes integration tests (e.g., `TestCreate`, `TestRead`, `TestReadNotFound`, `TestUpdate`, `TestDelete`, `TestDeleteNotFound`, `TestList`). For EVERY CRUD operation you MUST follow this exact loop:
 
 1. **Fetch the tutorial page** for that operation (e.g., `https://docs.formae.io/en/latest/plugin-sdk/tutorial/05-create/`)
