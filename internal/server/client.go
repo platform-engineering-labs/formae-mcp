@@ -103,6 +103,22 @@ func (c *FormaeClient) ListStacks() (json.RawMessage, error) {
 	return body, nil
 }
 
+// ListPolicies retrieves all standalone policies from the agent.
+func (c *FormaeClient) ListPolicies() (json.RawMessage, error) {
+	body, status, err := c.get("/api/v1/policies", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status == http.StatusNotFound {
+		return json.RawMessage("[]"), nil
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
+	}
+
+	return body, nil
+}
+
 // ListTargets queries the agent for targets matching the given query string.
 func (c *FormaeClient) ListTargets(query string) (json.RawMessage, error) {
 	q := url.Values{}
@@ -342,6 +358,33 @@ func (c *FormaeClient) ForceDiscover() error {
 	}
 
 	return nil
+}
+
+// ForceCheckTTL triggers an immediate TTL expiry sweep.
+func (c *FormaeClient) ForceCheckTTL() (json.RawMessage, error) {
+	body, status, err := c.post("/api/v1/admin/check-ttl", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
+	}
+	return body, nil
+}
+
+// ForceReconcileStack triggers a one-shot reconcile for a specific stack.
+// Returns the response body and HTTP status. On non-2xx status, error is non-nil
+// but body is also returned so callers can surface the agent's error JSON.
+func (c *FormaeClient) ForceReconcileStack(label string) (json.RawMessage, int, error) {
+	path := fmt.Sprintf("/api/v1/stacks/%s/reconcile", url.PathEscape(label))
+	body, status, err := c.post(path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	if status != http.StatusOK && status != http.StatusAccepted {
+		return body, status, fmt.Errorf("agent returned status %d", status)
+	}
+	return body, status, nil
 }
 
 func (c *FormaeClient) postMultipartWithHeaders(path string, query url.Values, fields map[string]string, fileField, fileName string, fileContent []byte, headers map[string]string) ([]byte, int, error) {

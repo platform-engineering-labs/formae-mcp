@@ -66,6 +66,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-patch` | Make targeted infrastructure changes without a full reconcile |
 | `formae-destroy` | Tear down infrastructure resources, stacks, or environments |
 | `formae-fix-code-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
+| `formae-policy` | Set, remove, or inspect TTL and auto-reconcile policies on a stack |
 | `formae-discover` | Find unmanaged resources in cloud accounts |
 | `formae-import` | Bring unmanaged/discovered resources under formae management |
 | `formae-plugin-new` | Scaffold a new formae resource plugin |
@@ -88,6 +89,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `list_plugins` | List active plugins |
 | `list_changes_since_last_reconcile` | List infrastructure changes since last reconcile |
 | `extract_resources` | Extract resources as PKL code |
+| `list_policies` | List standalone (reusable) policies and the stacks they're attached to |
 
 ### Mutation
 
@@ -98,6 +100,9 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `cancel_commands` | Cancel running commands |
 | `force_sync` | Trigger immediate resource synchronization |
 | `force_discover` | Trigger immediate resource discovery |
+| `force_check_ttl` | Trigger an immediate TTL expiry sweep across all stacks |
+| `force_reconcile_stack` | Force a one-shot reconcile on a stack (requires auto-reconcile policy attached) |
+| `create_inline_policy` | Plan a TTL or auto-reconcile policy edit on a stack (returns snippet + insertion anchor; caller applies via Edit) |
 
 ## Configuration
 

@@ -21,6 +21,10 @@ const ListStacksDescription = `List all infrastructure stacks known to the forma
 
 Use this tool when the user asks about their stacks, infrastructure organization, or needs an overview of what's deployed.`
 
+const ListPoliciesDescription = `List all standalone (reusable) policies known to the formae agent. Returns each policy's label, type ("ttl" or "auto-reconcile"), configuration, and the stacks it is attached to.
+
+Use this tool when the user asks about reusable policies, which stacks share a policy, or what standalone policies exist. For inline policies attached directly to a stack, use list_stacks — inline policies appear on each stack object.`
+
 const ListTargetsDescription = `Query infrastructure targets (cloud accounts/regions) configured in the formae agent.
 
 Use this tool when the user asks about their cloud targets, configured regions, or provider setup.
@@ -88,6 +92,33 @@ Note: In environments with many resources, sync may take significant time. The s
 const ForceDiscoverDescription = `Trigger an immediate resource discovery scan across configured cloud targets. The formae agent discovers new (unmanaged) resources periodically, but this forces an immediate discovery cycle.
 
 Newly discovered resources appear as unmanaged resources that can be queried with list_resources using 'managed:false'.`
+
+const ForceCheckTTLDescription = `Trigger an immediate TTL expiry check across all stacks. Stacks whose TTL policy has expired will be destroyed asynchronously. Stacks with active commands are skipped. The agent runs this check periodically; this tool forces an immediate sweep.
+
+DESTRUCTIVE: This tool destroys infrastructure for any stack whose TTL has expired. The destruction is irreversible.
+
+Primarily useful for test harnesses and incident response. For normal operation the agent runs this automatically.`
+
+const ForceReconcileStackDescription = `Force a one-shot reconcile on a specific stack. Reverts any out-of-band changes to managed resources on the stack back to their last-known desired state. The stack must have an auto-reconcile policy attached.
+
+Returns 202 with a command_id when the reconcile starts (poll get_command_status to monitor progress). Returns 200 if there is no drift to reconcile. Returns 403 if the stack has no auto-reconcile policy attached. Returns 409 if the stack has active commands.
+
+Primarily useful for test harnesses and incident response. For normal operation the agent runs scheduled reconciles based on the policy interval.`
+
+const CreateInlinePolicyDescription = `Plan a TTL or auto-reconcile policy edit for a stack. The tool locates the stack in the workspace's PKL files, computes the snippet to insert/replace/remove, and returns the plan. The tool does NOT modify the file — the caller must apply the returned snippet at the returned line range using the Edit tool.
+
+Output fields:
+- file_path: which PKL file declares the stack
+- operation: "create" (new policy added), "update" (existing policy of same type replaced), "remove" (policy deleted), or "noop" (remove requested but no matching policy existed)
+- pkl_snippet: the text to insert (empty for remove and noop)
+- insertion_anchor_start / insertion_anchor_end: 1-indexed inclusive line range; for "create" with start == end the snippet should be inserted before that line; for "update" / "remove" the lines in the range should be replaced/deleted
+- existing_policy_snippet: the existing block being replaced or deleted (only for update/remove)
+- imports_to_add: list of import statements that must be added at the top of the file (e.g. import "@formae/formae.pkl")
+- notes: human-readable observations (e.g. "removed empty policies block")
+
+After applying the edit, run apply_forma in reconcile mode (simulate=true first, then simulate=false on confirmation) on the returned file_path.
+
+Errors when: the stack is unknown, no PKL file in the workspace declares it, or multiple files declare the same label.`
 
 const ListChangesSinceLastReconcileDescription = `List infrastructure changes detected since the last reconcile.
 
