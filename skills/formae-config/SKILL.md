@@ -10,7 +10,7 @@ description: "Use when the user wants to switch, list, save, edit, delete, or co
 ## Command reference
 
 - `fcfg init [--name <name>] [--yes]` — convert an existing `formae.conf.pkl` into a profile and replace it with a symlink. Always pass `--yes` from agent contexts.
-- `fcfg list [--json]` — list profiles. Use `--json` when you need to parse the output.
+- `fcfg list [--json]` — list profiles, marking the active one with `*` in plain output. Use `--json` when you need to parse.
 - `fcfg current` — print the active profile name on a single line.
 - `fcfg use <name>` — atomically switch the active profile.
 - `fcfg save <name> [--force]` — snapshot the active profile under a new name. Does not switch. `--force` overwrites an existing profile.
