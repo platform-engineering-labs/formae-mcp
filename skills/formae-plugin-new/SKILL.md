@@ -22,6 +22,7 @@ Collect the following from the user:
 - **Provider/service**: e.g., Cloudflare, Datadog, GitHub
 - **Resource types**: Once the user names the provider, research the provider's API thoroughly before suggesting resource types. Present a well-researched list organized in implementation waves (e.g., "Wave 1: core resources, Wave 2: networking, Wave 3: IAM/security"). The user should be able to pick individual resources or entire waves. Do NOT present a hastily assembled shortlist — take the time to understand the provider's full resource catalog first.
 - **Credentials**: how should authentication be configured? (env vars, config files, API keys)
+- **Namespace convention**: The provider namespace becomes the uppercase prefix in formae resource type IDs (e.g., `AWS`, `GCP`, `ATLAS`). The scaffolder will uppercase mixed-case input automatically and emit a notice when it does so.
 - **Polymorphic structures**: are there resources with different field shapes per subtype? (e.g., DNS records with different fields per record type)
 - **Development mode**: autonomous or guided?
   - **Autonomous**: TDD through the entire implementation without pausing for review — for one-shotting a plugin quickly
@@ -42,6 +43,28 @@ If resources have polymorphic structures (like DNS record types with different f
 
 **Guided mode checkpoint**: present API research findings and proposed resource model to the user for approval before continuing.
 
+### 2a. External binary dependencies
+
+If your plugin shells out to an external binary (e.g., `atlas`, `helm`, `kubectl`), the binary must be available in the formae agent's `$PATH` at runtime. The plugin SDK does not yet ship a first-class mechanism for bundling extra binaries with plugin distributions; the conventions below are the current stop-gap.
+
+**Prior art.** Formae core ships the `pkl-reader-helm` external binary using the pattern at `formae/scripts/install-helm-reader.sh`. This is the canonical reference for any plugin that depends on a runtime binary — read it before designing your own.
+
+**Plugin-side convention.** On plugin initialization, call `exec.LookPath("<binary>")` and fail fast with a clear error message naming both the binary and the install path. Example error:
+
+```
+plugin atlas: required binary `atlas` not found in $PATH.
+Install with: /path/to/install-atlas.sh
+See: https://atlasgo.io/getting-started
+```
+
+Optionally expose a health-check endpoint that reports binary availability so operators can diagnose deployment issues without invoking real CRUD operations.
+
+**Multi-arch handling.** Mirror the `uname -s` / `uname -m` mapping pattern from `formae/scripts/install-helm-reader.sh` to select the correct release asset per platform.
+
+**Dev-mode bootstrap.** Until the SDK supports bundled binaries, mirror the install script in your plugin's own repository (e.g., `scripts/install-atlas.sh`). Have `make install` invoke it so fresh dev machines and CI runners can bootstrap automatically.
+
+**Known SDK limitation.** Track the follow-up "plugin ships extra binaries" SDK enhancement — when that lands, plugins will declare their binary dependencies in `formae-plugin.pkl` and the agent host will install them at plugin registration time.
+
 ### 3. Scaffold the plugin
 
 Run the scaffolding command:
@@ -55,18 +78,21 @@ Verify the scaffolded project:
 - Check the Makefile and `formae-plugin.pkl`
 - Confirm it builds: `make build`
 
-Then `cd` into the new plugin directory and run `/init` so Claude has full context on the scaffolded template before continuing.
-
 ### 4. Follow the tutorial
 
 Fetch the plugin SDK tutorial from `https://docs.formae.io/en/latest/plugin-sdk/tutorial/` and follow it start to finish, adapting each lesson to the target provider.
 
-Reference prior art plugins for real-world patterns:
-- AWS: `https://github.com/platform-engineering-labs/formae-plugin-aws`
-- Azure: `https://github.com/platform-engineering-labs/formae-plugin-azure`
-- GCP: `https://github.com/platform-engineering-labs/formae-plugin-gcp`
-- OCI: `https://github.com/platform-engineering-labs/formae-plugin-oci`
-- OVH: `https://github.com/platform-engineering-labs/formae-plugin-ovh`
+Reference prior art plugins for general examples (single resource, simple CRUD): AWS, Azure, GCP, OCI, OVH — each at `https://github.com/platform-engineering-labs/formae-plugin-<provider>`.
+
+For specific advanced patterns, the canonical references are:
+
+| Pattern | Canonical reference |
+|---|---|
+| Resolvable computed outputs (custom Read, output-port story) | [`formae-plugin-aws/schema/pkl/ses/emailidentity.pkl`](https://github.com/platform-engineering-labs/formae-plugin-aws/blob/main/schema/pkl/ses/emailidentity.pkl) |
+| Polymorphic Target auth (abstract + discriminated subclasses) | [`formae-plugin-k8s/schema/pkl/main/k8s.pkl`](https://github.com/platform-engineering-labs/formae-plugin-k8s/blob/main/schema/pkl/main/k8s.pkl) |
+| Cross-plugin Target Resolvables (Target Config field accepts upstream resolvable) | [`formae-plugin-grafana/schema/pkl/grafana.pkl`](https://github.com/platform-engineering-labs/formae-plugin-grafana/blob/main/schema/pkl/grafana.pkl) |
+| Collection Resolvables (`Mapping<String, formae.Resolvable>`) | `formae-plugin-compose` — see the Target Config file with the Mapping field |
+| Synthetic identifiers (`identifier = "Label"` for logical resources without natural server-side IDs) | `formae-plugin-atlas` — Migration resource schema |
 
 Tutorial lessons to follow (adapt to target provider):
 
@@ -80,6 +106,18 @@ Tutorial lessons to follow (adapt to target provider):
 8. **List** — implement resource discovery
 9. **Error handling** — use `OperationErrorCode` patterns from the SDK
 10. **Conformance tests** — run `make conformance-test`
+
+**Target Config field serialization (G-6).** Plugin Go structs SHOULD declare camelCase json tags on `Config` fields (e.g., `` `json:"host"` ``). PKL fields should be single-name camelCase. Do NOT use the `hidden lowercase` / `fixed PascalCase = lowercase` pattern preserved in older plugins (k8s, Grafana) — that's a wart from Go structs lacking json tags, not a convention. Canonical reference for the clean pattern: the AWS plugin's Target Config classes.
+
+**Target Config field immutability (G-8).** `@formae.ConfigFieldHint.createOnly` defaults to `true` (immutable), the **opposite** of `@formae.FieldHint` on resource fields (defaults to `false`, mutable). This is by-design: a Target's identity is typically defined by immutable environment fields (AWS account ID, region, server URL), so changing one means replacing the Target — and everything in it. Always declare `createOnly` **explicitly** on `ConfigFieldHint` annotations so intent is visible in PKL:
+
+```pkl
+@formae.ConfigFieldHint { createOnly = false }  // mutable
+hidden host: String
+
+@formae.ConfigFieldHint { createOnly = true }   // immutable (also the default)
+hidden region: String
+```
 
 **MANDATORY: TDD for steps 4–8.** Each tutorial lesson includes integration tests (e.g., `TestCreate`, `TestRead`, `TestReadNotFound`, `TestUpdate`, `TestDelete`, `TestDeleteNotFound`, `TestList`). For EVERY CRUD operation you MUST follow this exact loop:
 
