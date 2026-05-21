@@ -23,7 +23,7 @@ Install the plugin:
 /plugin install formae-mcp@formae-marketplace
 ```
 
-Restart Claude Code for the plugin to take effect. The MCP server binary is built automatically on first use.
+Run `/reload-plugins` (Claude Code v2.1.116+) to apply the install without restarting your session. On older versions, restart Claude Code instead. The MCP server binary is built automatically on first use.
 
 Verify by asking Claude to run `/formae-status`.
 
