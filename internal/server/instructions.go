@@ -9,19 +9,36 @@ const serverInstructions = `You are connected to a formae MCP server that provid
 - **Target**: A cloud account or region where resources are deployed.
 - **Resource**: A cloud infrastructure object (S3 bucket, EC2 instance, etc). Can be managed or unmanaged (discovered but not yet under management).
 
+For deeper coverage, read formae://docs/concepts.
+
 ## Apply Modes
 
-- **Reconcile** (default): Guarantees infrastructure matches the forma file exactly. Creates missing resources, destroys extra resources, updates differences. Use for planned deployments.
-- **Patch**: Only applies specified changes. Other resources are untouched. Use for urgent fixes during incidents. Creates drift that should later be reconciled.
+- **Reconcile** (default): Guarantees infrastructure matches the forma file exactly. Creates missing, destroys extra, updates differences. Use for planned deployments.
+- **Patch**: Only applies specified changes. Other resources untouched. Use for urgent fixes during incidents. Creates drift that should later be reconciled.
 
 ## Important Workflows
 
-1. **Always simulate before applying**: Use simulate=true to preview changes before modifying infrastructure.
-2. **Drift handling**: The agent continuously syncs with cloud state. Drift can be overwritten (force-reconcile) or absorbed into the IaC codebase.
-3. **Discovery**: The agent discovers unmanaged resources that can be imported under management.
-4. **Commands are async**: Apply and destroy operations run asynchronously. Use get_command_status or list_commands to monitor progress.
+1. **Always simulate before applying**: Use simulate=true to preview changes.
+2. **Drift handling**: The agent continuously syncs with cloud state. Drift can be overwritten (force-reconcile) or absorbed.
+3. **Discovery**: The agent finds unmanaged resources that can be imported.
+4. **Commands are async**: Apply/destroy run asynchronously. Use get_command_status or list_commands to monitor.
+
+## The IaC Language
+
+Formae uses PKL (Apple's configuration language) for forma files. If you need to write or read a forma file:
+- PKL basics: formae://docs/pkl-primer (also: https://pkl-lang.org)
+- Forma file structure (project, targets, resources blocks): formae://docs/forma-anatomy
+- Schema annotations (@formae.ResourceHint, @formae.FieldHint, @formae.Resolvable): formae://docs/annotations
 
 ## Query Syntax
 
-Queries use field:value pairs separated by spaces (AND-combined). Read the formae://docs/query-syntax resource for full reference.
+Queries use field:value pairs separated by spaces (AND-combined). See formae://docs/query-syntax for the full reference.
+
+## Troubleshooting
+
+For common error messages and what they mean: formae://docs/troubleshooting.
+
+## Authoritative Documentation
+
+For canonical, version-tracked docs see https://docs.formae.io/en/latest/.
 `
