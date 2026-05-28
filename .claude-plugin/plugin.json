@@ -1,7 +1,7 @@
 {
   "name": "formae-mcp",
   "description": "MCP server and skills for formae infrastructure-as-code: manage cloud resources, handle drift, discover infrastructure, and build plugins",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": {
     "name": "Platform Engineering Labs"
   },
