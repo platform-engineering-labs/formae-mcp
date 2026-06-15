@@ -146,6 +146,9 @@ func TestReadResource_FormaAnatomy(t *testing.T) {
 	if !strings.Contains(result.Contents[0].Text, "Minimal forma") {
 		t.Error("expected forma-anatomy doc to mention Minimal forma")
 	}
+	if !strings.Contains(result.Contents[0].Text, "alias") {
+		t.Error("expected forma-anatomy doc to document renaming via alias")
+	}
 }
 
 func TestReadResource_Annotations(t *testing.T) {
@@ -182,5 +185,8 @@ func TestReadResource_Troubleshooting(t *testing.T) {
 	}
 	if !strings.Contains(result.Contents[0].Text, "plugin not found") {
 		t.Error("expected troubleshooting doc to mention plugin not found")
+	}
+	if !strings.Contains(result.Contents[0].Text, "alias") {
+		t.Error("expected troubleshooting doc to cover alias/rename rejections")
 	}
 }

@@ -30,6 +30,7 @@ type docPage struct {
 // path is verified to resolve on the live site.
 var docPages = []docPage{
 	{"Core concepts", "core-concepts/", "Overview of stacks, targets, resources, formas, modes, drift, discovery."},
+	{"Labels and renaming", "core-concepts/label/", "Resource/stack labels, discovery-assigned labels, and renaming a resource via alias."},
 	{"Stacks", "core-concepts/stack/", "Logical grouping of resources with referential integrity."},
 	{"Targets", "core-concepts/target/", "Cloud accounts/regions where resources are deployed."},
 	{"Forma files", "core-concepts/forma/", "The infrastructure declaration unit."},

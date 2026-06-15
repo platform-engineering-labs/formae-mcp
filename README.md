@@ -64,6 +64,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-plugins` | List installed plugins, supported providers, and resource types |
 | `formae-apply` | Deploy infrastructure by applying a forma file or reconciling a stack |
 | `formae-patch` | Make targeted infrastructure changes without a full reconcile |
+| `formae-rename` | Rename a resource's label via `alias` without destroying the cloud object |
 | `formae-destroy` | Tear down infrastructure resources, stacks, or environments |
 | `formae-fix-code-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
 | `formae-policy` | Set, remove, or inspect TTL and auto-reconcile policies on a stack |
