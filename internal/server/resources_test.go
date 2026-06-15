@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -15,8 +16,8 @@ func TestResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListResources failed: %v", err)
 	}
-	if len(resources.Resources) != 6 {
-		t.Errorf("expected 6 resources, got %d", len(resources.Resources))
+	if len(resources.Resources) != 7 {
+		t.Errorf("expected 7 resources, got %d", len(resources.Resources))
 	}
 
 	expectedURIs := map[string]bool{
@@ -26,6 +27,7 @@ func TestResources(t *testing.T) {
 		"formae://docs/forma-anatomy":   false,
 		"formae://docs/annotations":     false,
 		"formae://docs/troubleshooting": false,
+		"formae://docs/index":           false,
 	}
 	for _, r := range resources.Resources {
 		if _, ok := expectedURIs[r.URI]; !ok {
@@ -36,6 +38,41 @@ func TestResources(t *testing.T) {
 	for uri, found := range expectedURIs {
 		if !found {
 			t.Errorf("missing resource: %s", uri)
+		}
+	}
+}
+
+// TestResourceDocLinksAreWellFormed guards against the stale plugin-SDK doc
+// URLs that the MCP previously handed to AI assistants (causing 404s). On the
+// docs site every SDK page lives under plugin-sdk/tutorial/ or
+// plugin-sdk/reference/ — there is no top-level /reference/ path and tutorial
+// pages are never directly under /plugin-sdk/<NN>-...
+func TestResourceDocLinksAreWellFormed(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+
+	docURIs := []string{
+		"formae://docs/query-syntax",
+		"formae://docs/concepts",
+		"formae://docs/pkl-primer",
+		"formae://docs/forma-anatomy",
+		"formae://docs/annotations",
+		"formae://docs/troubleshooting",
+	}
+
+	// Matches the two known-broken shapes:
+	//  - top-level reference: .../en/latest/reference/...   (must be plugin-sdk/reference/)
+	//  - tutorial page missing tutorial/: .../en/latest/plugin-sdk/02-schema/ (must be plugin-sdk/tutorial/...)
+	brokenLink := regexp.MustCompile(`https?://docs\.formae\.io/en/latest/(reference/|plugin-sdk/\d)`)
+
+	for _, uri := range docURIs {
+		result, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri})
+		if err != nil {
+			t.Fatalf("ReadResource(%s) failed: %v", uri, err)
+		}
+		for _, c := range result.Contents {
+			if m := brokenLink.FindAllString(c.Text, -1); m != nil {
+				t.Errorf("%s emits stale/broken doc link(s): %v", uri, m)
+			}
 		}
 	}
 }

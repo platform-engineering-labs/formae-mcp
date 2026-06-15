@@ -1,6 +1,10 @@
 package server
 
-const serverInstructions = `You are connected to a formae MCP server that provides access to a formae infrastructure agent managing cloud resources.
+import "fmt"
+
+var serverInstructions = fmt.Sprintf(serverInstructionsTmpl, docsBaseURL)
+
+const serverInstructionsTmpl = `You are connected to a formae MCP server that provides access to a formae infrastructure agent managing cloud resources.
 
 ## Key Concepts
 
@@ -49,5 +53,5 @@ For common error messages and what they mean: formae://docs/troubleshooting.
 
 ## Authoritative Documentation
 
-For canonical, version-tracked docs see https://docs.formae.io/en/latest/.
+All formae web documentation lives under %s. Always use complete URLs that include the full path; never invent, shorten, or omit path segments (such as the version prefix). Do not guess documentation URLs — read formae://docs/index for the canonical list of pages, or use the formae://docs/* resources directly.
 `

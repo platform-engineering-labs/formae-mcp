@@ -90,6 +90,20 @@ func (s *Server) registerResources() {
 			}},
 		}, nil
 	})
+
+	s.mcpServer.AddResource(&mcp.Resource{
+		URI:         "formae://docs/index",
+		Name:        "Formae Documentation Index",
+		Description: "Canonical list of formae documentation URLs. Read this to find the correct doc link instead of constructing or guessing one.",
+		MIMEType:    "text/markdown",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{{
+				URI:  "formae://docs/index",
+				Text: docsIndexDoc(),
+			}},
+		}, nil
+	})
 }
 
 const querySyntaxDoc = `# Formae Query Syntax
@@ -511,11 +525,11 @@ rules). Sub-resources don't have their own lifecycle independent of the parent.
 
 ## Going deeper
 
-- Schema reference (canonical PKL annotations): https://docs.formae.io/en/latest/reference/schema/
-- Plugin SDK tutorial — schema: https://docs.formae.io/en/latest/plugin-sdk/02-schema/
-- Plugin SDK tutorial — target config: https://docs.formae.io/en/latest/plugin-sdk/03-target/
-- Plugin interface reference: https://docs.formae.io/en/latest/reference/plugin-interface/
-- Plugin manifest format: https://docs.formae.io/en/latest/reference/manifest/
+- Schema reference (canonical PKL annotations): https://docs.formae.io/en/latest/plugin-sdk/reference/schema/
+- Plugin SDK tutorial — schema: https://docs.formae.io/en/latest/plugin-sdk/tutorial/02-schema/
+- Plugin SDK tutorial — target config: https://docs.formae.io/en/latest/plugin-sdk/tutorial/03-target/
+- Plugin interface reference: https://docs.formae.io/en/latest/plugin-sdk/reference/plugin-interface/
+- Plugin manifest format: https://docs.formae.io/en/latest/plugin-sdk/reference/manifest/
 `
 
 const troubleshootingDoc = `# Formae Troubleshooting
@@ -550,7 +564,7 @@ A field marked with ` + "`@formae.FieldHint { createOnly = true }`" + ` or
 responds by destroying and recreating the resource. If unexpected, check
 whether ConfigFieldHint's default (true) is biting — see formae://docs/annotations.
 
-Schema reference: https://docs.formae.io/en/latest/reference/schema/
+Schema reference: https://docs.formae.io/en/latest/plugin-sdk/reference/schema/
 
 ## "namespace mismatch" / resource type unknown
 
