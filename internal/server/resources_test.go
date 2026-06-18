@@ -21,17 +21,17 @@ func TestResources(t *testing.T) {
 	}
 
 	expectedURIs := map[string]bool{
-		"formae://docs/query-syntax":        false,
-		"formae://docs/concepts":            false,
-		"formae://docs/pkl-primer":          false,
-		"formae://docs/forma-anatomy":       false,
-		"formae://docs/annotations":         false,
-		"formae://docs/troubleshooting":     false,
-		"formae://docs/index":               false,
-		"formae://docs/examples":            false,
-		"formae://docs/forma-structure":     false,
-		"formae://docs/stack-design":        false,
-		"formae://docs/authoring-pitfalls":  false,
+		"formae://docs/query-syntax":       false,
+		"formae://docs/concepts":           false,
+		"formae://docs/pkl-primer":         false,
+		"formae://docs/forma-anatomy":      false,
+		"formae://docs/annotations":        false,
+		"formae://docs/troubleshooting":    false,
+		"formae://docs/index":              false,
+		"formae://docs/examples":           false,
+		"formae://docs/forma-structure":    false,
+		"formae://docs/stack-design":       false,
+		"formae://docs/authoring-pitfalls": false,
 	}
 	for _, r := range resources.Resources {
 		if _, ok := expectedURIs[r.URI]; !ok {

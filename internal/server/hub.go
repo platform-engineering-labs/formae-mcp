@@ -120,9 +120,9 @@ type Example struct {
 // the caller must surface to the user (adversarial-review requirements).
 type ListExamplesResult struct {
 	Plugin             string    `json:"plugin"`
-	RefUsed            string    `json:"refUsed"`            // tag or "" (default branch)
-	VersionMatched     bool      `json:"versionMatched"`     // false → examples may not match pinned schema
-	OriginatorDomain   string    `json:"originatorDomain"`   // from the hub catalog
+	RefUsed            string    `json:"refUsed"`          // tag or "" (default branch)
+	VersionMatched     bool      `json:"versionMatched"`   // false → examples may not match pinned schema
+	OriginatorDomain   string    `json:"originatorDomain"` // from the hub catalog
 	OriginatorVerified bool      `json:"originatorVerified"`
 	Examples           []Example `json:"examples"`
 }

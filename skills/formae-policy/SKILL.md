@@ -17,7 +17,7 @@ Use this skill to manage formae stack policies via natural language. Two policy 
 
 When the user mentions attaching the same policy to more than one stack, or explicitly says "reusable" or "shared", default to standalone. Otherwise default to inline.
 
-A stack cannot have both an inline policy and a standalone policy of the same type. The MCP tools enforce this: `create_inline_policy` refuses if a standalone of the same type is already attached; `attach_standalone_policy` refuses if an inline of the same type exists.
+A stack should not carry both an inline and a standalone policy of the same type. The tooling does NOT enforce this for you — before adding a policy, check existing policies with `list_policies` and `list_stacks` and make sure you're not creating a duplicate of the same type on the stack.
 
 ## Defaults
 

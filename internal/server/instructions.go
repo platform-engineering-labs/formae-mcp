@@ -57,7 +57,7 @@ Use these tools when helping a user write or scaffold a new plugin or forma proj
 
 - **search_hub_plugins** — full-text search across published hub plugins by keyword.
 - **get_hub_plugin** — fetch the full manifest and metadata for a specific hub plugin.
-- **list_plugin_examples** — list bundled code examples for a plugin (returns paths under /examples).
+- **list_plugin_examples** — list bundled code examples for a plugin (returns named examples with a likelyTemplateStub flag plus version-match and originator trust info).
 - **get_plugin_example** — fetch the source of a specific example file.
 
 Key docs for authoring:
