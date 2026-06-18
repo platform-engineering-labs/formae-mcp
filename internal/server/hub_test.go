@@ -251,3 +251,132 @@ func TestGetHubPluginTool(t *testing.T) {
 		t.Fatalf("expected repo URL in output, got: %s", text)
 	}
 }
+
+func TestHubClientListExamplesSortsAndFlags(t *testing.T) {
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/contents/examples") {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`[{"name":"basic","type":"dir"},{"name":"eks-automode","type":"dir"},{"name":"stack-test.pkl","type":"file"}]`))
+	}))
+	defer gh.Close()
+
+	c := &HubClient{githubBaseURL: gh.URL, httpClient: gh.Client()}
+	exs, err := c.listExamplesForRepo("https://github.com/platform-engineering-labs/formae-plugin-aws", "")
+	if err != nil {
+		t.Fatalf("listExamplesForRepo: %v", err)
+	}
+	if exs[0].Name != "eks-automode" {
+		t.Fatalf("expected real example first, got %q", exs[0].Name)
+	}
+	var basic *Example
+	for i := range exs {
+		if exs[i].Name == "basic" {
+			basic = &exs[i]
+		}
+	}
+	if basic == nil || !basic.LikelyTemplateStub {
+		t.Fatalf("expected basic flagged as template stub, got %+v", basic)
+	}
+}
+
+// Version-matched fetch: when a tag matching the version exists, it is used and
+// versionMatched is true; the contents request must carry ?ref=<tag>.
+func TestHubClientListExamplesVersionMatched(t *testing.T) {
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/git/refs/tags/v0.1.5"):
+			w.WriteHeader(http.StatusOK) // tag exists
+			_, _ = w.Write([]byte(`{"ref":"refs/tags/v0.1.5"}`))
+		case strings.HasSuffix(r.URL.Path, "/contents/examples"):
+			if r.URL.Query().Get("ref") != "v0.1.5" {
+				t.Errorf("expected ?ref=v0.1.5, got %q", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(`[{"name":"eks-automode","type":"dir"}]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer gh.Close()
+
+	c := &HubClient{githubBaseURL: gh.URL, httpClient: gh.Client()}
+	res, err := c.listExamplesResolved("https://github.com/platform-engineering-labs/formae-plugin-aws", "0.1.5")
+	if err != nil {
+		t.Fatalf("listExamplesResolved: %v", err)
+	}
+	if !res.VersionMatched || res.RefUsed != "v0.1.5" {
+		t.Fatalf("expected versionMatched at v0.1.5, got %+v", res)
+	}
+}
+
+// No matching tag: fall back to default branch and flag versionMatched=false.
+func TestHubClientListExamplesVersionFallback(t *testing.T) {
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/git/refs/tags/"):
+			w.WriteHeader(http.StatusNotFound) // no tags match
+		case strings.HasSuffix(r.URL.Path, "/contents/examples"):
+			if r.URL.Query().Get("ref") != "" {
+				t.Errorf("expected no ref on fallback, got %q", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(`[{"name":"eks-automode","type":"dir"}]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer gh.Close()
+
+	c := &HubClient{githubBaseURL: gh.URL, httpClient: gh.Client()}
+	res, err := c.listExamplesResolved("https://github.com/platform-engineering-labs/formae-plugin-aws", "0.9.9")
+	if err != nil {
+		t.Fatalf("listExamplesResolved: %v", err)
+	}
+	if res.VersionMatched {
+		t.Fatalf("expected versionMatched=false on fallback, got %+v", res)
+	}
+}
+
+// MCP-level tool test for list_plugin_examples.
+func TestListPluginExamplesTool(t *testing.T) {
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/plugins/aws":
+			_, _ = w.Write([]byte(`{"name":"aws","namespace":"AWS","license":"FSL-1.1-ALv2","status":"ready","github_repo_url":"https://github.com/platform-engineering-labs/formae-plugin-aws"}`))
+		case r.URL.Path == "/api/v1/plugins":
+			_, _ = w.Write([]byte(`{"results":[{"qualifiedName":"platform.engineering/aws","name":"aws","namespace":"AWS","originator":{"domain":"platform.engineering","verified":true},"latestStable":{"version":"0.2.0","channel":"stable"}}]}`))
+		case strings.Contains(r.URL.Path, "/git/refs/tags/"):
+			w.WriteHeader(http.StatusNotFound)
+		case strings.HasSuffix(r.URL.Path, "/contents/examples"):
+			_, _ = w.Write([]byte(`[{"name":"eks-automode","type":"dir"},{"name":"basic","type":"dir"}]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer gh.Close()
+
+	s := New("http://localhost:1")
+	s.hub = &HubClient{
+		baseURL:       gh.URL,
+		githubBaseURL: gh.URL,
+		httpClient:    gh.Client(),
+	}
+	session := connectServer(t, s)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "list_plugin_examples",
+		Arguments: map[string]any{"plugin": "aws"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, "eks-automode") {
+		t.Fatalf("expected eks-automode in output, got: %s", text)
+	}
+	if !strings.Contains(text, "originatorDomain") {
+		t.Fatalf("expected originatorDomain in output, got: %s", text)
+	}
+	if !strings.Contains(text, "versionMatched") {
+		t.Fatalf("expected versionMatched in output, got: %s", text)
+	}
+}

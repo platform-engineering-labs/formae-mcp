@@ -139,6 +139,18 @@ func (s *Server) registerTools() {
 		Annotations: readOnly,
 	}, s.handleGetHubPlugin)
 
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "list_plugin_examples",
+		Description: tools.ListPluginExamplesDescription,
+		Annotations: readOnly,
+	}, s.handleListPluginExamples)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "get_plugin_example",
+		Description: tools.GetPluginExampleDescription,
+		Annotations: readOnly,
+	}, s.handleGetPluginExample)
+
 	// Mutation tools
 	destructive := boolPtr(true)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
@@ -372,6 +384,39 @@ func (s *Server) handleGetHubPlugin(_ context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(err), nil, nil
 	}
 	data, err := json.Marshal(d)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
+}
+
+func (s *Server) handleListPluginExamples(_ context.Context, _ *mcp.CallToolRequest, input tools.ListPluginExamplesInput) (*mcp.CallToolResult, any, error) {
+	if input.Plugin == "" {
+		return errorResult(fmt.Errorf("plugin is required")), nil, nil
+	}
+	result, err := s.hub.ListExamples(input.Plugin, input.Version)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
+}
+
+func (s *Server) handleGetPluginExample(_ context.Context, _ *mcp.CallToolRequest, input tools.GetPluginExampleInput) (*mcp.CallToolResult, any, error) {
+	if input.Plugin == "" {
+		return errorResult(fmt.Errorf("plugin is required")), nil, nil
+	}
+	if input.Example == "" {
+		return errorResult(fmt.Errorf("example is required")), nil, nil
+	}
+	result, err := s.hub.GetExample(input.Plugin, input.Example, input.Version)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(result)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}

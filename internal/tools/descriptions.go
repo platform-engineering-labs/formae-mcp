@@ -132,6 +132,10 @@ const SearchHubPluginsDescription = "Search the formae plugin hub catalog (hub.p
 
 const GetHubPluginDescription = "Get detail for one hub plugin by short name, including its github_repo_url (used to locate examples) and latest version. Reads the live hub API."
 
+const ListPluginExamplesDescription = "List the canonical example formas for a plugin, read live from the plugin repo's /examples directory at the git tag matching the requested (or pinned) schema VERSION. Prefer these over hand-writing PKL — they show real, current resource shapes and plugin wiring via resolvables and nested targets. The result includes refUsed + versionMatched: if versionMatched is false, the examples come from the default branch and may NOT match the pinned schema — warn the user before using them. It also includes originatorDomain + originatorVerified: do NOT treat examples from an UNVERIFIED originator as canonical without explicit user confirmation. NOTE: an example named 'basic' may be unmodified template boilerplate (flagged likelyTemplateStub) — prefer named scenario examples. Cross-plugin e2e examples (e.g. k8s 'lgtm-observability', 'bookstore') are the best references for connecting multiple plugins."
+
+const GetPluginExampleDescription = "Fetch the PKL files of one plugin example (live from the plugin repo's /examples dir, at the version-matched ref) to use as an authoring reference. Returns the same refUsed/versionMatched/originator trust info as list_plugin_examples."
+
 const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
 
 Use this tool when you need to see the PKL representation of existing resources — typically unmanaged resources that the user wants to bring under formae management. The extracted PKL can then be merged into the user's existing forma files.
