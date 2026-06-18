@@ -10,7 +10,14 @@ Use this skill to manage formae stack policies via natural language. Two policy 
 - **TTL** — destroys a stack after a duration (`TTLPolicy`).
 - **Auto-reconcile** — periodically reverts out-of-band changes (`AutoReconcilePolicy`).
 
-Reusable / standalone policies are out of scope for this skill (handled separately).
+## Inline vs standalone — pick the right kind
+
+- **Inline policy** — declared inside a single stack block. Use when the policy is one-off and applies to exactly one stack.
+- **Standalone (reusable) policy** — declared at the top level of `forma { }` and referenced from one or more stacks via `PolicyResolvable`. Use when the same policy governs multiple stacks (e.g. a shared 1-hour ephemeral TTL applied to `lifeline`, `dev`, and `staging`).
+
+When the user mentions attaching the same policy to more than one stack, or explicitly says "reusable" or "shared", default to standalone. Otherwise default to inline.
+
+A stack cannot have both an inline policy and a standalone policy of the same type. The MCP tools enforce this: `create_inline_policy` refuses if a standalone of the same type is already attached; `attach_standalone_policy` refuses if an inline of the same type exists.
 
 ## Defaults
 
@@ -52,6 +59,77 @@ Same shape as set, but call `create_inline_policy` with `operation: "remove"`. T
 For `remove`, the Edit tool deletes the lines covered by the anchor range. The `existing_policy_snippet` shows what's being removed; surface it in the diff.
 
 If `notes` mentions "removed empty policies block", explain to the user that the stack's `policies = new Listing { ... }` wrapper was also removed because that was the last policy.
+
+## Standalone (reusable) policies
+
+A standalone policy is declared once at the top level of the main forma file (`forma { }` block, not inside any stack) and attached to stacks via `PolicyResolvable` references.
+
+### PKL shape
+
+```pkl
+forma {
+  // Standalone policy declaration (top level, outside any stack)
+  new formae.TTLPolicy {
+    label = "ephemeral-1h"
+    ttl = 1.h
+    onDependents = "abort"
+  }
+
+  // (Auto-reconcile variant)
+  new formae.AutoReconcilePolicy {
+    label = "reconcile-5m"
+    interval = 5.min
+  }
+
+  // Stacks reference it via PolicyResolvable
+  new formae.Stack {
+    label = "lifeline"
+    // ...resources...
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "ephemeral-1h" }
+    }
+  }
+}
+```
+
+### Workflow — create a standalone policy (with optional attach)
+
+User says something like "create a 1-hour ephemeral policy and attach it to lifeline and dev".
+
+1. **Parse the intent.** Resolve policy fields and any stacks to attach to.
+2. **Call `create_standalone_policy`** with `label`, `policy_type`, duration fields, and optionally a `forma_file` override. The tool identifies the main forma file (the PKL file with the most stacks) and returns `file_path`, `pkl_snippet`, `insertion_anchor`, and `imports_to_add`. If the tool returns an ambiguity error, present the candidate files to the user and ask which to use (cache the choice for the session).
+3. **Read the file**, apply the edit (insert the snippet before the closing `}` of the `forma { }` block), add any missing imports.
+4. **For each stack to attach:** call `attach_standalone_policy(stack, policy_label)`. The tool returns a `PolicyResolvable` snippet and an insertion anchor inside the stack's `policies` block (or creates the block if absent). Apply the edit. If the tool returns `noop`, inform the user and continue.
+5. **Show the diff.** Ask whether to apply.
+6. **Simulate.** Call `apply_forma` with `mode: "reconcile"`, `simulate: true`, `force: true`. If edits span multiple files, simulate each file.
+7. **Confirm and apply for real.** Poll `get_command_status` every 5 seconds; report state transitions.
+
+### Workflow — attach a standalone policy to a stack
+
+User says "attach ephemeral-1h to staging".
+
+1. Call `attach_standalone_policy(stack, policy_label)`. On conflict (inline policy of same type exists), the tool errors — surface the message and suggest removing the inline policy first. On `noop`, tell the user it's already attached.
+2. Read the target file, apply the edit, show the diff.
+3. Simulate → confirm → apply → poll.
+
+### Workflow — detach a standalone policy from a stack
+
+User says "detach ephemeral-1h from lifeline".
+
+1. Call `detach_standalone_policy(stack, policy_label)`. Returns the line range to delete. On `noop` (not attached), inform the user and stop.
+2. Read the file, delete the lines. If `notes` mentions "removed empty policies block", explain to the user that the wrapper block was also removed.
+3. Show the diff. Simulate with `apply_forma reconcile`. Confirm → apply → poll.
+
+### Workflow — delete a standalone policy
+
+User says "delete the ephemeral-1h policy".
+
+1. Call `delete_standalone_policy(label)`. If the policy is still attached to stacks the tool refuses and lists the offending stacks — surface this and suggest detaching first.
+2. On success the tool returns: `file_path` + `source_anchor` (lines to delete), `existing_policy_snippet` (show as "before"), and `destroy_forma_pkl` (a complete PKL forma for the destroy step).
+3. **Remove the source declaration first:** read the file, delete the lines at `source_anchor`, show the diff.
+4. Write `destroy_forma_pkl` to a temp file. Call `destroy_forma(simulate=true)`, show the simulation, confirm.
+5. Call `destroy_forma(simulate=false)`, poll. Clean up the temp file.
+6. If the agent's destroy returns a `Skip` with `ReferencingStacks` (race condition), surface this clearly: the source PKL has been edited but the policy still exists in the agent; name the attaching stacks so the user can detach and retry.
 
 ## Workflow — show policies on a stack
 
