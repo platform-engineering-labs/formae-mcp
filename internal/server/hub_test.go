@@ -376,7 +376,69 @@ func TestListPluginExamplesTool(t *testing.T) {
 	if !strings.Contains(text, "originatorDomain") {
 		t.Fatalf("expected originatorDomain in output, got: %s", text)
 	}
-	if !strings.Contains(text, "versionMatched") {
-		t.Fatalf("expected versionMatched in output, got: %s", text)
+	if !strings.Contains(text, `"versionMatched":false`) {
+		t.Fatalf("expected versionMatched:false in output (fallback path), got: %s", text)
+	}
+}
+
+// MCP-level tool test for get_plugin_example.
+func TestGetPluginExampleTool(t *testing.T) {
+	const fileContent = `amends "package://platform.engineering/aws@0.2.0#/S3Bucket.pkl"`
+
+	var ghStubURL string // filled in once the server is created
+
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		// Hub: plugin detail
+		case r.URL.Path == "/api/v1/plugins/aws":
+			_, _ = w.Write([]byte(`{"name":"aws","namespace":"AWS","license":"FSL-1.1-ALv2","status":"ready","github_repo_url":"https://github.com/platform-engineering-labs/formae-plugin-aws"}`))
+		// Hub: catalog (trust + version)
+		case r.URL.Path == "/api/v1/plugins":
+			_, _ = w.Write([]byte(`{"results":[{"qualifiedName":"platform.engineering/aws","name":"aws","namespace":"AWS","originator":{"domain":"platform.engineering","verified":true},"latestStable":{"version":"0.2.0","channel":"stable"}}]}`))
+		// GitHub: tag ref — 404 to exercise default-branch fallback
+		case strings.Contains(r.URL.Path, "/git/refs/tags/"):
+			w.WriteHeader(http.StatusNotFound)
+		// GitHub: example dir listing for /examples/s3-bucket
+		case strings.HasSuffix(r.URL.Path, "/contents/examples/s3-bucket"):
+			downloadURL := ghStubURL + "/raw/s3-bucket/main.pkl"
+			body := `[{"name":"main.pkl","type":"file","download_url":"` + downloadURL + `"}]`
+			_, _ = w.Write([]byte(body))
+		// GitHub: raw file content
+		case strings.HasSuffix(r.URL.Path, "/raw/s3-bucket/main.pkl"):
+			_, _ = w.Write([]byte(fileContent))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer gh.Close()
+	ghStubURL = gh.URL
+
+	s := New("http://localhost:1")
+	s.hub = &HubClient{
+		baseURL:       gh.URL,
+		githubBaseURL: gh.URL,
+		httpClient:    gh.Client(),
+	}
+	session := connectServer(t, s)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "get_plugin_example",
+		Arguments: map[string]any{"plugin": "aws", "example": "s3-bucket"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, "main.pkl") {
+		t.Fatalf("expected main.pkl in output, got: %s", text)
+	}
+	if !strings.Contains(text, "S3Bucket.pkl") {
+		t.Fatalf("expected file content in output, got: %s", text)
+	}
+	if !strings.Contains(text, `"originatorVerified":true`) {
+		t.Fatalf("expected originatorVerified:true in output, got: %s", text)
+	}
+	if !strings.Contains(text, `"versionMatched":false`) {
+		t.Fatalf("expected versionMatched:false (fallback path) in output, got: %s", text)
 	}
 }

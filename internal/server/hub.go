@@ -346,11 +346,12 @@ func (c *HubClient) GetExample(pluginName, exampleName, version string) (GetExam
 		if err != nil {
 			return res, fmt.Errorf("download %s: %w", e.Name, err)
 		}
-		content, readErr := io.ReadAll(fileResp.Body)
-		fileResp.Body.Close()
 		if fileResp.StatusCode != http.StatusOK {
+			fileResp.Body.Close()
 			return res, fmt.Errorf("download %s returned status %d", e.Name, fileResp.StatusCode)
 		}
+		content, readErr := io.ReadAll(fileResp.Body)
+		fileResp.Body.Close()
 		if readErr != nil {
 			return res, fmt.Errorf("read %s: %w", e.Name, readErr)
 		}
