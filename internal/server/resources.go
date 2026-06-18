@@ -104,6 +104,62 @@ func (s *Server) registerResources() {
 			}},
 		}, nil
 	})
+
+	s.mcpServer.AddResource(&mcp.Resource{
+		URI:         "formae://docs/examples",
+		Name:        "Plugin Examples",
+		Description: "How to find and use plugin examples: /examples directory convention, list_plugin_examples / get_plugin_example MCP tools, caveats around boilerplate stubs and version matching.",
+		MIMEType:    "text/markdown",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{{
+				URI:  "formae://docs/examples",
+				Text: examplesDoc,
+			}},
+		}, nil
+	})
+
+	s.mcpServer.AddResource(&mcp.Resource{
+		URI:         "formae://docs/forma-structure",
+		Name:        "Forma Project Structure",
+		Description: "Infra-repo conventions: main.pkl, modules/, vars.pkl, cross-stack Resolvable references, and apply ordering.",
+		MIMEType:    "text/markdown",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{{
+				URI:  "formae://docs/forma-structure",
+				Text: formaStructureDoc,
+			}},
+		}, nil
+	})
+
+	s.mcpServer.AddResource(&mcp.Resource{
+		URI:         "formae://docs/stack-design",
+		Name:        "Stack Design Guide",
+		Description: "How to design stacks: reconciliation boundary semantics, nested/recursive targets, stacks orthogonal to targets, and policies per stack.",
+		MIMEType:    "text/markdown",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{{
+				URI:  "formae://docs/stack-design",
+				Text: stackDesignDoc,
+			}},
+		}, nil
+	})
+
+	s.mcpServer.AddResource(&mcp.Resource{
+		URI:         "formae://docs/authoring-pitfalls",
+		Name:        "Authoring Pitfalls",
+		Description: "Common mistakes when writing forma files: flat form, reconcile deletes, resolvable ordering, PklProject deps, label stability, and more.",
+		MIMEType:    "text/markdown",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{{
+				URI:  "formae://docs/authoring-pitfalls",
+				Text: authoringPitfallsDoc,
+			}},
+		}, nil
+	})
 }
 
 const querySyntaxDoc = `# Formae Query Syntax
@@ -621,4 +677,387 @@ Concept: https://docs.formae.io/en/latest/core-concepts/discovery/
 - Full docs site: https://docs.formae.io/en/latest/
 - Core concepts index: https://docs.formae.io/en/latest/core-concepts/
 - Per-plugin GitHub repos for plugin-specific issues
+`
+
+const examplesDoc = `# Plugin Examples
+
+## Where examples live
+
+Every plugin repository has an ` + "`/examples`" + ` directory — this is the canonical source
+for ready-to-use forma files that exercise each resource type. Always start here
+when you need a working starting point.
+
+## Fetching examples via MCP tools
+
+Use the MCP tools provided by the formae server to read live examples:
+
+- ` + "`list_plugin_examples`" + ` — lists all available examples for a given plugin.
+  Returns each example's name, description, and whether it is a likely template stub.
+- ` + "`get_plugin_example`" + ` — fetches the full content of a named example.
+
+Both tools fetch at the git tag that matches your pinned schema version. Check the
+` + "`versionMatched`" + ` field in the response:
+- ` + "`versionMatched: true`" + ` — the example is from the same version as your schema dep. Use it.
+- ` + "`versionMatched: false`" + ` — the plugin has no tag for your schema version; the example
+  comes from the default branch and **may not match your pinned schema**. Treat with caution
+  and warn the user before using.
+
+Also check ` + "`originatorVerified`" + `. Examples from unverified third-party plugins should not
+be treated as canonical without user confirmation.
+
+## The ` + "`basic`" + ` example caveat
+
+An example named ` + "`basic`" + ` is often unmodified template boilerplate (flagged
+` + "`likelyTemplateStub: true`" + ` by the tool). It may declare placeholder values and
+omit real configuration. Prefer named scenario examples (e.g., ` + "`vpc-with-subnets`" + `,
+` + "`s3-website`" + `) over ` + "`basic`" + ` whenever they exist.
+
+## Cross-plugin / multi-target examples
+
+The best references for wiring multiple plugins together and for nested target
+patterns are the cross-plugin end-to-end examples in the k8s plugin repository:
+
+- ` + "`lgtm-observability`" + ` — wires an AWS EKS cluster target, a Kubernetes target that
+  reads the cluster endpoint via a resolvable, and a Grafana target that reads the
+  in-cluster Grafana Service URL. The canonical nested-target reference.
+- ` + "`bookstore`" + ` — a multi-stack, multi-target application example covering AWS networking,
+  an EKS cluster, and Kubernetes workloads across separate stacks.
+
+Use these as the authoritative multi-plugin / nested-target references.
+
+## Going deeper
+
+- Forma project structure (modules, vars): formae://docs/forma-structure
+- Stack design (nested targets, reconciliation boundary): formae://docs/stack-design
+- Authoring pitfalls (version mismatch, boilerplate traps): formae://docs/authoring-pitfalls
+`
+
+const formaStructureDoc = `# Forma Project Structure
+
+## Canonical layout
+
+A formae infrastructure repository uses the following conventions:
+
+` + "```" + `
+infra-repo/
+  PklProject              # PKL package dependencies (plugin schemas)
+  formae.conf.pkl         # CLI/agent configuration
+  vars.pkl                # Shared scalars and Target instances
+  stacks/
+    network/
+      main.pkl            # Entry point — amends "@formae/forma.pkl"
+      network.pkl         # Network resource definitions
+    app/
+      main.pkl            # Entry point — amends "@formae/forma.pkl"
+      app.pkl             # App resource definitions
+  modules/                # PKL imported by 2 or more stacks
+    common-tags.pkl
+    naming.pkl
+` + "```" + `
+
+## main.pkl — the entry point
+
+Every stack directory has a ` + "`main.pkl`" + ` that is the entry point for that stack.
+It ` + "`amends \"@formae/forma.pkl\"`" + ` and spreads sibling resource files into its
+` + "`forma {}`" + ` block:
+
+` + "```pkl" + `
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+import "@aws/aws.pkl"
+
+import "network.pkl" as net
+
+forma {
+  new formae.Stack { label = "network" }
+  new formae.Target {
+    label = "aws-prod"
+    config = new aws.Config { region = "us-east-1" }
+  }
+  ...net.resources
+}
+` + "```" + `
+
+The ` + "`...net.resources`" + ` spread brings all resources declared in the sibling
+module into the stack's ` + "`forma {}`" + ` block. Each sibling file exports a
+` + "`resources`" + ` property (a Listing of resource objects).
+
+## vars.pkl — shared scalars and targets
+
+` + "`vars.pkl`" + ` at the repo root holds values shared across stacks:
+- Primitive scalars: region, availability zones, CIDR blocks
+- ` + "`formae.Target`" + ` instances that multiple stacks reference
+
+` + "```pkl" + `
+import "@formae/formae.pkl"
+import "@aws/aws.pkl"
+
+region = "us-east-1"
+azs = new Listing<String> { "us-east-1a"; "us-east-1b" }
+vpcCidr = "10.0.0.0/16"
+
+awsProd = new formae.Target {
+  label = "aws-prod"
+  config = new aws.Config { region = region }
+}
+` + "```" + `
+
+Import ` + "`vars.pkl`" + ` in each stack's ` + "`main.pkl`" + ` to avoid repetition.
+
+## modules/ — shared PKL modules
+
+The ` + "`modules/`" + ` directory is reserved for PKL modules imported by **two or more**
+stacks. Do not put single-consumer files there — keep them next to the stack that
+uses them. This keeps the module boundary meaningful.
+
+## Cross-stack references via Resolvables
+
+A stack that needs a resource from another stack uses a typed ` + "`*Resolvable`" + `
+field on its module, **not** hardcoded IDs. The consuming module declares:
+
+` + "```pkl" + `
+// app/app.pkl
+import "@formae/formae.pkl"
+
+// Typed cross-stack ref: points to the VPC ID produced by the network stack
+vpcId: formae.Resolvable
+
+appSubnet = new subnet.Subnet {
+  label = "app"
+  vpcId = vpcId          // resolved at apply time
+  cidr = "10.0.1.0/24"
+}
+` + "```" + `
+
+And ` + "`main.pkl`" + ` wires it by importing ` + "`vars.pkl`" + ` and the network stack's resources.
+
+## Apply ordering
+
+Apply order follows resolvable edges. A stack that references another stack's
+resources will be applied **after** the producing stack. The ` + "`formae-import`" + `
+skill is a good source of prior art for module composition patterns.
+
+## Going deeper
+
+- Forma file anatomy (single-file format): formae://docs/forma-anatomy
+- PKL syntax fundamentals: formae://docs/pkl-primer
+- Stack design and reconciliation boundaries: formae://docs/stack-design
+`
+
+const stackDesignDoc = `# Stack Design Guide
+
+## The stack is the reconciliation boundary
+
+A stack is the **reconciliation boundary** in formae. When you run
+` + "`apply --mode reconcile`" + ` against a stack, formae makes that stack match its
+PKL declaration exactly:
+- Resources in the PKL but not deployed → **created**
+- Resources deployed but not in the PKL → **deleted**
+- Differences between PKL and deployed state → **updated**
+
+How you group resources into stacks therefore decides what one reconcile can
+create or delete in a single operation. Group resources that share a lifecycle
+and a blast radius together.
+
+## Nested / recursive targets
+
+A **nested target** is a target whose configuration reads from a resource in
+another target via a resolvable. This enables a chain:
+
+` + "```" + `
+[AWS target] → EKS cluster resource
+                  ↓ endpoint + CA via resolvable
+              [Kubernetes target] → workload resources
+                                        ↓ Grafana Service URL via resolvable
+                                    [Grafana target] → dashboard resources
+` + "```" + `
+
+Concretely: the Kubernetes target's ` + "`config`" + ` reads ` + "`appCluster.res.endpoint`" + `
+and ` + "`appCluster.res.caCert`" + ` from an EKS cluster resource in the AWS target.
+The Grafana target reads the in-cluster Grafana Service URL from a Kubernetes
+Service resource in the Kubernetes target.
+
+The canonical example is the k8s plugin's ` + "`lgtm-observability`" + ` example — see
+` + "`formae://docs/examples`" + ` for how to fetch it.
+
+## Stacks are orthogonal to targets
+
+Stacks and targets are independent dimensions:
+- A **stack** groups resources for reconciliation purposes.
+- A **target** specifies where (which cloud account/region/cluster) resources are deployed.
+- A resolvable can cross **both** stack and target boundaries.
+
+You do not need to create a separate stack per target. A single stack may contain
+resources spread across multiple targets, and a resolvable from a Kubernetes
+target can reference a resource in an AWS target in a different stack.
+
+## Policies are set per stack
+
+Stacks carry policies that govern their lifecycle:
+
+- **TTL policy** — automatically destroys the stack after a duration. Useful for
+  ephemeral environments (preview deploys, feature branches). Set ` + "`onDependents`" + `
+  to ` + "`\"cascade\"`" + ` to also destroy dependent stacks.
+- **Auto-reconcile policy** — periodically re-reconciles the stack to revert any
+  out-of-band changes. Useful for environments that must stay locked to IaC.
+
+Because **policies are set per stack**, the policy granularity mirrors the stack
+grouping. This is another reason to group by blast radius and lifecycle: a TTL
+on a ` + "`preview`" + ` stack tears down only what belongs to that preview, not shared
+infrastructure in a ` + "`networking`" + ` stack.
+
+## Practical guidelines
+
+- **Group by lifecycle** — resources created and destroyed together belong in
+  the same stack.
+- **Group by blast radius** — resources whose failure modes are coupled (e.g.,
+  app tier + its database) belong together; shared infra (VPC, DNS) lives in its
+  own stack.
+- **Don't mirror target boundaries** — a stack may span multiple targets; let
+  resolvables handle cross-target wiring.
+- **Keep stacks focused** — large stacks make reconcile slower and increase the
+  impact of a single bad change.
+
+## Going deeper
+
+- Forma project structure (modules, vars, cross-stack refs): formae://docs/forma-structure
+- Plugin examples (nested-target canonical reference): formae://docs/examples
+- Authoring pitfalls (reconcile deletes surprise): formae://docs/authoring-pitfalls
+- Policies reference: https://docs.formae.io/en/latest/core-concepts/stack/
+`
+
+const authoringPitfallsDoc = `# Authoring Pitfalls
+
+> This document is seeded with known pitfalls and will be expanded by dogfooding
+> as real-world authoring experience accumulates.
+
+---
+
+## 1. Using the flat ` + "`stack=`" + ` / ` + "`targets=`" + ` / ` + "`resources=`" + ` form
+
+**Wrong:**
+` + "```pkl" + `
+amends "@formae/forma.pkl"
+
+stack = new formae.Stack { label = "default" }
+targets = new Listing { new formae.Target { ... } }
+resources = new Listing { myBucket }
+` + "```" + `
+
+**Right:** real forma files use a ` + "`forma {`" + ` block:
+` + "```pkl" + `
+amends "@formae/forma.pkl"
+
+forma {
+  new formae.Stack { label = "default" }
+  new formae.Target { ... }
+  myBucket
+}
+` + "```" + `
+
+The flat form is not recognized by the formae parser.
+
+---
+
+## 2. Reconcile deletes resources not in your PKL
+
+` + "`apply --mode reconcile`" + ` (the default) treats your PKL as the **complete truth** for
+that stack. Any resource in the stack that is **not** in your PKL will be **deleted**.
+If you only want to add or update specific resources without touching others, use
+` + "`--mode patch`" + ` instead. Always simulate first.
+
+---
+
+## 3. Resolvable used before the producing stack/resource is applied
+
+A ` + "`reconcile`" + ` on a stack that references a resolvable from another stack will fail if
+the producing stack hasn't been applied yet — the resolvable has no value to bind.
+Apply producer stacks first, in dependency order.
+
+---
+
+## 4. Forgetting to add a plugin's schema dependency to ` + "`PklProject`" + `
+
+If you import ` + "`@aws/s3/bucket.pkl`" + ` but haven't declared the ` + "`@aws`" + ` package in
+` + "`PklProject`" + `, PKL will fail to resolve the import. Run
+` + "`formae project add-dep <plugin-schema-uri>`" + ` or edit ` + "`PklProject`" + ` manually.
+
+---
+
+## 5. Confusing schema dep (authoring) with agent plugin install (runtime)
+
+- **Schema dep** in ` + "`PklProject`" + ` — needed at authoring time so PKL can type-check your
+  forma files. Does not require root; lives in your project.
+- **Plugin install on the agent** — needed at runtime so the agent can perform CRUD
+  operations against the cloud. Requires root on the agent machine; installed via
+  ` + "`formae plugin install`" + `.
+
+You need both. Forgetting the agent-side install produces a ` + "`plugin not found`" + ` error
+at apply time even though your PKL compiles fine.
+
+---
+
+## 6. Trusting ` + "`examples/basic`" + ` as a real reference
+
+The ` + "`basic`" + ` example in a plugin's ` + "`/examples`" + ` directory is often unmodified
+template boilerplate (flagged ` + "`likelyTemplateStub: true`" + ` by ` + "`list_plugin_examples`" + `).
+It may use placeholder values and omit real configuration. Prefer named scenario
+examples when they exist.
+
+---
+
+## 7. Using examples from a newer plugin version than your pinned schema
+
+When ` + "`get_plugin_example`" + ` returns ` + "`versionMatched: false`" + `, the example comes from the
+plugin's default branch — which may be ahead of your pinned schema version. Field
+names, types, or required properties may differ. Heed this flag; don't silently
+copy an example that may not work with your schema.
+
+---
+
+## 8. Treating an unverified third-party plugin's examples as canonical
+
+` + "`get_plugin_example`" + ` returns an ` + "`originatorVerified`" + ` flag. If it is ` + "`false`" + `, the
+example comes from a third-party plugin not verified by the formae team. Use it as
+a starting point only, and confirm with the user before treating it as authoritative.
+
+---
+
+## 9. A standalone PKL file that declares its own stack/target won't reconcile
+
+A ` + "`.pkl`" + ` file that declares its own ` + "`forma {}`" + ` block must appear in the
+` + "`main.pkl`" + ` import tree to be reconciled. A file that lives next to ` + "`main.pkl`" + `
+but is never imported or spread into ` + "`main.pkl`" + `'s ` + "`forma {}`" + ` block is invisible
+to the agent. Always spread resources via ` + "`...module.resources`" + ` in ` + "`main.pkl`" + `.
+
+---
+
+## 10. Changing an imported resource's ` + "`label`" + ` makes reconcile plan a CREATE
+
+The agent identifies resources by the triplet ` + "`(stack, type, label)`" + `. If you change a
+resource's ` + "`label`" + ` in PKL, the agent sees a new resource (CREATE) and the old one as
+deleted (DELETE). To bring an existing resource under management without recreating
+it, the ` + "`label`" + ` must match exactly what the agent recorded — use the ` + "`formae-import`" + `
+skill to generate the correct PKL with the right ` + "`label`" + `.
+
+---
+
+## 11. Using ` + "`pkl eval`" + ` on forma files instead of ` + "`formae eval`" + `
+
+Don't evaluate forma files with ` + "`pkl eval`" + ` directly. Always use:
+` + "```" + `
+formae eval --output-consumer machine
+` + "```" + `
+` + "`formae eval`" + ` resolves ` + "`@formae/`" + ` imports, handles Resolvables, and produces the
+machine-readable JSON that the agent and other tooling expect. Plain ` + "`pkl eval`" + `
+skips formae's resolver and will produce incorrect or incomplete output.
+
+---
+
+## Going deeper
+
+- Forma structure and project layout: formae://docs/forma-structure
+- Stack design and reconciliation boundary: formae://docs/stack-design
+- Plugin examples (version matching, stubs): formae://docs/examples
+- Troubleshooting common errors: formae://docs/troubleshooting
 `
