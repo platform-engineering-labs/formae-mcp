@@ -7,6 +7,20 @@ description: "Use when the user wants to create a new formae resource plugin, bu
 
 Create a complete formae resource plugin for a cloud provider or service, following the plugin SDK tutorial and using TDD for the implementation.
 
+## When you arrive here from authoring
+
+Building a resource plugin is a **large, multi-step, context-hungry effort**: provider API research, schema design, CRUD implementation, TDD for every operation, conformance tests, and end-to-end verification. The full workflow (steps 1–8 below) easily spans hundreds of tool calls and thousands of tokens — far bigger than authoring a forma file.
+
+**If the user arrived here mid-authoring** (i.e., they were writing a forma file and discovered no plugin exists for their provider), offer to run the plugin build as a **separate sub-agent or fresh session** before diving in:
+
+> "Building this plugin is a large task that will likely fill the current conversation's context window. I recommend starting a fresh Claude Code session (or I can launch a sub-agent) so the plugin build doesn't crowd out your authoring work. Want me to proceed that way?"
+
+**If the user is not actively managing context**, proactively warn them before starting:
+
+> "Heads up: building a full plugin typically uses 40–60 % of a context window on its own. I'll warn you again at 40 % and every 10 % after that, but if you'd prefer to keep this conversation focused on authoring, I can hand the plugin work to a sub-agent now."
+
+Only skip these prompts if the user has already confirmed they want to build the plugin in the current session.
+
 ## MANDATORY RULE: Install Before Testing
 
 After ANY code changes to the plugin, you MUST run `make install` before running conformance tests. The conformance tests run against the INSTALLED plugin binary, not the source code. Skipping this step means you're testing stale code.
@@ -164,7 +178,28 @@ Create a test project and verify the full lifecycle:
   - Supported resource types with descriptions
   - Example usage
 
-### 8. Definition of Done
+### 8. Installing the finished plugin on the agent
+
+**Authoring vs. runtime distinction.** Schema work (`formae eval`, PKL editing) does NOT require the plugin to be installed on the agent — the PKL schema is evaluated locally. The plugin binary is only needed for `formae apply` / runtime operations that actually call cloud APIs.
+
+**Where the plugin runs.** A resource plugin is a separate process that the formae agent discovers and spawns at startup. The binary must be present on the **agent machine** — the host (local or remote) where `formae agent start` runs. The agent's plugin directory is configured in `~/.config/formae/formae.conf.pkl` on that machine.
+
+**Install requires root and possibly remote access.** Placing a binary in the agent's plugin directory typically requires `sudo` (or equivalent) on the agent host. If the agent runs remotely, you may need SSH access. If the agent runs in a container, you need to rebuild or extend the container image.
+
+**The assistant guides, never installs.** Walk the user through the installation steps but do NOT:
+- Run `sudo` commands to place binaries on the agent host
+- SSH into a remote machine and install on the user's behalf
+- Modify a production agent without the user's explicit confirmation for each step
+
+**Docker-based agents.** If the agent runs in a Docker container, adding a plugin requires rebuilding or extending the image so the plugin binary is present inside it. The general approach is to add a `COPY` step for the plugin binary and a `RUN` step to register it, then redeploy the container. See [docs.formae.io](https://docs.formae.io) for the authoritative procedure.
+
+> **Docs gap (as of 2026-06-17):** The page `https://docs.formae.io/en/operations/extending-the-agent-image/` is listed in the docs sidebar but returns 404. Until it is published, guide the user through the general Docker extension pattern and refer them to [docs.formae.io](https://docs.formae.io) for the latest authoritative steps. Do not fabricate specific Dockerfile snippets as authoritative — confirm with the user before any production change.
+
+**Non-Docker agents.** Copy the built plugin binary to the agent host's plugin directory (as shown in `formae-plugin.pkl`'s install target or via `make install` if the agent machine is local), then restart the agent. The exact path is in `~/.config/formae/formae.conf.pkl` on the agent host.
+
+**Verify the install.** After installation, run `formae plugin list` (or the equivalent agent health check) to confirm the agent has discovered and started the plugin before attempting `formae apply`.
+
+### 9. Definition of Done
 
 Before reporting completion, verify each item:
 
