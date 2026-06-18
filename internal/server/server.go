@@ -15,7 +15,7 @@ import (
 
 const (
 	serverName    = "formae-mcp"
-	serverVersion = "0.3.0"
+	serverVersion = "0.5.0"
 )
 
 // Server wraps the MCP server and the formae API client.
