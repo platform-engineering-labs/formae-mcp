@@ -27,15 +27,15 @@ If the intent is "bring existing cloud resources under management", dispatch to 
 
 ## Step 3 — Infer schema plugins
 
-Call `search_hub_plugins` to identify the schema packages the user's intent requires. Map intent to plugin names — for example: "EKS on AWS" → `aws`, `k8s`; "Azure storage" → `azure`; "Tailscale mesh" → `tailscale`. Present the inferred set and ask the user to confirm or adjust before proceeding.
+Call `search_hub_plugins` to identify the schema packages the user's intent requires. Map intent to plugin names — for example: "EKS on AWS" → `aws`, `k8s`; "Azure storage" → `azure`; "Tailscale mesh" → `tailscale`. When `search_hub_plugins` returns multiple candidates for an ambiguous name, use `get_hub_plugin` to disambiguate and fetch the repo and version detail. Present the inferred set and ask the user to confirm or adjust before proceeding.
 
 Make clear: these are **schema packages only** — they provide PKL types and IDE completion. They do not install resource plugins on the agent.
 
 **If a needed plugin is absent from the catalog:** surface `formae-plugin-new` as the path forward. Add a context-window caution to the user: plugin building is a substantial task — it is best started in a fresh session or as a sub-agent to avoid context pressure mid-authoring.
 
 **Dependency wiring** — do not wire deps yourself:
-- New project: `formae-project-init` handles deps (already dispatched in Step 1c).
-- Existing project: dispatch to `formae-deps` to add the new schema package deps.
+- New project: `formae-project-init` sets up the initial schema package deps.
+- Existing project needing additional packages: dispatch to `formae-deps` to add them.
 
 ## Step 4 — Trust gate
 
@@ -63,16 +63,17 @@ Then dispatch to `formae-stack-design` to decide how resources are grouped into 
 
 ## Step 7 — Author, policy, simulate, and apply
 
-**Fetch examples** by calling `list_plugin_examples` for the chosen plugin combination, pinned to the schema version declared in the project's `PklProject`. If the result reports `versionMatched: false`, tell the user before relying on those examples: *"These examples come from the plugin's default branch and may not match your pinned schema version — treat them as a starting point and verify against your installed PKL types."*
+**Fetch examples** by calling `list_plugin_examples` for the chosen plugin combination, pinned to the schema version declared in the project's `PklProject`. If the result reports `versionMatched: false`, tell the user before relying on those examples: *"These examples come from the plugin's default branch and may not match your pinned schema version — treat them as a starting point and verify against your installed PKL types."* Once a specific example is chosen, use `get_plugin_example` to fetch its PKL files.
 
 **Policy needs** — if the user wants TTL, auto-reconcile, or other lifecycle policies on a stack, dispatch to `formae-policy`.
 
-**Simulate then apply** — dispatch to `formae-apply` for the simulate-then-apply workflow. Do not call `apply_forma` directly from this skill.
+**Simulate then apply** — dispatch to `formae-apply` for the simulate-then-apply workflow.
 
 ---
 
 ## CONSTRAINTS
 
+- **Never call `apply_forma` directly.** Always dispatch to `formae-apply` for simulate/apply workflows.
 - **Never install resource plugins.** Plugin installation is an agent-side operation. Guide the user to docs.formae.io; do not attempt it.
 - **Never write the flat forma form.** Do not write `stack = ...`, `targets = ...`, `resources = ...` at the top level. Always use the `forma {}` block pattern.
 - **Always use `formae eval --output-consumer machine`.** Never use `pkl eval` — forma files use formae-specific extensions that only the formae CLI resolves correctly, and `--output-consumer machine` produces parseable output.
