@@ -62,6 +62,8 @@ If `notes` mentions "removed empty policies block", explain to the user that the
 
 ## Standalone (reusable) policies
 
+> **Availability:** The `create_standalone_policy` / `attach_standalone_policy` / `detach_standalone_policy` / `delete_standalone_policy` MCP tools described below are part of a planned feature and may not be present on the connected MCP server. **Before using any of them, confirm the tool is actually available.** If these tools are NOT available, do standalone policies manually instead (see "Manual fallback" below) — and only if the connected agent supports standalone policies at all; if unsure, tell the user standalone-policy support may not be available yet and offer an inline policy instead.
+
 A standalone policy is declared once at the top level of the main forma file (`forma { }` block, not inside any stack) and attached to stacks via `PolicyResolvable` references.
 
 ### PKL shape
@@ -92,7 +94,23 @@ forma {
 }
 ```
 
+### Manual fallback (no standalone tools)
+
+When the standalone MCP tools are NOT available, you can still create and attach a standalone policy by editing the PKL file directly:
+
+1. **Read the main forma file** — identify the file that contains the `forma { }` block with the most stacks.
+2. **Insert the policy declaration** — add the standalone policy at the top level inside the `forma { }` block (not inside any stack), using the PKL shape shown above (e.g. `new formae.TTLPolicy { label=...; ttl=... }` or `new formae.AutoReconcilePolicy { label=...; interval=... }`).
+3. **Add a `PolicyResolvable` reference** — for each target stack, add (or extend) a `policies = new Listing { ... }` block containing `new formae.PolicyResolvable { label = "<policy-label>" }`.
+4. **Add any missing imports** near the top of the file.
+5. **Show the diff** to the user.
+6. **Simulate first:** call `apply_forma` with `mode: "reconcile"`, `simulate: true`, `force: true`, `file_path: <file>`. Show the simulation result and ask for explicit confirmation.
+7. **Apply for real:** call `apply_forma` with `simulate: false`. Poll `get_command_status` every 5 seconds; only report state transitions.
+
+> **Note:** this manual path still depends on the connected formae agent supporting standalone policies. If the agent does not recognise them, the apply will fail. In that case, fall back to an inline policy instead.
+
 ### Workflow — create a standalone policy (with optional attach)
+
+_Use this workflow when the standalone MCP tools are available (see Availability note above)._
 
 User says something like "create a 1-hour ephemeral policy and attach it to lifeline and dev".
 
@@ -106,6 +124,8 @@ User says something like "create a 1-hour ephemeral policy and attach it to life
 
 ### Workflow — attach a standalone policy to a stack
 
+_Use this workflow when the standalone MCP tools are available (see Availability note above)._
+
 User says "attach ephemeral-1h to staging".
 
 1. Call `attach_standalone_policy(stack, policy_label)`. On conflict (inline policy of same type exists), the tool errors — surface the message and suggest removing the inline policy first. On `noop`, tell the user it's already attached.
@@ -114,6 +134,8 @@ User says "attach ephemeral-1h to staging".
 
 ### Workflow — detach a standalone policy from a stack
 
+_Use this workflow when the standalone MCP tools are available (see Availability note above)._
+
 User says "detach ephemeral-1h from lifeline".
 
 1. Call `detach_standalone_policy(stack, policy_label)`. Returns the line range to delete. On `noop` (not attached), inform the user and stop.
@@ -121,6 +143,8 @@ User says "detach ephemeral-1h from lifeline".
 3. Show the diff. Simulate with `apply_forma reconcile`. Confirm → apply → poll.
 
 ### Workflow — delete a standalone policy
+
+_Use this workflow when the standalone MCP tools are available (see Availability note above)._
 
 User says "delete the ephemeral-1h policy".
 
