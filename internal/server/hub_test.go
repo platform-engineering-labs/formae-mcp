@@ -1,10 +1,40 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// connectServer connects an already-built *Server via InMemoryTransport and
+// returns a client session for calling tools. Prefer connectTestServer when
+// the server can be built internally; use this when you need to inject
+// dependencies (e.g. a stub HubClient) before connecting.
+func connectServer(t *testing.T, s *Server) *mcp.ClientSession {
+	t.Helper()
+	ctx := context.Background()
+
+	t1, t2 := mcp.NewInMemoryTransports()
+
+	serverSession, err := s.mcpServer.Connect(ctx, t1, nil)
+	if err != nil {
+		t.Fatalf("server.Connect failed: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	clientSession, err := client.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatalf("client.Connect failed: %v", err)
+	}
+	t.Cleanup(func() { clientSession.Close() })
+
+	return clientSession
+}
 
 func TestHubClientSearchPlugins(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,5 +195,59 @@ func TestHubClientGetPlugin(t *testing.T) {
 	}
 	if d.GithubRepoURL != "https://github.com/platform-engineering-labs/formae-plugin-kubernetes" {
 		t.Fatalf("unexpected repo url: %q", d.GithubRepoURL)
+	}
+}
+
+// --- MCP tool tests ---
+
+func TestSearchHubPluginsTool(t *testing.T) {
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"results":[{"qualifiedName":"platform.engineering/k8s","name":"k8s","namespace":"K8S"}]}`))
+	}))
+	defer hub.Close()
+
+	s := New("http://localhost:1")
+	s.hub = &HubClient{baseURL: hub.URL, httpClient: hub.Client()}
+	session := connectServer(t, s)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search_hub_plugins",
+		Arguments: map[string]any{"query": "k8s"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, "K8S") {
+		t.Fatalf("expected K8S in output, got: %s", text)
+	}
+}
+
+func TestGetHubPluginTool(t *testing.T) {
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/k8s") {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"name":"k8s","namespace":"K8S","license":"FSL-1.1-ALv2","status":"ready","github_repo_url":"https://github.com/platform-engineering-labs/formae-plugin-kubernetes"}`))
+	}))
+	defer hub.Close()
+
+	s := New("http://localhost:1")
+	s.hub = &HubClient{baseURL: hub.URL, httpClient: hub.Client()}
+	session := connectServer(t, s)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "get_hub_plugin",
+		Arguments: map[string]any{"name": "k8s"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, "github_repo_url") {
+		t.Fatalf("expected github_repo_url in output, got: %s", text)
+	}
+	if !strings.Contains(text, "formae-plugin-kubernetes") {
+		t.Fatalf("expected repo URL in output, got: %s", text)
 	}
 }

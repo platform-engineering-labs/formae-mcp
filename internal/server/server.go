@@ -22,6 +22,7 @@ const (
 type Server struct {
 	mcpServer *mcp.Server
 	client    *FormaeClient
+	hub       *HubClient
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -41,6 +42,7 @@ func New(endpoint string) *Server {
 	s := &Server{
 		mcpServer: mcpServer,
 		client:    client,
+		hub:       NewHubClient(),
 	}
 
 	s.registerTools()
@@ -124,6 +126,18 @@ func (s *Server) registerTools() {
 		Description: tools.ExtractResourcesDescription,
 		Annotations: readOnly,
 	}, s.handleExtractResources)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "search_hub_plugins",
+		Description: tools.SearchHubPluginsDescription,
+		Annotations: readOnly,
+	}, s.handleSearchHubPlugins)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "get_hub_plugin",
+		Description: tools.GetHubPluginDescription,
+		Annotations: readOnly,
+	}, s.handleGetHubPlugin)
 
 	// Mutation tools
 	destructive := boolPtr(true)
@@ -335,6 +349,33 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 	}
 
 	return textResult(string(content)), nil, nil
+}
+
+func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
+	plugins, err := s.hub.SearchPlugins(input.Query)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(plugins)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
+}
+
+func (s *Server) handleGetHubPlugin(_ context.Context, _ *mcp.CallToolRequest, input tools.GetHubPluginInput) (*mcp.CallToolResult, any, error) {
+	if input.Name == "" {
+		return errorResult(fmt.Errorf("name is required")), nil, nil
+	}
+	d, err := s.hub.GetPlugin(input.Name)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(d)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
 }
 
 // Tool handlers — mutations

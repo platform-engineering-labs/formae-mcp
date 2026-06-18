@@ -70,6 +70,16 @@ type CreateInlinePolicyInput struct {
 	FormaFile       string `json:"forma_file,omitempty" jsonschema:"Optional explicit path to the forma file declaring the stack. When omitted the tool searches the workspace using formae eval."`
 }
 
+// SearchHubPluginsInput is the input for the search_hub_plugins tool.
+type SearchHubPluginsInput struct {
+	Query string `json:"query,omitempty" jsonschema:"Optional filter matched against plugin name, namespace, or category (e.g. 'k8s', 'cloud', 'observability'). Leave empty to list the full catalog."`
+}
+
+// GetHubPluginInput is the input for the get_hub_plugin tool.
+type GetHubPluginInput struct {
+	Name string `json:"name" jsonschema:"required,The plugin short name as listed by search_hub_plugins (e.g. 'aws', 'k8s', 'grafana')."`
+}
+
 // CreateInlinePolicyOutput is the structured response from the create_inline_policy tool.
 // The tool does NOT modify the file — the caller (skill / LLM) applies the edit using the Edit tool.
 type CreateInlinePolicyOutput struct {

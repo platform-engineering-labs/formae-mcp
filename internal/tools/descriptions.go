@@ -128,6 +128,10 @@ If a stack is specified, only checks that stack. If no stack is specified, check
 
 An empty result means no changes have been detected — the infrastructure matches the last reconciled state.`
 
+const SearchHubPluginsDescription = "Search the formae plugin hub catalog (hub.platform.engineering) for available plugins by name, namespace, or category. Returns qualifiedName, namespace, category, and latest stable version. Use this to infer which plugin SCHEMA packages a forma file needs, to resolve PklProject dependency versions, and to detect when no plugin exists for a desired service (which signals creating one). This reads the live catalog — it does NOT install anything."
+
+const GetHubPluginDescription = "Get detail for one hub plugin by short name, including its github_repo_url (used to locate examples) and latest version. Reads the live hub API."
+
 const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
 
 Use this tool when you need to see the PKL representation of existing resources — typically unmanaged resources that the user wants to bring under formae management. The extracted PKL can then be merged into the user's existing forma files.
