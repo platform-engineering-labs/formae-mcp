@@ -48,13 +48,19 @@ Special case: if `PklProject` exists but `main.pkl` does not, a prior init likel
 
 ## Step 4 — Run `formae project init`
 
-Show the exact command to the user before running it. Include the chosen plugin dependencies and the target directory. Example:
+`formae project init` scaffolds the project in a **target directory** — an optional positional path that defaults to the current directory. Plugins are added with **repeated `--include` flags, each taking a plugin SHORT NAME** (`aws`, `k8s`, `vllm`, `grafana`, …). There is **no `@formae/` prefix, no `--deps`, no `--name`, and it is not comma-separated** — one `--include` per plugin:
 
 ```
-formae project init --name <project-name> --deps @formae/aws,@formae/k8s ./<project-name>/
+formae project init <dir> --include k8s --include vllm -y
 ```
 
-Wait for confirmation, then run the command.
+Flags (from `formae project init --help`): `--include <name>` (repeatable, short plugin name), `--schema pkl` (default), `-y`/`--yes` (skip the no-plugins confirmation), `--plugin-dir <dir>` (scanned for `@local` schemas; default `~/.pel/formae/plugins`), `--config <file>`.
+
+**Important — `--include` resolves the plugin version from the agent.** A non-`@local` include (e.g. `--include k8s`) makes init query the **agent** for that plugin's installed version, so the plugin must already be installed on the agent. If you hit `plugin "<name>" not installed on the agent`, either:
+- have the user install it agent-side first (`formae plugin install <name>` on the agent host — you never install it yourself), or
+- use a local schema instead: `--include <name>@local --plugin-dir <dir>` (resolves from disk, no agent query).
+
+Show the exact command to the user before running it; wait for confirmation, then run it.
 
 ## Step 5 — Scaffold the project structure
 

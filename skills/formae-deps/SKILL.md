@@ -43,13 +43,11 @@ Read the file first, then apply the edit with the Edit tool. Show the diff to th
 
 ### 2c — Resolve the deps lockfile
 
-After editing `PklProject`, the lockfile `PklProject.deps.json` must be updated. Show this command to the user before running it:
+After editing `PklProject`, the lockfile `PklProject.deps.json` must be updated. This is a **PKL** command — `formae` has no `project resolve` subcommand (`formae project` only has `init`). Show it to the user before running it, from the directory containing `PklProject`:
 
 ```
-formae project resolve
+pkl project resolve
 ```
-
-If you are unsure whether this is the correct subcommand, run `formae project --help` first and use the output to confirm. Do not guess silently.
 
 ## Step 3 — Remove a dependency
 
@@ -57,7 +55,7 @@ Read `PklProject`, find the dependency block for the named plugin, and delete it
 
 **Dangling import check.** Before confirming the removal, search all `.pkl` files in the project for `import "@<name>/` (and `amends "@<name>/`). If any match is found, warn the user that removing the dependency will leave dangling imports that will cause resolution errors. List the affected files and ask whether to proceed anyway. Do not automatically remove the imports — that is the user's decision.
 
-After deleting from `PklProject`, run `formae project resolve` (or the equivalent — see Step 2c) to update the lockfile.
+After deleting from `PklProject`, run `pkl project resolve` (see Step 2c) to update the lockfile.
 
 ## Step 4 — Agent install note
 
@@ -71,5 +69,5 @@ If the user actually needs the resource plugin to **run** (i.e., to execute `app
 
 - **Schema deps only.** This skill does not install resource plugins on the agent, does not modify `formae root`, and makes no changes to the agent or running infrastructure.
 - **Never silently add an unverified-originator plugin.** If `originatorVerified` is false, surface the originator domain and get explicit user confirmation before adding the dependency.
-- **Never guess the `formae project resolve` subcommand.** If unsure, run `--help` first. Show the command before running it.
+- **Use `pkl project resolve`** to update `PklProject.deps.json` — `formae project resolve` does not exist (`formae project` only has `init`). Show the command before running it.
 - **Never skip the dangling-import check on removal.** Always scan `.pkl` files before confirming a dependency removal.
