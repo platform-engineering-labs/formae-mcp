@@ -104,12 +104,6 @@ func (s *Server) registerTools() {
 	}, s.handleCheckHealth)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
-		Name:        "list_plugins",
-		Description: tools.ListPluginsDescription,
-		Annotations: readOnly,
-	}, s.handleListPlugins)
-
-	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "list_policies",
 		Description: tools.ListPoliciesDescription,
 		Annotations: readOnly,
@@ -264,15 +258,6 @@ func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, in
 		return errorResult(err), nil, nil
 	}
 	return textResult("Formae agent is healthy and reachable."), nil, nil
-}
-
-func (s *Server) handleListPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	cmd := exec.Command("formae", "plugin", "list")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errorResult(fmt.Errorf("failed to list plugins: %w\noutput: %s", err, string(output))), nil, nil
-	}
-	return textResult(string(output)), nil, nil
 }
 
 func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {

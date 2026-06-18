@@ -60,10 +60,6 @@ const CheckHealthDescription = `Check if the formae agent is running and reachab
 
 Use this tool to verify the agent is available before performing operations.`
 
-const ListPluginsDescription = `List all active formae plugins including resource plugins, schema plugins, and network plugins. Shows plugin name, namespace, version, and capabilities.
-
-Use this tool when the user asks about installed plugins, supported cloud providers, or available resource types.`
-
 const ApplyFormaDescription = `Submit a forma apply command to the formae agent. The command is executed asynchronously — use get_command_status or list_commands to monitor progress.
 
 This tool evaluates the forma file (PKL -> JSON if needed) and submits it to the agent. There are two modes:

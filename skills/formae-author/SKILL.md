@@ -45,12 +45,12 @@ If any plugin returns `originatorVerified: false`, **surface its `originatorDoma
 
 ## Step 5 — Agent readiness (guidance only, non-blocking)
 
-Call `check_health` and `list_plugins` to get the current agent state. This is informational — authoring and simulate mode do not require resource plugins to be installed.
+Authoring and simulate mode need only plugin **schemas** (the PklProject dependencies) — not the resource plugins themselves — so **assume the required resource plugins are already installed on the agent** and proceed. Do **not** probe the agent's installed plugins here: there is no reliable, non-privileged way to list an agent's plugins (the old `list_plugins`/`formae plugin list` path requires sudo and only sees *local* plugins anyway), and authoring never needs it. `check_health` is fine as an optional, no-privilege reachability check.
 
-For any resource plugin that is missing from the agent but required by the forma:
+If a later `apply` fails because a required resource plugin is not installed on the agent:
 
-- Inform the user it is not yet installed.
-- Point to docs.formae.io for installation instructions (Docker vs other environments).
+- Inform the user which plugin is missing (the apply error will name it).
+- Point to docs.formae.io for installation instructions (Docker vs other environments). Never install it yourself.
 - Clarify: authoring, `formae eval --output-consumer machine`, and simulate mode all work without the plugin. A real apply requires the plugin to be present on the agent.
 
 Do not install resource plugins. That is an agent-side operation outside this skill's scope.

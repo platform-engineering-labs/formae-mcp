@@ -1,6 +1,6 @@
 # formae-mcp
 
-MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 23 MCP tools for querying and managing cloud infrastructure, plus 19 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
+MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 22 MCP tools for querying and managing cloud infrastructure, plus 18 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
 
 ## Prerequisites
 
@@ -71,7 +71,6 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-stacks` | View infrastructure stacks, organization, and resource counts |
 | `formae-resources` | Query deployed resources by type, stack, label, or management status |
 | `formae-targets` | List cloud targets, configured regions, and provider accounts |
-| `formae-plugins` | List installed plugins, supported providers, and resource types |
 | `formae-apply` | Deploy infrastructure by applying a forma file or reconciling a stack |
 | `formae-patch` | Make targeted infrastructure changes without a full reconcile |
 | `formae-destroy` | Tear down infrastructure resources, stacks, or environments |
@@ -96,7 +95,6 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `list_commands` | List commands with optional query and filters |
 | `get_agent_stats` | Retrieve agent statistics |
 | `check_health` | Health check for the formae agent |
-| `list_plugins` | List active plugins |
 | `list_changes_since_last_reconcile` | List infrastructure changes since last reconcile |
 | `extract_resources` | Extract resources as PKL code |
 | `list_policies` | List standalone (reusable) policies and the stacks they're attached to |
