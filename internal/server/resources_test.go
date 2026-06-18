@@ -168,6 +168,21 @@ func TestReadResource_Annotations(t *testing.T) {
 	}
 }
 
+func TestFormaAnatomyUsesFormaBlock(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	res, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "formae://docs/forma-anatomy"})
+	if err != nil {
+		t.Fatalf("ReadResource: %v", err)
+	}
+	text := res.Contents[0].Text
+	if !strings.Contains(text, "forma {") || !strings.Contains(text, "new formae.Stack") {
+		t.Errorf("forma-anatomy must show the forma { } block with new formae.Stack")
+	}
+	if strings.Contains(text, "targets = new Listing") || strings.Contains(text, "resources = new Listing") {
+		t.Errorf("forma-anatomy must NOT teach the flat stack=/targets=/resources= form")
+	}
+}
+
 func TestReadResource_Troubleshooting(t *testing.T) {
 	session := connectTestServer(t, "http://localhost:1")
 

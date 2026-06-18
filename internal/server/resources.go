@@ -346,36 +346,44 @@ computes a changeset, and applies the changes.
 
 ` + "```pkl" + `
 amends "@formae/forma.pkl"
-
-import "@aws/aws.pkl" as aws
+import "@formae/formae.pkl"
+import "@aws/aws.pkl"
 import "@aws/s3/bucket.pkl"
 
-stack = "default"
-
-targets = new Listing<aws.Target> {
-  new {
-    label = "prod-us-west-2"
-    region = "us-west-2"
-  }
+local assets = new bucket.Bucket {
+  label = "my-app-assets"
+  bucketName = "my-app-assets-prod"
 }
 
-resources = new Listing {
-  new bucket.Bucket {
-    label = "my-app-assets"
-    bucketName = "my-app-assets-prod"
+forma {
+  new formae.Stack { label = "default" }
+  new formae.Target {
+    label = "aws"
+    config = new aws.Config { region = "us-west-2" }
   }
+  assets
 }
 ` + "```" + `
 
-## Top-level fields
+## The ` + "`forma {}`" + ` block
 
-| Field | Type | Required | Purpose |
-|---|---|---|---|
-| stack | String | yes | Logical grouping; default "default" |
-| targets | Listing<Target> | yes | Where to deploy (cloud account + region) |
-| resources | Listing<Resource> | yes | What to deploy |
+The ` + "`forma {}`" + ` block is the top-level declaration. It contains three kinds of
+elements in any order:
 
-Targets and resources are typed per-plugin (e.g., ` + "`aws.Target`" + `, ` + "`gcp.Target`" + `).
+- **` + "`new formae.Stack`" + `** — declares the logical stack that groups these resources.
+  Typically one per file; the default stack name is "default".
+- **` + "`new formae.Target`" + `** — declares a deployment target (cloud account + region +
+  credentials). One or more targets can appear.
+- **Resources** — instances of plugin-defined types (` + "`bucket.Bucket`" + `,
+  ` + "`function.Function`" + `, etc.) or spread from a sibling module via
+  ` + "`...module.resources`" + `.
+
+**Single-target rule**: when there is exactly one target in the block, all
+resources are implicitly deployed to it. With multiple targets, each resource
+must set ` + "`target = <targetVar>.res`" + ` to declare its home.
+
+See ` + "`formae://docs/forma-structure`" + ` for the full grammar and
+` + "`formae://docs/stack-design`" + ` for multi-stack patterns.
 
 ## Project layout
 
@@ -403,21 +411,23 @@ local appBucket = new bucket.Bucket {
   bucketName = "app-data-prod"
 }
 
-local lambda = new function.Function {
+local handler = new function.Function {
   label = "api"
   environment = new Mapping<String, String|formae.Resolvable> {
     ["BUCKET"] = appBucket.res.bucketName
   }
 }
 
-resources = new Listing {
+forma {
+  new formae.Stack { label = "default" }
+  new formae.Target { label = "aws"; config = new aws.Config { region = "us-west-2" } }
   appBucket
-  lambda
+  handler
 }
 ` + "```" + `
 
-` + "`local`" + ` keeps the binding out of the resources list while still allowing it
-to be added explicitly. References across the list trigger dependency ordering
+` + "`local`" + ` keeps the binding out of the ` + "`forma {}`" + ` block while still allowing it
+to be added explicitly. References between resources trigger dependency ordering
 during apply.
 
 ## Labels and identification
@@ -434,6 +444,8 @@ a KSUID. Labels must be unique within a (stack, type) pair.
 - Plugin-specific resource catalogs: https://hub.platform.engineering and per-plugin GitHub repos
 - Schema annotations (what each field means): formae://docs/annotations
 - PKL syntax fundamentals: formae://docs/pkl-primer
+- Full forma grammar: formae://docs/forma-structure
+- Multi-stack patterns: formae://docs/stack-design
 `
 
 const annotationsDoc = `# Formae Schema Annotations
