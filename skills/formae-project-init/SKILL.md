@@ -85,6 +85,8 @@ Inform the user:
 - Simulate mode (`apply_forma` with `simulate: true`) also works once the agent is running.
 - A real `apply` requires the relevant resource plugin to be present on the agent. See `formae-plugin-new` skill or docs.formae.io for how to install plugins.
 
+Note: the above "no resource plugins needed" statements apply to authoring, eval, and simulate *after* the project exists; `formae project init` with a non-`@local` `--include` is the exception — it queries the agent for the plugin version, so that plugin must already be installed (see Step 4).
+
 ## Step 7 — Hand back
 
 Once the scaffold is in place:

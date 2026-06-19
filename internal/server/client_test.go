@@ -1,6 +1,7 @@
 package server
 
 import (
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,21 @@ func newTestFormaeClient(srv *httptest.Server) *FormaeClient {
 	c := NewFormaeClient(srv.URL)
 	c.httpClient = srv.Client()
 	return c
+}
+
+// parseSimulateField parses the multipart form from r and returns the value of
+// the "simulate" field. It calls t.Fatal on any parse error.
+func parseSimulateField(t *testing.T, r *http.Request) string {
+	t.Helper()
+	ct := r.Header.Get("Content-Type")
+	_, params, err := mime.ParseMediaType(ct)
+	if err != nil {
+		t.Fatalf("parseSimulateField: bad Content-Type %q: %v", ct, err)
+	}
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		t.Fatalf("parseSimulateField: ParseMultipartForm: %v (boundary=%q)", err, params["boundary"])
+	}
+	return r.FormValue("simulate")
 }
 
 // TestSubmitCommandAccepts202 verifies that the happy path (async-accepted) still works.
@@ -37,12 +53,15 @@ func TestSubmitCommandAccepts202(t *testing.T) {
 }
 
 // TestSubmitCommandAccepts200Simulate verifies that a synchronous simulate response
-// (200 OK) is treated as success, not an error.
+// (200 OK) is treated as success, not an error, and that the request carried simulate=true.
 func TestSubmitCommandAccepts200Simulate(t *testing.T) {
 	const respBody = `{"ChangesRequired":true,"Plan":[{"action":"create"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/commands" {
 			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		if got := parseSimulateField(t, r); got != "true" {
+			t.Errorf("simulate field: want %q, got %q", "true", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -57,6 +76,23 @@ func TestSubmitCommandAccepts200Simulate(t *testing.T) {
 	}
 	if string(body) != respBody {
 		t.Fatalf("want body %q, got %q", respBody, string(body))
+	}
+}
+
+// TestSubmitCommandRejects200NonSimulate verifies that a 200 response for a
+// non-simulate command is treated as an error (gating: 200 only valid when simulate=true).
+func TestSubmitCommandRejects200NonSimulate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"unexpected":"synchronous-ok"}`))
+	}))
+	defer srv.Close()
+
+	c := newTestFormaeClient(srv)
+	_, err := c.SubmitCommand("apply", "reconcile", false, false, nil, "client-1")
+	if err == nil {
+		t.Fatal("SubmitCommand: expected error for 200 without simulate=true, got nil")
 	}
 }
 
@@ -99,12 +135,15 @@ func TestDestroyByQueryAccepts202(t *testing.T) {
 }
 
 // TestDestroyByQueryAccepts200Simulate verifies that a synchronous simulate destroy
-// response (200 OK) is treated as success, not an error.
+// response (200 OK) is treated as success, not an error, and that the request carried simulate=true.
 func TestDestroyByQueryAccepts200Simulate(t *testing.T) {
 	const respBody = `{"ChangesRequired":true,"Plan":[{"action":"delete"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/commands" {
 			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		if got := parseSimulateField(t, r); got != "true" {
+			t.Errorf("simulate field: want %q, got %q", "true", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -119,6 +158,23 @@ func TestDestroyByQueryAccepts200Simulate(t *testing.T) {
 	}
 	if string(body) != respBody {
 		t.Fatalf("want body %q, got %q", respBody, string(body))
+	}
+}
+
+// TestDestroyByQueryRejects200NonSimulate verifies that a 200 response for a
+// non-simulate destroy command is treated as an error.
+func TestDestroyByQueryRejects200NonSimulate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"unexpected":"synchronous-ok"}`))
+	}))
+	defer srv.Close()
+
+	c := newTestFormaeClient(srv)
+	_, err := c.DestroyByQuery("stack=default", false, "client-1")
+	if err == nil {
+		t.Fatal("DestroyByQuery: expected error for 200 without simulate=true, got nil")
 	}
 }
 

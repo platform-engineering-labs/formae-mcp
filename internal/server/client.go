@@ -260,7 +260,7 @@ func (c *FormaeClient) SubmitCommand(command string, mode string, simulate bool,
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusAccepted && status != http.StatusOK {
+	if !isCommandStatusOK(status, simulate) {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
@@ -279,11 +279,18 @@ func (c *FormaeClient) DestroyByQuery(query string, simulate bool, clientID stri
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusAccepted && status != http.StatusOK {
+	if !isCommandStatusOK(status, simulate) {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
 	return body, nil
+}
+
+// isCommandStatusOK reports whether status is an acceptable response for a
+// command submission. 202 Accepted is always valid (async path). 200 OK is
+// only valid for simulate requests (synchronous plan response).
+func isCommandStatusOK(status int, simulate bool) bool {
+	return status == http.StatusAccepted || (simulate && status == http.StatusOK)
 }
 
 // CancelCommands cancels running commands matching an optional query.
