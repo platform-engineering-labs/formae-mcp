@@ -47,6 +47,8 @@ If any plugin returns `originatorVerified: false`, **surface its `originatorDoma
 
 Authoring and simulate mode need only plugin **schemas** (the PklProject dependencies) — not the resource plugins themselves — so **assume the required resource plugins are already installed on the agent** and proceed. Do **not** probe the agent's installed plugins here: there is no reliable, non-privileged way to list an agent's plugins (the old `list_plugins`/`formae plugin list` path requires sudo and only sees *local* plugins anyway), and authoring never needs it. `check_health` is fine as an optional, no-privilege reachability check.
 
+**Exception — `formae project init` does reach the agent**: a non-`@local` `--include <name>` resolves that plugin's version from the agent, so init can fail if the plugin isn't installed agent-side. The `formae-project-init` skill covers the `@local`/`--plugin-dir` fallback for offline init.
+
 If a later `apply` fails because a required resource plugin is not installed on the agent:
 
 - Inform the user which plugin is missing (the apply error will name it).

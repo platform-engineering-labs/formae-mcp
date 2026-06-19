@@ -1077,6 +1077,87 @@ skips formae's resolver and will produce incorrect or incomplete output.
 
 ---
 
+## 12. ` + "`formae project init --include <name>`" + ` resolves the version from the agent
+
+A non-` + "`@local`" + ` ` + "`--include`" + ` (e.g. ` + "`--include k8s`" + `) makes ` + "`formae project init`" + ` query
+the **agent** for that plugin's installed version. So that plugin must already be
+installed on the agent at init time, or init fails with
+` + "`plugin \"<name>\" not installed on the agent`" + `. This qualifies the common
+"authoring needs no agent plugins" assumption: authoring and simulate need only
+schemas, but ` + "`init`" + ` itself reaches the agent for a version unless you use a local
+schema. To init offline, use ` + "`--include <name>@local --plugin-dir <dir>`" + `, which
+resolves the version from disk and never contacts the agent.
+
+---
+
+## 13. PKL self-reference shadowing on a field named like its local
+
+Defining a module-level ` + "`local labels = ...`" + ` and then writing
+` + "`metadata { labels = labels }`" + ` (mirroring the field name) makes PKL bind the
+right-hand ` + "`labels`" + ` to the field being assigned, not the outer local — an infinite
+self-reference that blows the stack at eval with an opaque trace. Rename the local
+(e.g. ` + "`appLabels`" + `) so it doesn't collide with the field name. (Real example: the k8s
+` + "`apps`" + ` example avoids this by using ` + "`commonLabels`" + `/` + "`frontendLabels`" + `, never a bare
+` + "`labels`" + ` local.)
+
+---
+
+## 14. A Resolvable can't be wired into a Kubernetes container env (today)
+
+The k8s plugin types ` + "`EnvVar.value`" + ` as ` + "`String?`" + `, so
+` + "`value = someResource.res.id`" + ` fails eval:
+` + "`Expected value of type String, but got type ...Resolvable`" + `. The
+"inject a resolvable into a client via an env var" pattern only works through the
+**compose** plugin's ` + "`variables`" + ` mapping (typed ` + "`(String|Resolvable)`" + `), not k8s
+env vars. For a k8s-deployed client, pass a plain string value, or wait for the k8s
+plugin to accept ` + "`(String|formae.Resolvable)`" + ` on env values.
+
+---
+
+## 15. Server-side state asserted via a plugin is lost on restart
+
+Some plugins assert state into a running server's mutable store rather than a durable
+spec: a ` + "`vllm.LoRAAdapter`" + ` is loaded into the vLLM process's memory; the grafana
+plugin writes Folder/DataSource/Dashboard into Grafana's database (in-container
+SQLite by default). When that pod restarts, the state silently disappears and the
+live graph drifts from formae's desired state with nothing re-asserting it. Mitigate
+by putting that resource on its own stack with an **auto-reconcile** policy (formae
+periodically re-applies and re-loads it), and/or giving the server durable storage
+(a PVC + persistent DB config). Expect transient re-load failures while the server
+is still warming up; a later auto-reconcile interval succeeds.
+
+---
+
+## 16. Naming a Kubernetes Service after an app that reads ` + "`<NAME>_PORT`" + `
+
+Kubernetes injects legacy service-link env vars into every pod in the namespace. A
+Service named ` + "`vllm`" + ` injects ` + "`VLLM_PORT=tcp://<clusterIP>:8000`" + ` — and vLLM reads
+` + "`VLLM_PORT`" + ` as its own bind port and crashes at startup
+(` + "`VLLM_PORT 'tcp://...' appears to be a URI`" + `). Set ` + "`enableServiceLinks = false`" + ` on
+the PodSpec, or don't name the Service after an app that reads ` + "`<NAME>_PORT`" + `. This
+bites any single-replica server fronted by a same-named Service.
+
+---
+
+## 17. The example you need may live in a different plugin's repo
+
+Don't give up after checking the obvious plugin. The GPU/vLLM example lives in the
+**vllm** plugin's repo, not the k8s plugin's repo, even though it deploys onto
+Kubernetes. When ` + "`list_plugin_examples`" + ` for one plugin doesn't have what you need,
+search the hub (` + "`search_hub_plugins`" + `) for a more specific plugin and read ITS
+examples.
+
+---
+
+## 18. A locally-built image must be loaded into the cluster before apply
+
+A forma that references an image you built locally (e.g. ` + "`formae-chat-ui:demo`" + `) will
+fail to pull on a local cluster until the image is available to it. Build it and
+` + "`minikube image load <image>`" + ` (or push to a registry the cluster can reach) before
+the Deployment can pull it. The forma file alone doesn't capture this step.
+
+---
+
 ## Going deeper
 
 - Forma structure and project layout: formae://docs/forma-structure

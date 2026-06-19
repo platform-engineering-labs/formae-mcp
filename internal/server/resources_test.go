@@ -193,7 +193,7 @@ func TestNewAuthoringResources(t *testing.T) {
 		"formae://docs/examples":           {"/examples", "list_plugin_examples", "basic", "observe the formae agent"},
 		"formae://docs/forma-structure":    {"main.pkl", "modules/", "vars.pkl"},
 		"formae://docs/stack-design":       {"reconciliation boundary", "nested target", "policies are set per stack"},
-		"formae://docs/authoring-pitfalls": {"forma {", "reconcile", "label"},
+		"formae://docs/authoring-pitfalls": {"forma {", "reconcile", "label", "enableServiceLinks", "auto-reconcile", "not installed on the agent", "minikube image load"},
 	}
 	for uri, wants := range cases {
 		res, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri})

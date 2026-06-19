@@ -66,7 +66,7 @@ Key docs for authoring:
 - Browsable example index: formae://docs/examples
 - Common authoring mistakes to avoid: formae://docs/authoring-pitfalls
 
-**Schema vs agent rule**: when authoring a new plugin, the assistant only needs to add the plugin's PKL schema package as a PklProject dependency (no root dependency needed). Resource plugins are compiled Go shared objects installed on the agent machine — the assistant provides guidance only and never installs or builds them.
+**Schema vs agent rule**: when authoring a new plugin, the assistant only needs to add the plugin's PKL schema package as a PklProject dependency (no root dependency needed). Resource plugins are compiled Go shared objects installed on the agent machine — the assistant provides guidance only and never installs or builds them. Note: ` + "`formae project init --include <name>`" + ` (non-` + "`@local`" + `) resolves that plugin's version from the agent, so the named plugin must be installed on the agent at init time — or use ` + "`--include <name>@local --plugin-dir <dir>`" + ` to resolve from disk.
 
 ## Authoritative Documentation
 
