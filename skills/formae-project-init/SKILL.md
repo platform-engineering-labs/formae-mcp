@@ -89,7 +89,7 @@ Inform the user:
 
 Once the scaffold is in place:
 
-1. Suggest pulling a **version-matched** example for the chosen plugins via `list_plugin_examples`. This gives idiomatic starting code aligned with the installed schema version.
+1. Suggest pulling a **version-matched** example for the chosen plugins via `list_plugin_examples`. Read the pinned version for each plugin from the just-created `PklProject` — it is the `@<version>` suffix on the dependency `uri` (e.g., `k8s@0.3.2` → `"0.3.2"`) — and pass it as the `version` argument. Do not omit `version` and let the tool default to `latestStable`, which may differ from the version pinned by `formae project init`.
 2. Offer to design the stack layout with the stack-design skill — how resources are grouped, which stacks map to which targets.
 
 ---

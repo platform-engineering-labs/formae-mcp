@@ -49,6 +49,10 @@ After editing `PklProject`, the lockfile `PklProject.deps.json` must be updated.
 pkl project resolve
 ```
 
+### 2d — Fetch examples for the newly-added plugin
+
+When pulling examples for the plugin just added, pass the version pinned in `PklProject` (the `@<version>` suffix from the dependency `uri`) as the `version` argument to `list_plugin_examples` or `get_plugin_example`. Do not omit it — the tool's `latestStable` default may not match the version you just pinned.
+
 ## Step 3 — Remove a dependency
 
 Read `PklProject`, find the dependency block for the named plugin, and delete it using the Edit tool. Show the diff to the user.
