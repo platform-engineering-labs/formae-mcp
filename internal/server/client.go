@@ -260,7 +260,7 @@ func (c *FormaeClient) SubmitCommand(command string, mode string, simulate bool,
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusAccepted {
+	if status != http.StatusAccepted && status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
@@ -279,7 +279,7 @@ func (c *FormaeClient) DestroyByQuery(query string, simulate bool, clientID stri
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusAccepted {
+	if status != http.StatusAccepted && status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
