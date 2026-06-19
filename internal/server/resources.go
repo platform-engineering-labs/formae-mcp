@@ -725,6 +725,29 @@ patterns are the cross-plugin end-to-end examples in the k8s plugin repository:
 
 Use these as the authoritative multi-plugin / nested-target references.
 
+> **Caveat — lgtm-observability is not a "watch my app's metrics" starter**
+>
+> Before copying ` + "`lgtm-observability`" + `, note four constraints:
+>
+> 1. **These dashboards observe the formae agent**, not your own workload. The
+>    pre-built dashboards (` + "`formae-overview`" + `, ` + "`formae-plugins`" + `) scrape agent
+>    metrics. There is no ready-made "scrape my app's ` + "`/metrics`" + ` + app dashboard"
+>    path in this example.
+> 2. **Grafana resource plugin is an agent-side install.** It must be installed by
+>    root on the agent, requires a ` + "`GRAFANA_AUTH`" + ` env var at agent start, and an
+>    agent restart — none of which the authoring flow can do. See pitfall 5 in
+>    ` + "`formae://docs/authoring-pitfalls`" + ` (schema dep vs. agent plugin install).
+> 3. **The LGTM stack is a local example module, not a hub package.** It lives at
+>    ` + "`@apps/lgtm/lgtm.pkl`" + ` inside the k8s plugin repo. A fresh project cannot
+>    import it directly; you would need to copy the module in.
+> 4. **Full LGTM is heavy.** Loki + Tempo + Mimir + Grafana + MinIO StatefulSets
+>    is a significant workload for a single-node cluster.
+>
+> **For app-metrics observability, prefer a k8s-plugin-only approach:** deploy
+> Grafana + Prometheus (or the ` + "`grafana/otel-lgtm`" + ` all-in-one image) with
+> ConfigMap-provisioned datasource and dashboard. This requires no grafana plugin,
+> no agent env vars, and no agent restart.
+
 ## Going deeper
 
 - Forma project structure (modules, vars): formae://docs/forma-structure

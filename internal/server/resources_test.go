@@ -190,7 +190,7 @@ func TestFormaAnatomyUsesFormaBlock(t *testing.T) {
 func TestNewAuthoringResources(t *testing.T) {
 	session := connectTestServer(t, "http://localhost:1")
 	cases := map[string][]string{
-		"formae://docs/examples":           {"/examples", "list_plugin_examples", "basic"},
+		"formae://docs/examples":           {"/examples", "list_plugin_examples", "basic", "observe the formae agent"},
 		"formae://docs/forma-structure":    {"main.pkl", "modules/", "vars.pkl"},
 		"formae://docs/stack-design":       {"reconciliation boundary", "nested target", "policies are set per stack"},
 		"formae://docs/authoring-pitfalls": {"forma {", "reconcile", "label"},
