@@ -40,8 +40,8 @@ User says something like "expire lifeline in 20 minutes" or "auto-reconcile prod
    - `insertion_anchor_start` / `insertion_anchor_end` — the line range; for `create` they are equal (insert before that line); for `update` they cover the existing block (replace those lines).
    - `existing_policy_snippet` — only for `update`; show this as the "before" in the diff.
    - `imports_to_add` — add each entry near the top of the file if missing.
-5. **Read the file** with the Read tool.
-6. **Apply the edit** with the Edit tool. For `create` insert the snippet before the anchor line; for `update` replace the lines covered by the anchor range. Add any missing imports near the top of the file. Indent the snippet to match the surrounding context (the snippet is emitted unindented).
+5. **Read the file.**
+6. **Apply the edit.** For `create` insert the snippet before the anchor line; for `update` replace the lines covered by the anchor range. Add any missing imports near the top of the file. Indent the snippet to match the surrounding context (the snippet is emitted unindented).
 7. **Show the diff** to the user.
 8. **Ask whether to apply to infrastructure.** Default phrasing: *"Apply this change with `reconcile` (simulate first)?"* If the user declines, stop — the file edit stands and the policy will activate on the next manual apply.
 9. **Simulate.** Call `apply_forma` with `mode: "reconcile"`, `simulate: true`, `force: true`, `file_path: <returned file_path>`.
@@ -56,7 +56,7 @@ Same shape as set, but call `create_inline_policy` with `operation: "remove"`. T
 - `operation: "remove"` — apply the deletion at the anchor lines.
 - `operation: "noop"` — no policy of that type was attached. Tell the user there's nothing to remove and stop.
 
-For `remove`, the Edit tool deletes the lines covered by the anchor range. The `existing_policy_snippet` shows what's being removed; surface it in the diff.
+For `remove`, delete the lines covered by the anchor range. The `existing_policy_snippet` shows what's being removed; surface it in the diff.
 
 If `notes` mentions "removed empty policies block", explain to the user that the stack's `policies = new Listing { ... }` wrapper was also removed because that was the last policy.
 
