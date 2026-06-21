@@ -16,7 +16,7 @@ Find resources in cloud accounts that aren't managed by formae yet.
    - Key properties
    - Which target/account they belong to
 4. Ask the user if they want to bring any resources under management
-5. If yes, use `/formae-import` to start the import workflow
+5. If yes, use the `formae-import` skill to start the import workflow
 
 ## Forcing a Fresh Discovery
 
