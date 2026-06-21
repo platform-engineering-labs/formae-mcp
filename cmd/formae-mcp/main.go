@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -12,7 +14,28 @@ import (
 	"github.com/platform-engineering-labs/formae-mcp/internal/server"
 )
 
+// version is the build version, injectable via -ldflags "-X main.version=<v>".
+// It defaults to "dev" for un-stamped builds.
+var version = "dev"
+
+// tryVersion handles the --version flag. If args contains an exact --version
+// (or -version) token, it writes the version followed by a newline to stdout
+// and returns true; otherwise it writes nothing and returns false.
+func tryVersion(args []string, stdout io.Writer) bool {
+	for _, arg := range args {
+		if arg == "--version" || arg == "-version" {
+			fmt.Fprintln(stdout, version)
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
+	if tryVersion(os.Args[1:], os.Stdout) {
+		return
+	}
+
 	agentURL, agentPort := config.AgentEndpoint()
 	endpoint := fmt.Sprintf("%s:%s", agentURL, agentPort)
 
