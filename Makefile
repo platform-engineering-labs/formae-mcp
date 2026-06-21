@@ -2,7 +2,7 @@
 
 BINARY_NAME := formae-mcp
 VERSION ?= dev
-LDFLAGS := -ldflags "-X main.version=$(VERSION)"
+LDFLAGS := -ldflags "-X github.com/platform-engineering-labs/formae-mcp/internal/version.version=$(VERSION)"
 
 build:
 	go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/formae-mcp/
