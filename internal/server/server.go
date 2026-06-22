@@ -11,12 +11,20 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
+	"github.com/platform-engineering-labs/formae-mcp/internal/version"
 )
 
-const (
-	serverName    = "formae-mcp"
-	serverVersion = "0.5.0"
-)
+const serverName = "formae-mcp"
+
+// implementation describes this server in the MCP handshake. The version is
+// read from internal/version so the handshake and the CLI --version flag share
+// a single, build-injectable source of truth.
+func implementation() *mcp.Implementation {
+	return &mcp.Implementation{
+		Name:    serverName,
+		Version: version.String(),
+	}
+}
 
 // Server wraps the MCP server and the formae API client.
 type Server struct {
@@ -30,10 +38,7 @@ func New(endpoint string) *Server {
 	client := NewFormaeClient(endpoint)
 
 	mcpServer := mcp.NewServer(
-		&mcp.Implementation{
-			Name:    serverName,
-			Version: serverVersion,
-		},
+		implementation(),
 		&mcp.ServerOptions{
 			Instructions: serverInstructions,
 		},
