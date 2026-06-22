@@ -17,13 +17,13 @@ Determine where the authoring will happen. Three branches:
 
 If the user is **unsure** whether a project exists, offer to scan `~/dev` for `PklProject` files that declare a formae dependency. Present only verified hits from that scan — never invent or guess paths.
 
-**(c) No project exists** — dispatch to `formae-project-init`. That skill handles directory selection, collision safety, running `formae project init`, and scaffolding. Return here after init completes.
+**(c) No project exists** — hand off to the `formae-project-init` skill. That skill handles directory selection, collision safety, running `formae project init`, and scaffolding. Return here after init completes.
 
 ## Step 2 — Existing-cloud-resources branch (orthogonal to Step 1)
 
 Before authoring new resources, ask: is the intent to bring **existing** cloud resources under management (resources that already exist in the cloud), or to author new ones?
 
-If the intent is "bring existing cloud resources under management", dispatch to `formae-import`. That skill still needs a code location — complete Step 1 first. After import, return here if the user also wants to author additional new resources.
+If the intent is "bring existing cloud resources under management", hand off to the `formae-import` skill. That skill still needs a code location — complete Step 1 first. After import, return here if the user also wants to author additional new resources.
 
 ## Step 3 — Infer schema plugins
 
@@ -35,7 +35,7 @@ Make clear: these are **schema packages only** — they provide PKL types and ID
 
 **Dependency wiring** — do not wire deps yourself:
 - New project: `formae-project-init` sets up the initial schema package deps.
-- Existing project needing additional packages: dispatch to `formae-deps` to add them.
+- Existing project needing additional packages: hand off to the `formae-deps` skill to add them.
 
 ## Step 4 — Trust gate
 
@@ -61,21 +61,25 @@ Do not install resource plugins. That is an agent-side operation outside this sk
 
 Read `formae://docs/forma-structure` to orient on the standard project layout before writing any files.
 
-Then dispatch to `formae-stack-design` to decide how resources are grouped into stacks and which stacks map to which targets. Do not embed stack-design logic here.
+Then hand off to the `formae-stack-design` skill to decide how resources are grouped into stacks and which stacks map to which targets. Do not embed stack-design logic here.
 
 ## Step 7 — Author, policy, simulate, and apply
 
 **Fetch examples** by calling `list_plugin_examples` for the chosen plugin combination, passing the schema version pinned in the project's `PklProject`. To obtain that version, read the `uri` field for the relevant plugin in the `dependencies` block of `PklProject` and extract the `@<version>` suffix (e.g., `k8s@0.3.2` → `"0.3.2"`). If the `uri` has no explicit version tag, fall back to reading `PklProject.deps.json` for the resolved version. Pass that string as the `version` argument to `list_plugin_examples` and `get_plugin_example` — do not omit it and let the tool default to `latestStable`, which may not match what the project pinned. If the result still reports `versionMatched: false`, tell the user before relying on those examples: *"These examples come from the plugin's default branch and may not match your pinned schema version — treat them as a starting point and verify against your installed PKL types."* Once a specific example is chosen, use `get_plugin_example` to fetch its PKL files.
 
-**Policy needs** — if the user wants TTL, auto-reconcile, or other lifecycle policies on a stack, dispatch to `formae-policy`.
+**Policy needs** — if the user wants TTL, auto-reconcile, or other lifecycle policies on a stack, hand off to the `formae-policy` skill.
 
-**Simulate then apply** — dispatch to `formae-apply` for the simulate-then-apply workflow.
+**Simulate then apply** — hand off to the `formae-apply` skill for the simulate-then-apply workflow.
 
 ---
 
+## Portability
+
+Auto-activation from this skill's `description` field is a Claude Code behavior; on Codex, OpenCode, or other harnesses the user may need to invoke `formae-author` explicitly. "Hand off to the `formae-X` skill" means follow that skill's documented procedure — on harnesses without a programmatic skill-invocation primitive, read and execute the target skill's steps directly. MCP tool names (`apply_forma`, `list_stacks`, `create_inline_policy`, etc.) are protocol-level identifiers and are the same across all harnesses.
+
 ## CONSTRAINTS
 
-- **Never call `apply_forma` directly.** Always dispatch to `formae-apply` for simulate/apply workflows.
+- **Never call `apply_forma` directly.** Always follow the `formae-apply` skill for simulate/apply workflows.
 - **Never install resource plugins.** Plugin installation is an agent-side operation. Guide the user to docs.formae.io; do not attempt it.
 - **Never write the flat forma form.** Do not write `stack = ...`, `targets = ...`, `resources = ...` at the top level. Always use the `forma {}` block pattern.
 - **Always use `formae eval --output-consumer machine`.** Never use `pkl eval` — forma files use formae-specific extensions that only the formae CLI resolves correctly, and `--output-consumer machine` produces parseable output.

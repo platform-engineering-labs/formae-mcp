@@ -45,7 +45,7 @@ If `get_command_status` returns a **failed** state:
 ## Force Flag
 
 If the simulation reports drift (out-of-band changes detected), the apply may be rejected. The user can choose to:
-- **Investigate**: Use `/formae-fix-code-drift` to understand the changes
+- **Investigate**: Use the `formae-fix-code-drift` skill to understand the changes
 - **Force**: Set `force: true` to overwrite the drift
 
 ## Important
@@ -53,4 +53,4 @@ If the simulation reports drift (out-of-band changes detected), the apply may be
 - NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
 - NEVER skip the simulation step
 - NEVER apply without user confirmation
-- For targeted urgent fixes, use `/formae-patch` instead
+- For targeted urgent fixes, use the `formae-patch` skill instead

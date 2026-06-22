@@ -39,7 +39,7 @@ For example, for grafana at version 0.1.3:
 }
 ```
 
-Read the file first, then apply the edit with the Edit tool. Show the diff to the user before proceeding.
+Read the file first, then apply the edit. Show the diff to the user before proceeding.
 
 ### 2c — Resolve the deps lockfile
 
@@ -55,7 +55,7 @@ When pulling examples for the plugin just added, pass the version pinned in `Pkl
 
 ## Step 3 — Remove a dependency
 
-Read `PklProject`, find the dependency block for the named plugin, and delete it using the Edit tool. Show the diff to the user.
+Read `PklProject`, find the dependency block for the named plugin, and delete it. Show the diff to the user.
 
 **Dangling import check.** Before confirming the removal, search all `.pkl` files in the project for `import "@<name>/` (and `amends "@<name>/`). If any match is found, warn the user that removing the dependency will leave dangling imports that will cause resolution errors. List the affected files and ask whether to proceed anyway. Do not automatically remove the imports — that is the user's decision.
 
