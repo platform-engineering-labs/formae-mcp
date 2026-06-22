@@ -53,7 +53,7 @@ Steps to follow:
 7. **List** — implement resource discovery
 8. **Error handling** — use `OperationErrorCode` patterns from the SDK
 
-**Errors go in the result, not the `error` return.** Every CRUD result type (`CreateResult`, `ReadResult`, `UpdateResult`, `DeleteResult`, `ListResult`, `StatusResult`) carries its own `ErrorCode` field typed as `resource.OperationErrorCode`. Domain-level failures — NotFound, AlreadyExists, InvalidRequest, ServiceInternalError — go there. The Go `error` return is reserved for transport-level failures where you can't construct a meaningful result at all (e.g., `transport.NewClient` failing, context cancellation).
+**Errors go in the result, not the `error` return.** Domain-level failures — NotFound, AlreadyExists, InvalidRequest, ServiceInternalError — are reported through an `OperationErrorCode` on the result, not the Go `error` return. *Where* that code lives depends on the result type: `ReadResult` has a top-level `ErrorCode`; `CreateResult`, `UpdateResult`, `DeleteResult`, and `StatusResult` carry it on their nested `ProgressResult` (`ProgressResult.ErrorCode`, set alongside `OperationStatus: OperationStatusFailure`); `ListResult` has **no** error-code field — a list-level failure is the one case that returns a Go `error`. The Go `error` return is otherwise reserved for transport-level failures where you can't construct a meaningful result at all (e.g., `transport.NewClient` failing, context cancellation).
 
 Concretely:
 
