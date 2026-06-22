@@ -23,7 +23,7 @@ Usage:
 
 Flags:
   -h, --help       Show this help message and exit
-      --version    Print the version and exit
+  -V, --version    Print the version and exit
 `
 
 // tryHelp handles the --help flag. If args contains an exact --help (-help or
@@ -40,11 +40,11 @@ func tryHelp(args []string, stdout io.Writer) bool {
 }
 
 // tryVersion handles the --version flag. If args contains an exact --version
-// (or -version) token, it writes version followed by a newline to stdout and
+// (-version or -V) token, it writes version followed by a newline to stdout and
 // returns true; otherwise it writes nothing and returns false.
 func tryVersion(args []string, version string, stdout io.Writer) bool {
 	for _, arg := range args {
-		if arg == "--version" || arg == "-version" {
+		if arg == "--version" || arg == "-version" || arg == "-V" {
 			fmt.Fprintln(stdout, version)
 			return true
 		}

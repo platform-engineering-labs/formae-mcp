@@ -7,7 +7,7 @@ import (
 
 func TestTryVersion_PrintsVersionAndReports(t *testing.T) {
 	const v = "1.2.3"
-	for _, arg := range []string{"--version", "-version"} {
+	for _, arg := range []string{"--version", "-version", "-V"} {
 		var buf bytes.Buffer
 		if !tryVersion([]string{arg}, v, &buf) {
 			t.Errorf("tryVersion([%q]) = false, want true", arg)
