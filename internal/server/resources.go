@@ -492,6 +492,34 @@ Every resource has a ` + "`label`" + ` — a user-facing identifier within the s
 The agent uses (stack, type, label) as a stable triplet, internally backed by
 a KSUID. Labels must be unique within a (stack, type) pair.
 
+## Renaming a resource (` + "`alias`" + `)
+
+A label can be changed without destroying and recreating the cloud object. Set
+` + "`alias`" + ` to the resource's PREVIOUS label and ` + "`label`" + ` to the new one:
+
+` + "```pkl" + `
+new vpc.VPC {
+  label = "production-vpc"   // the NEW label
+  alias = "vpc-008eef..."    // the PREVIOUS label
+  cidrBlock = "172.31.0.0/16"
+}
+` + "```" + `
+
+On apply, the agent matches the existing managed row by ` + "`alias`" + ` and renames it
+in place. The KSUID and the cloud NativeID are preserved — no destroy/recreate,
+no plugin Create/Delete. Rename happens inline with ` + "`apply_forma`" + ` in both
+reconcile and patch modes; there is no separate rename command.
+
+Idempotent: once the rename has landed, the agent matches by the current label
+first, so a re-apply with the alias still present is a no-op. The alias can be
+left in the forma or removed at will.
+
+Rename can combine with a property change (one update carries both) and with a
+bring-under-management import (` + "`alias`" + ` = the discovery-assigned label,
+` + "`label`" + ` = the desired name — adopted and renamed in a single apply).
+
+Reference: https://docs.formae.io/en/latest/core-concepts/label/#renaming-a-resource
+
 ## Going deeper
 
 - Forma overview (canonical): https://docs.formae.io/en/latest/core-concepts/forma/
@@ -650,6 +678,22 @@ deploy unexpectedly removed resources, you likely used reconcile when patch was
 intended (or vice versa).
 
 Concept: https://docs.formae.io/en/latest/core-concepts/apply-modes/
+
+## Apply rejected for an ` + "`alias`" + ` (rename) error
+
+The agent validates ` + "`alias`" + ` usage before touching the cloud and rejects:
+
+- **Two resources claim the same existing row** — one references it by its
+  current label, another via ` + "`alias`" + `. Drop the duplicate declaration (usually
+  a leftover from a refactor where the old resource block wasn't deleted).
+- **Dead alias** — ` + "`alias`" + ` names a label that matches no existing managed
+  (in the resource's stack) or unmanaged resource of the same type. Remove the
+  stale ` + "`alias`" + ` if this is a fresh resource, or fix it to the real previous
+  label.
+- **` + "`alias`" + ` equals ` + "`label`" + `** — the alias must reference a DIFFERENT prior
+  label. Remove it (no rename is happening).
+
+Concept: https://docs.formae.io/en/latest/core-concepts/label/#renaming-a-resource
 
 ## Commands stuck in "in_progress"
 

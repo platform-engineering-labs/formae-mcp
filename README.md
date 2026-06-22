@@ -1,6 +1,6 @@
 # formae-mcp
 
-MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 22 MCP tools for querying and managing cloud infrastructure, plus 18 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
+MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 22 MCP tools for querying and managing cloud infrastructure, plus 19 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
 
 ## Prerequisites
 
@@ -73,6 +73,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-targets` | List cloud targets, configured regions, and provider accounts |
 | `formae-apply` | Deploy infrastructure by applying a forma file or reconciling a stack |
 | `formae-patch` | Make targeted infrastructure changes without a full reconcile |
+| `formae-rename` | Rename a resource's label via `alias` without destroying the cloud object |
 | `formae-destroy` | Tear down infrastructure resources, stacks, or environments |
 | `formae-fix-code-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
 | `formae-policy` | Set, remove, or inspect TTL and auto-reconcile policies on a stack |

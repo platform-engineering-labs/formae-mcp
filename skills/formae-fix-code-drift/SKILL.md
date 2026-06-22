@@ -84,5 +84,5 @@ After handling all drifted resources, re-run the verification from step 2 to con
 - NEVER report an absorption as complete without a simulation proving it is a no-op
 - NEVER overwrite without user confirmation
 - When absorbing, only modify the specific properties that drifted — do not restructure or rewrite unrelated code
-- Resource labels must match exactly — never rename them
+- Absorbing drift never renames a resource — leave each resource's `label` as-is. (Renaming is a separate, deliberate operation via `alias`; it is not part of drift absorption.)
 - If the user has multiple drifted resources, handle them one at a time or in logical groups as the user prefers
