@@ -70,6 +70,29 @@ type CreateInlinePolicyInput struct {
 	FormaFile       string `json:"forma_file,omitempty" jsonschema:"Optional explicit path to the forma file declaring the stack. When omitted the tool searches the workspace using formae eval."`
 }
 
+// SearchHubPluginsInput is the input for the search_hub_plugins tool.
+type SearchHubPluginsInput struct {
+	Query string `json:"query,omitempty" jsonschema:"Optional filter matched against plugin name, namespace, or category (e.g. 'k8s', 'cloud', 'observability'). Leave empty to list the full catalog."`
+}
+
+// GetHubPluginInput is the input for the get_hub_plugin tool.
+type GetHubPluginInput struct {
+	Name string `json:"name" jsonschema:"required,The plugin short name as listed by search_hub_plugins (e.g. 'aws', 'k8s', 'grafana')."`
+}
+
+// ListPluginExamplesInput is the input for the list_plugin_examples tool.
+type ListPluginExamplesInput struct {
+	Plugin  string `json:"plugin" jsonschema:"required,Plugin short name (e.g. 'aws', 'k8s')."`
+	Version string `json:"version,omitempty" jsonschema:"Optional plugin schema version to match (e.g. '0.1.5'). Defaults to the project's pinned version or latest. Examples are fetched at the matching git tag; if none exists the default branch is used and versionMatched is false."`
+}
+
+// GetPluginExampleInput is the input for the get_plugin_example tool.
+type GetPluginExampleInput struct {
+	Plugin  string `json:"plugin" jsonschema:"required,Plugin short name."`
+	Example string `json:"example" jsonschema:"required,Example name as returned by list_plugin_examples (e.g. 'eks-automode', 'lgtm-observability')."`
+	Version string `json:"version,omitempty" jsonschema:"Optional plugin schema version to match (same semantics as list_plugin_examples)."`
+}
+
 // CreateInlinePolicyOutput is the structured response from the create_inline_policy tool.
 // The tool does NOT modify the file — the caller (skill / LLM) applies the edit using the Edit tool.
 type CreateInlinePolicyOutput struct {

@@ -16,18 +16,22 @@ func TestResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListResources failed: %v", err)
 	}
-	if len(resources.Resources) != 7 {
-		t.Errorf("expected 7 resources, got %d", len(resources.Resources))
+	if len(resources.Resources) != 11 {
+		t.Errorf("expected 11 resources, got %d", len(resources.Resources))
 	}
 
 	expectedURIs := map[string]bool{
-		"formae://docs/query-syntax":    false,
-		"formae://docs/concepts":        false,
-		"formae://docs/pkl-primer":      false,
-		"formae://docs/forma-anatomy":   false,
-		"formae://docs/annotations":     false,
-		"formae://docs/troubleshooting": false,
-		"formae://docs/index":           false,
+		"formae://docs/query-syntax":       false,
+		"formae://docs/concepts":           false,
+		"formae://docs/pkl-primer":         false,
+		"formae://docs/forma-anatomy":      false,
+		"formae://docs/annotations":        false,
+		"formae://docs/troubleshooting":    false,
+		"formae://docs/index":              false,
+		"formae://docs/examples":           false,
+		"formae://docs/forma-structure":    false,
+		"formae://docs/stack-design":       false,
+		"formae://docs/authoring-pitfalls": false,
 	}
 	for _, r := range resources.Resources {
 		if _, ok := expectedURIs[r.URI]; !ok {
@@ -168,6 +172,43 @@ func TestReadResource_Annotations(t *testing.T) {
 	}
 	if !strings.Contains(result.Contents[0].Text, "ConfigFieldHint") {
 		t.Error("expected annotations doc to mention ConfigFieldHint")
+	}
+}
+
+func TestFormaAnatomyUsesFormaBlock(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	res, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "formae://docs/forma-anatomy"})
+	if err != nil {
+		t.Fatalf("ReadResource: %v", err)
+	}
+	text := res.Contents[0].Text
+	if !strings.Contains(text, "forma {") || !strings.Contains(text, "new formae.Stack") {
+		t.Errorf("forma-anatomy must show the forma { } block with new formae.Stack")
+	}
+	if strings.Contains(text, "targets = new Listing") || strings.Contains(text, "resources = new Listing") {
+		t.Errorf("forma-anatomy must NOT teach the flat stack=/targets=/resources= form")
+	}
+}
+
+func TestNewAuthoringResources(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	cases := map[string][]string{
+		"formae://docs/examples":           {"/examples", "list_plugin_examples", "basic", "observe the formae agent"},
+		"formae://docs/forma-structure":    {"main.pkl", "modules/", "vars.pkl"},
+		"formae://docs/stack-design":       {"reconciliation boundary", "nested target", "policies are set per stack"},
+		"formae://docs/authoring-pitfalls": {"forma {", "reconcile", "label", "enableServiceLinks", "auto-reconcile", "not installed on the agent", "minikube image load"},
+	}
+	for uri, wants := range cases {
+		res, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri})
+		if err != nil {
+			t.Fatalf("ReadResource(%s): %v", uri, err)
+		}
+		text := res.Contents[0].Text
+		for _, w := range wants {
+			if !strings.Contains(text, w) {
+				t.Errorf("%s missing %q", uri, w)
+			}
+		}
 	}
 }
 

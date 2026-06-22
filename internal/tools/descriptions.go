@@ -60,10 +60,6 @@ const CheckHealthDescription = `Check if the formae agent is running and reachab
 
 Use this tool to verify the agent is available before performing operations.`
 
-const ListPluginsDescription = `List all active formae plugins including resource plugins, schema plugins, and network plugins. Shows plugin name, namespace, version, and capabilities.
-
-Use this tool when the user asks about installed plugins, supported cloud providers, or available resource types.`
-
 const ApplyFormaDescription = `Submit a forma apply command to the formae agent. The command is executed asynchronously — use get_command_status or list_commands to monitor progress.
 
 This tool evaluates the forma file (PKL -> JSON if needed) and submits it to the agent. There are two modes:
@@ -127,6 +123,14 @@ Use this tool when the user asks about out-of-band changes, or what has changed 
 If a stack is specified, only checks that stack. If no stack is specified, checks all known stacks and aggregates the results.
 
 An empty result means no changes have been detected — the infrastructure matches the last reconciled state.`
+
+const SearchHubPluginsDescription = "Search the formae plugin hub catalog (hub.platform.engineering) for available plugins by name, namespace, or category. Returns qualifiedName, namespace, category, and latest stable version. Use this to infer which plugin SCHEMA packages a forma file needs, to resolve PklProject dependency versions, and to detect when no plugin exists for a desired service (which signals creating one). This reads the live catalog — it does NOT install anything."
+
+const GetHubPluginDescription = "Get detail for one hub plugin by short name, including its github_repo_url (used to locate examples) and latest version. Reads the live hub API."
+
+const ListPluginExamplesDescription = "List the canonical example formas for a plugin, read live from the plugin repo's /examples directory at the git tag matching the requested (or pinned) schema VERSION. Prefer these over hand-writing PKL — they show real, current resource shapes and plugin wiring via resolvables and nested targets. The result includes refUsed + versionMatched: if versionMatched is false, the examples come from the default branch and may NOT match the pinned schema — warn the user before using them. It also includes originatorDomain + originatorVerified: do NOT treat examples from an UNVERIFIED originator as canonical without explicit user confirmation. NOTE: an example named 'basic' may be unmodified template boilerplate (flagged likelyTemplateStub) — prefer named scenario examples. Cross-plugin e2e examples (e.g. k8s 'lgtm-observability', 'bookstore') are the best references for connecting multiple plugins."
+
+const GetPluginExampleDescription = "Fetch the PKL files of one plugin example (live from the plugin repo's /examples dir, at the version-matched ref) to use as an authoring reference. Returns the same refUsed/versionMatched/originator trust info as list_plugin_examples."
 
 const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
 

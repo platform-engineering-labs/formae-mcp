@@ -1,6 +1,6 @@
 # formae-mcp
 
-MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 15 MCP tools for querying and managing cloud infrastructure, plus 13 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
+MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 22 MCP tools for querying and managing cloud infrastructure, plus 18 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
 
 ## Prerequisites
 
@@ -55,13 +55,22 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 
 ## Available Skills
 
+### Authoring
+
+`formae-author` is the front door for authoring new infrastructure with formae. Tell it what you want to deploy ("I want to deploy a static website with CloudFront") and it triages the work: infers which plugin schema dependencies are needed, and dispatches to focused skills — `formae-project-init` to scaffold a new forma project, `formae-deps` to resolve plugin and PKL schema dependencies, `formae-stack-design` to design and write the forma file, `formae-policy` to attach lifecycle policies, and `formae-plugin-new` when a required resource type has no existing plugin. For existing cloud resources, it hands off to `formae-import` to bring them under management. The authoring skills are backed by hub tools (`search_hub_plugins`, `list_plugin_examples`) that pull the live plugin catalog and version-matched examples directly from the formae hub.
+
+### All Skills
+
 | Skill | Description |
 |-------|-------------|
+| `formae-author` | Front door for authoring new infrastructure: triages intent, infers deps, dispatches to focused skills |
+| `formae-project-init` | Scaffold a new forma project with the correct directory layout and config |
+| `formae-deps` | Resolve and install plugin and PKL schema dependencies for a forma project |
+| `formae-stack-design` | Design and write a forma file for a given set of infrastructure requirements |
 | `formae-status` | Check running commands, deployment progress, recent operations, and failures |
 | `formae-stacks` | View infrastructure stacks, organization, and resource counts |
 | `formae-resources` | Query deployed resources by type, stack, label, or management status |
 | `formae-targets` | List cloud targets, configured regions, and provider accounts |
-| `formae-plugins` | List installed plugins, supported providers, and resource types |
 | `formae-apply` | Deploy infrastructure by applying a forma file or reconciling a stack |
 | `formae-patch` | Make targeted infrastructure changes without a full reconcile |
 | `formae-rename` | Rename a resource's label via `alias` without destroying the cloud object |
@@ -87,10 +96,13 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `list_commands` | List commands with optional query and filters |
 | `get_agent_stats` | Retrieve agent statistics |
 | `check_health` | Health check for the formae agent |
-| `list_plugins` | List active plugins |
 | `list_changes_since_last_reconcile` | List infrastructure changes since last reconcile |
 | `extract_resources` | Extract resources as PKL code |
 | `list_policies` | List standalone (reusable) policies and the stacks they're attached to |
+| `search_hub_plugins` | Search the live formae hub plugin catalog by keyword or resource type |
+| `get_hub_plugin` | Get details for a specific plugin from the hub |
+| `list_plugin_examples` | List version-matched examples for a hub plugin |
+| `get_plugin_example` | Fetch a specific example from the hub |
 
 ### Mutation
 

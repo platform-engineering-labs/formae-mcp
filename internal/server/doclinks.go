@@ -53,14 +53,42 @@ var docPages = []docPage{
 	{"Plugin SDK reference — Manifest", "plugin-sdk/reference/manifest/", "Plugin manifest (formae-plugin.pkl) format."},
 }
 
+// mcpDocResources is the curated set of in-server MCP doc resources served
+// under the formae://docs/* URI scheme. These are read directly via
+// ReadResource — they are NOT docs.formae.io URLs.
+var mcpDocResources = []struct {
+	URI  string
+	Desc string
+}{
+	{"formae://docs/concepts", "Core concepts: stacks, targets, resources, formas, modes, drift, discovery."},
+	{"formae://docs/pkl-primer", "Minimal PKL syntax for reading and writing forma files."},
+	{"formae://docs/forma-anatomy", "Forma file structure: the forma{}, stacks, targets, and resources blocks."},
+	{"formae://docs/annotations", "Schema annotations: @formae.ResourceHint, @formae.FieldHint, @formae.Resolvable."},
+	{"formae://docs/query-syntax", "Query syntax (Bluge field:value pairs) for list_resources and similar tools."},
+	{"formae://docs/troubleshooting", "Common error messages, causes, and remediation steps."},
+	{"formae://docs/examples", "Browsable plugin example index; use list_plugin_examples / get_plugin_example to fetch."},
+	{"formae://docs/forma-structure", "Recommended file layout for forma projects (main.pkl, modules/, vars.pkl, etc.)."},
+	{"formae://docs/stack-design", "Stack design guide: reconciliation boundaries, nested targets, and policy placement."},
+	{"formae://docs/authoring-pitfalls", "Common authoring mistakes: wrong forma block, reconcile vs patch, label collisions."},
+}
+
 // docsIndexDoc renders the canonical documentation index served at
 // formae://docs/index.
 func docsIndexDoc() string {
 	var b strings.Builder
 	b.WriteString("# Formae Documentation Index\n\n")
 	b.WriteString("Canonical documentation URLs. Use these exact links — do not construct, shorten, or guess documentation URLs.\n\n")
+
+	b.WriteString("## External documentation (docs.formae.io)\n\n")
 	for _, p := range docPages {
 		fmt.Fprintf(&b, "- [%s](%s) — %s\n", p.Title, docURL(p.Path), p.Desc)
 	}
+
+	b.WriteString("\n## MCP doc resources (read directly)\n\n")
+	b.WriteString("The following resources are served in-server and can be read via ReadResource without a network call.\n\n")
+	for _, r := range mcpDocResources {
+		fmt.Fprintf(&b, "- %s — %s\n", r.URI, r.Desc)
+	}
+
 	return b.String()
 }
