@@ -26,12 +26,12 @@ Flags:
       --version    Print the version and exit
 `
 
-// tryHelp handles the --help flag. If args contains an exact --help (or -h)
-// token, it writes the usage message to stdout and returns true; otherwise it
-// writes nothing and returns false.
+// tryHelp handles the --help flag. If args contains an exact --help (-help or
+// -h) token, it writes the usage message to stdout and returns true; otherwise
+// it writes nothing and returns false.
 func tryHelp(args []string, stdout io.Writer) bool {
 	for _, arg := range args {
-		if arg == "--help" || arg == "-h" {
+		if arg == "--help" || arg == "-help" || arg == "-h" {
 			fmt.Fprint(stdout, usage)
 			return true
 		}

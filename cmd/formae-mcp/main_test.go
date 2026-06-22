@@ -31,7 +31,7 @@ func TestTryVersion_NoFlag(t *testing.T) {
 }
 
 func TestTryHelp_PrintsUsageAndReports(t *testing.T) {
-	for _, arg := range []string{"--help", "-h"} {
+	for _, arg := range []string{"--help", "-help", "-h"} {
 		var buf bytes.Buffer
 		if !tryHelp([]string{arg}, &buf) {
 			t.Errorf("tryHelp([%q]) = false, want true", arg)
