@@ -179,6 +179,61 @@ func TestHubClientSearchPluginsNoMatch(t *testing.T) {
 	}
 }
 
+func TestHubClientSearchPluginsFilterBySummary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/plugins" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		// Return two plugins; only k8s has "Kubernetes" anywhere, and only in summary.
+		_, _ = w.Write([]byte(`{"results":[` +
+			`{"qualifiedName":"platform.engineering/k8s","name":"k8s","namespace":"K8S","type":"resource","category":"containers","summary":"Kubernetes resource plugin","originator":{"domain":"platform.engineering","verified":true},"latestStable":{"version":"0.1.5","channel":"stable"}},` +
+			`{"qualifiedName":"platform.engineering/aws","name":"aws","namespace":"AWS","type":"resource","category":"compute","summary":"AWS resource plugin","originator":{"domain":"platform.engineering","verified":true},"latestStable":{"version":"0.2.0","channel":"stable"}}` +
+			`]}`))
+	}))
+	defer srv.Close()
+
+	c := &HubClient{baseURL: srv.URL, httpClient: srv.Client()}
+	plugins, err := c.SearchPlugins("Kubernetes")
+	if err != nil {
+		t.Fatalf("SearchPlugins: %v", err)
+	}
+	// "Kubernetes" only appears in the k8s summary; name/namespace/category don't match.
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin matched by summary, got %d: %+v", len(plugins), plugins)
+	}
+	if plugins[0].Name != "k8s" {
+		t.Fatalf("expected k8s matched by summary, got %q", plugins[0].Name)
+	}
+}
+
+func TestHubClientSearchPluginsFilterByQualifiedName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/plugins" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		// The query "platform.engineering/k8s" only matches qualifiedName, not name/namespace/category/summary.
+		_, _ = w.Write([]byte(`{"results":[` +
+			`{"qualifiedName":"platform.engineering/k8s","name":"k8s","namespace":"K8S","type":"resource","category":"containers","summary":"resource plugin","originator":{"domain":"platform.engineering","verified":true},"latestStable":{"version":"0.1.5","channel":"stable"}},` +
+			`{"qualifiedName":"platform.engineering/aws","name":"aws","namespace":"AWS","type":"resource","category":"compute","summary":"resource plugin","originator":{"domain":"platform.engineering","verified":true},"latestStable":{"version":"0.2.0","channel":"stable"}}` +
+			`]}`))
+	}))
+	defer srv.Close()
+
+	c := &HubClient{baseURL: srv.URL, httpClient: srv.Client()}
+	plugins, err := c.SearchPlugins("platform.engineering/k8s")
+	if err != nil {
+		t.Fatalf("SearchPlugins: %v", err)
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin matched by qualifiedName, got %d: %+v", len(plugins), plugins)
+	}
+	if plugins[0].QualifiedName != "platform.engineering/k8s" {
+		t.Fatalf("expected k8s matched by qualifiedName, got %q", plugins[0].QualifiedName)
+	}
+}
+
 func TestHubClientGetPlugin(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/plugins/k8s" {
@@ -257,7 +312,7 @@ func TestHubClientListExamplesSortsAndFlags(t *testing.T) {
 		if !strings.HasSuffix(r.URL.Path, "/contents/examples") {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`[{"name":"basic","type":"dir"},{"name":"eks-automode","type":"dir"},{"name":"stack-test.pkl","type":"file"}]`))
+		_, _ = w.Write([]byte(`[{"name":"basic","type":"dir"},{"name":"eks-automode","type":"dir"},{"name":"stack-test.pkl","type":"file"},{"name":"debug-stack.pkl","type":"file"}]`))
 	}))
 	defer gh.Close()
 
@@ -265,6 +320,16 @@ func TestHubClientListExamplesSortsAndFlags(t *testing.T) {
 	exs, err := c.listExamplesForRepo("https://github.com/platform-engineering-labs/formae-plugin-aws", "")
 	if err != nil {
 		t.Fatalf("listExamplesForRepo: %v", err)
+	}
+	// Loose files must not appear in the result.
+	for _, ex := range exs {
+		if ex.Name == "stack-test.pkl" || ex.Name == "debug-stack.pkl" {
+			t.Fatalf("loose file %q should not appear as an example", ex.Name)
+		}
+	}
+	// Dir entries are returned; real examples before template stubs.
+	if len(exs) != 2 {
+		t.Fatalf("expected 2 dir examples, got %d: %+v", len(exs), exs)
 	}
 	if exs[0].Name != "eks-automode" {
 		t.Fatalf("expected real example first, got %q", exs[0].Name)

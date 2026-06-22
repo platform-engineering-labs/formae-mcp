@@ -76,7 +76,8 @@ func (c *HubClient) SearchPlugins(query string) ([]HubPlugin, error) {
 	}
 	var filtered []HubPlugin
 	for _, p := range out.Results {
-		if containsFold(p.Name, query) || containsFold(p.Namespace, query) || containsFold(p.Category, query) {
+		if containsFold(p.Name, query) || containsFold(p.Namespace, query) || containsFold(p.Category, query) ||
+			containsFold(p.Summary, query) || containsFold(p.QualifiedName, query) {
 			filtered = append(filtered, p)
 		}
 	}
@@ -209,7 +210,7 @@ func (c *HubClient) listExamplesForRepo(repoURL, ref string) ([]Example, error) 
 	}
 	var real, stub []Example
 	for _, e := range entries {
-		if e.Name == "PklProject" || e.Name == "README.md" {
+		if e.Type != "dir" {
 			continue
 		}
 		ex := Example{Name: e.Name, LikelyTemplateStub: e.Name == "basic"}
