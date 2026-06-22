@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -38,6 +39,19 @@ func TestTryHelp_PrintsUsageAndReports(t *testing.T) {
 		}
 		if got := buf.String(); got != usage {
 			t.Errorf("tryHelp([%q]) wrote %q, want %q", arg, got, usage)
+		}
+	}
+}
+
+func TestHelpAdvertisesVersionFlags(t *testing.T) {
+	var buf bytes.Buffer
+	if !tryHelp([]string{"--help"}, &buf) {
+		t.Fatal("tryHelp([--help]) = false, want true")
+	}
+	out := buf.String()
+	for _, want := range []string{"-V", "--version"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help output does not advertise %q; got:\n%s", want, out)
 		}
 	}
 }
