@@ -30,6 +30,7 @@ func implementation() *mcp.Implementation {
 type Server struct {
 	mcpServer *mcp.Server
 	client    *FormaeClient
+	hub       *HubClient
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -46,6 +47,7 @@ func New(endpoint string) *Server {
 	s := &Server{
 		mcpServer: mcpServer,
 		client:    client,
+		hub:       NewHubClient(),
 	}
 
 	s.registerTools()
@@ -107,12 +109,6 @@ func (s *Server) registerTools() {
 	}, s.handleCheckHealth)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
-		Name:        "list_plugins",
-		Description: tools.ListPluginsDescription,
-		Annotations: readOnly,
-	}, s.handleListPlugins)
-
-	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "list_policies",
 		Description: tools.ListPoliciesDescription,
 		Annotations: readOnly,
@@ -129,6 +125,30 @@ func (s *Server) registerTools() {
 		Description: tools.ExtractResourcesDescription,
 		Annotations: readOnly,
 	}, s.handleExtractResources)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "search_hub_plugins",
+		Description: tools.SearchHubPluginsDescription,
+		Annotations: readOnly,
+	}, s.handleSearchHubPlugins)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "get_hub_plugin",
+		Description: tools.GetHubPluginDescription,
+		Annotations: readOnly,
+	}, s.handleGetHubPlugin)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "list_plugin_examples",
+		Description: tools.ListPluginExamplesDescription,
+		Annotations: readOnly,
+	}, s.handleListPluginExamples)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "get_plugin_example",
+		Description: tools.GetPluginExampleDescription,
+		Annotations: readOnly,
+	}, s.handleGetPluginExample)
 
 	// Mutation tools
 	destructive := boolPtr(true)
@@ -245,15 +265,6 @@ func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, in
 	return textResult("Formae agent is healthy and reachable."), nil, nil
 }
 
-func (s *Server) handleListPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	cmd := exec.Command("formae", "plugin", "list")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errorResult(fmt.Errorf("failed to list plugins: %w\noutput: %s", err, string(output))), nil, nil
-	}
-	return textResult(string(output)), nil, nil
-}
-
 func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
 	result, err := s.client.ListPolicies()
 	if err != nil {
@@ -340,6 +351,66 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 	}
 
 	return textResult(string(content)), nil, nil
+}
+
+func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
+	plugins, err := s.hub.SearchPlugins(input.Query)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(plugins)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
+}
+
+func (s *Server) handleGetHubPlugin(_ context.Context, _ *mcp.CallToolRequest, input tools.GetHubPluginInput) (*mcp.CallToolResult, any, error) {
+	if input.Name == "" {
+		return errorResult(fmt.Errorf("name is required")), nil, nil
+	}
+	d, err := s.hub.GetPlugin(input.Name)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(d)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
+}
+
+func (s *Server) handleListPluginExamples(_ context.Context, _ *mcp.CallToolRequest, input tools.ListPluginExamplesInput) (*mcp.CallToolResult, any, error) {
+	if input.Plugin == "" {
+		return errorResult(fmt.Errorf("plugin is required")), nil, nil
+	}
+	result, err := s.hub.ListExamples(input.Plugin, input.Version)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
+}
+
+func (s *Server) handleGetPluginExample(_ context.Context, _ *mcp.CallToolRequest, input tools.GetPluginExampleInput) (*mcp.CallToolResult, any, error) {
+	if input.Plugin == "" {
+		return errorResult(fmt.Errorf("plugin is required")), nil, nil
+	}
+	if input.Example == "" {
+		return errorResult(fmt.Errorf("example is required")), nil, nil
+	}
+	result, err := s.hub.GetExample(input.Plugin, input.Example, input.Version)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(data), nil, nil
 }
 
 // Tool handlers — mutations

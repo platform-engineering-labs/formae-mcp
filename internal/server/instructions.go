@@ -51,6 +51,23 @@ Queries use field:value pairs separated by spaces (AND-combined). See formae://d
 
 For common error messages and what they mean: formae://docs/troubleshooting.
 
+## Authoring Infrastructure
+
+Use these tools when helping a user write or scaffold a new plugin or forma project:
+
+- **search_hub_plugins** — full-text search across published hub plugins by keyword.
+- **get_hub_plugin** — fetch the full manifest and metadata for a specific hub plugin.
+- **list_plugin_examples** — list bundled code examples for a plugin (returns named examples with a likelyTemplateStub flag plus version-match and originator trust info).
+- **get_plugin_example** — fetch the source of a specific example file.
+
+Key docs for authoring:
+- Forma project layout (main.pkl, modules/, vars.pkl): formae://docs/forma-structure
+- Stack design and reconciliation boundaries: formae://docs/stack-design
+- Browsable example index: formae://docs/examples
+- Common authoring mistakes to avoid: formae://docs/authoring-pitfalls
+
+**Schema vs agent rule**: when authoring a new plugin, the assistant only needs to add the plugin's PKL schema package as a PklProject dependency (no root dependency needed). Resource plugins are compiled Go shared objects installed on the agent machine — the assistant provides guidance only and never installs or builds them. Note: ` + "`formae project init --include <name>`" + ` (non-` + "`@local`" + `) resolves that plugin's version from the agent, so the named plugin must be installed on the agent at init time — or use ` + "`--include <name>@local --plugin-dir <dir>`" + ` to resolve from disk.
+
 ## Authoritative Documentation
 
 All formae web documentation lives under %s. Always use complete URLs that include the full path; never invent, shorten, or omit path segments (such as the version prefix). Do not guess documentation URLs — read formae://docs/index for the canonical list of pages, or use the formae://docs/* resources directly.

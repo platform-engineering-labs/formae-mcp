@@ -7,6 +7,8 @@ description: "Use when the user wants to bring unmanaged/discovered resources un
 
 Bring discovered (unmanaged) resources under formae management by incorporating them into an existing IaC codebase.
 
+> **Routing note:** The `formae-author` router dispatches here when the user wants to bring EXISTING cloud resources under management (as opposed to authoring new infrastructure from scratch).
+
 ## Workflow
 
 ### 1. Identify the IaC codebase
@@ -39,11 +41,15 @@ Read the user's existing forma files to understand:
 - **Stack and target definitions**: where they're defined and how they're referenced
 - **Import patterns**: `@formae/`, `@aws/`, local imports
 
+For the conventions behind this layout, see `formae://docs/forma-structure`.
+
 ### 6. Confirm stack assignment
 
 Before writing any code, confirm with the user which stack the imported resources should belong to. Suggest the most appropriate stack based on:
 - The resource type and its purpose
 - Existing stack patterns in the codebase
+
+For guidance on stack boundary decisions, see `formae://docs/stack-design`.
 
 **CHECKPOINT: Do not proceed until the user confirms the stack.**
 
