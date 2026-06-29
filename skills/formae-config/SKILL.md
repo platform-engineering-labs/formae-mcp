@@ -5,43 +5,67 @@ description: "Use when the user wants to switch, list, save, edit, delete, or co
 
 # formae-config
 
-`fcfg` is a small CLI that manages named profiles for `~/.config/formae/`. The active config is a symlink at `~/.config/formae/formae.conf.pkl` pointing into `~/.config/formae/profiles/`. `fcfg` only moves files; it does **not** restart the formae agent. After `fcfg use <name>` the user must restart the agent themselves if it is running.
+formae configuration profiles are named configs under the formae config dir
+(`~/.config/formae/profiles/<name>.pkl`), with the active one recorded in a
+plain pointer file (`<config-dir>/active`). They are managed by the
+`formae profile` subcommand (formae >= 0.87.0) and exposed through the
+formae-mcp server as native tools. The old stand-alone `fcfg` binary is gone.
 
-## Command reference
+Switching the active profile takes effect for subsequent MCP calls immediately —
+no agent or MCP-server restart needed.
 
-- `fcfg init [--name <name>] [--yes]` — convert an existing `formae.conf.pkl` into a profile and replace it with a symlink. Always pass `--yes` from agent contexts.
-- `fcfg list [--json]` — list profiles, marking the active one with `*` in plain output. Use `--json` when you need to parse.
-- `fcfg current` — print the active profile name on a single line.
-- `fcfg use <name>` — atomically switch the active profile.
-- `fcfg save <name> [--force]` — snapshot the active profile under a new name. Does not switch. `--force` overwrites an existing profile.
-- `fcfg edit [<name>]` — open `$EDITOR` on a profile (or the active one). Skip from agent contexts; edit the file directly instead.
-- `fcfg delete <name>` — delete a profile. Refuses if it is the active one — switch first.
-- `fcfg diff <a> [<b>]` — `diff -u` between two profiles, or `<a>` vs the active profile. Exit code 1 from this command means "files differ" (not an error); only codes >1 are errors.
+## MCP tools
 
-## Exit codes
+| Intent | Tool | Notes |
+|--------|------|-------|
+| List profiles + active | `list_profiles` | returns `{"active": "<name>", "profiles": ["..."]}` |
+| Show active | `current_profile` | returns `{"active": "<name>"}` |
+| Switch active | `use_profile` | `{ "name": "<name>" }` |
+| Snapshot active under a new name | `save_profile` | `{ "name": "<name>", "force": false }` (does not switch) |
+| Create from template | `create_profile` | `{ "name": "<name>", "force": false }` (does not switch) |
+| Delete | `delete_profile` | refuses the active profile — switch first |
+| Compare | `diff_profiles` | `{ "a": "<name>", "b": "<name>?" }` (b defaults to active) |
+| View PKL | `read_profile` | `{ "name": "<name>" }` returns the profile's PKL |
+| Replace PKL | `write_profile` | `{ "name": "<name>", "content": "<pkl>" }` |
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | User error (missing profile, invalid name, overwrite without `--force`, etc.) |
-| 2 | Filesystem / permission error |
-| 3 | Not initialized — run `fcfg init --yes` first |
+All profile tools require formae >= 0.87.0; on an older formae they return
+`requires formae >= 0.87.0 (connected: A.B.C)`.
 
-## JSON output
+## Editing a profile
 
-Only `fcfg list --json` produces JSON:
+There is no interactive `$EDITOR` step. To modify a profile:
 
-```json
-{"active": "local-dev", "profiles": ["default", "load-test", "local-dev", "prod"]}
-```
+1. `read_profile` to fetch its current PKL.
+2. Edit the PKL.
+3. `write_profile` to replace it.
 
-`active` is `null` if the user has not run `fcfg init` yet.
+`write_profile` is **overwrite-only** (use `create_profile` for a new profile) and
+**refuses the active profile** — to edit the active one, `use_profile` to switch
+away first (or `save_profile` a copy, edit the copy, then switch). Content is
+written as-is; formae has no config validator, so a malformed profile surfaces at
+the next `use_profile`/apply rather than at write time.
+
+## Per-invocation override
+
+Every agent-touching tool (apply / destroy / status / inventory / list_* /
+force_* / extract / …) accepts an optional `profile` argument to target a named
+environment for that one call without changing the active profile. The plugin-hub
+tools (`search_hub_plugins`, `get_hub_plugin`, `list_plugin_examples`,
+`get_plugin_example`) are the exception — they query the plugin hub, not the agent,
+so they take no `profile`.
+
+## Direct CLI (when not using the MCP)
+
+- `formae profile list --output-consumer machine --output-schema json`
+- `formae profile current --output-consumer machine --output-schema json`
+- `formae profile use <name>` / `create <name>` / `save <name> [--force]` /
+  `delete <name>` / `diff <a> [<b>]`
 
 ## Worked example
 
 User: "switch my formae to load-test"
 
-1. Run `fcfg use load-test`.
-2. If exit code 3: tell the user they need to run `fcfg init --yes` first.
-3. If exit code 1: report the error from stderr (likely "profile not found" — suggest `fcfg list` to see what's available).
-4. On success: confirm to the user, and remind them to restart the formae agent if it is running.
+1. Call `use_profile` with `{ "name": "load-test" }`.
+2. On a version error: tell the user they need formae >= 0.87.0.
+3. On "profile not found": call `list_profiles` to show what's available.
+4. On success: confirm. No restart needed — subsequent tools use load-test.
