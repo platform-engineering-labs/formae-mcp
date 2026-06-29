@@ -32,15 +32,12 @@ func implementation() *mcp.Implementation {
 // Server wraps the MCP server and the formae API client.
 type Server struct {
 	mcpServer      *mcp.Server
-	client         *FormaeClient
 	hub            *HubClient
 	forcedEndpoint string // when set, empty-profile calls use this (tests / explicit)
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
 func New(endpoint string) *Server {
-	client := NewFormaeClient(endpoint)
-
 	mcpServer := mcp.NewServer(
 		implementation(),
 		&mcp.ServerOptions{
@@ -50,7 +47,6 @@ func New(endpoint string) *Server {
 
 	s := &Server{
 		mcpServer:      mcpServer,
-		client:         client,
 		hub:            NewHubClient(),
 		forcedEndpoint: endpoint,
 	}
@@ -395,6 +391,14 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 	if input.Query == "" {
 		return errorResult(fmt.Errorf("query is required")), nil, nil
 	}
+	if input.Profile != "" {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+			return errorResult(err), nil, nil
+		}
+		if err := profile.ValidateName(input.Profile); err != nil {
+			return errorResult(err), nil, nil
+		}
+	}
 
 	tmpDir, err := os.MkdirTemp("", "formae-extract-*")
 	if err != nil {
@@ -403,7 +407,12 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 	defer os.RemoveAll(tmpDir)
 
 	outFile := tmpDir + "/extracted.pkl"
-	cmd := exec.Command("formae", "extract", "--query", input.Query, "--yes", outFile)
+	args := []string{"extract", "--query", input.Query, "--yes"}
+	if input.Profile != "" {
+		args = append(args, "--profile", input.Profile)
+	}
+	args = append(args, outFile)
+	cmd := exec.Command("formae", args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output))), nil, nil
 	}
@@ -494,7 +503,11 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	result, err := s.client.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, "formae-mcp")
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, "formae-mcp")
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -509,8 +522,13 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(fmt.Errorf("file_path and query are mutually exclusive")), nil, nil
 	}
 
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+
 	if input.Query != "" {
-		result, err := s.client.DestroyByQuery(input.Query, input.Simulate, "formae-mcp")
+		result, err := c.DestroyByQuery(input.Query, input.Simulate, "formae-mcp")
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -522,7 +540,7 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	result, err := s.client.SubmitCommand("destroy", "", input.Simulate, false, formaJSON, "formae-mcp")
+	result, err := c.SubmitCommand("destroy", "", input.Simulate, false, formaJSON, "formae-mcp")
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -530,29 +548,45 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 }
 
 func (s *Server) handleCancelCommands(_ context.Context, _ *mcp.CallToolRequest, input tools.CancelCommandsInput) (*mcp.CallToolResult, any, error) {
-	result, err := s.client.CancelCommands(input.Query, "formae-mcp")
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.CancelCommands(input.Query, "formae-mcp")
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleForceSync(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	if err := s.client.ForceSync(); err != nil {
+func (s *Server) handleForceSync(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := c.ForceSync(); err != nil {
 		return errorResult(err), nil, nil
 	}
 	return textResult("Resource synchronization triggered successfully."), nil, nil
 }
 
-func (s *Server) handleForceDiscover(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	if err := s.client.ForceDiscover(); err != nil {
+func (s *Server) handleForceDiscover(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := c.ForceDiscover(); err != nil {
 		return errorResult(err), nil, nil
 	}
 	return textResult("Resource discovery triggered successfully."), nil, nil
 }
 
-func (s *Server) handleForceCheckTTL(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	result, err := s.client.ForceCheckTTL()
+func (s *Server) handleForceCheckTTL(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ForceCheckTTL()
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -563,7 +597,11 @@ func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolReq
 	if input.Stack == "" {
 		return errorResult(fmt.Errorf("stack is required")), nil, nil
 	}
-	body, _, err := s.client.ForceReconcileStack(input.Stack)
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	body, _, err := c.ForceReconcileStack(input.Stack)
 	if err != nil {
 		if body != nil {
 			return errorResult(fmt.Errorf("%s: %s", err.Error(), string(body))), nil, nil
