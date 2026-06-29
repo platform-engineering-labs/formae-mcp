@@ -38,6 +38,14 @@ func resetCacheForTest() {
 	detectFn = detectFromCLI
 }
 
+// SetDetectForTest overrides version detection for tests and clears the cache.
+func SetDetectForTest(v string) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	detectFn = func() (string, error) { return v, nil }
+	cached, cachedVer, cachedErr = false, "", nil
+}
+
 // Detect returns the local formae version (e.g. "0.87.0"), memoized for the
 // process lifetime.
 func Detect() (string, error) {

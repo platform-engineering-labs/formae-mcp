@@ -10,6 +10,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/config"
+	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
+	"github.com/platform-engineering-labs/formae-mcp/internal/profile"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 	"github.com/platform-engineering-labs/formae-mcp/internal/version"
 )
@@ -28,9 +31,10 @@ func implementation() *mcp.Implementation {
 
 // Server wraps the MCP server and the formae API client.
 type Server struct {
-	mcpServer *mcp.Server
-	client    *FormaeClient
-	hub       *HubClient
+	mcpServer      *mcp.Server
+	client         *FormaeClient
+	hub            *HubClient
+	forcedEndpoint string // when set, empty-profile calls use this (tests / explicit)
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -45,9 +49,10 @@ func New(endpoint string) *Server {
 	)
 
 	s := &Server{
-		mcpServer: mcpServer,
-		client:    client,
-		hub:       NewHubClient(),
+		mcpServer:      mcpServer,
+		client:         client,
+		hub:            NewHubClient(),
+		forcedEndpoint: endpoint,
 	}
 
 	s.registerTools()
@@ -55,6 +60,27 @@ func New(endpoint string) *Server {
 	s.registerPrompts()
 
 	return s
+}
+
+// clientFor builds a FormaeClient for the given profile (empty = active/default).
+// A non-empty profile is version-gated and name-validated; endpoint resolution
+// hard-errors for an unresolvable requested/active profile.
+func (s *Server) clientFor(profileName string) (*FormaeClient, error) {
+	if profileName != "" {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+			return nil, err
+		}
+		if err := profile.ValidateName(profileName); err != nil {
+			return nil, err
+		}
+	} else if s.forcedEndpoint != "" {
+		return NewFormaeClient(s.forcedEndpoint), nil
+	}
+	url, port, err := config.AgentEndpoint(profileName)
+	if err != nil {
+		return nil, err
+	}
+	return NewFormaeClient(url + ":" + port), nil
 }
 
 // Run starts the MCP server with the given transport.

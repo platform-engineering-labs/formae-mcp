@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 )
 
 // mockAgent creates a test HTTP server that simulates the formae agent.
@@ -763,4 +765,48 @@ func TestListResources_NotFound(t *testing.T) {
 
 func writeTestFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func withFakeVersion(t *testing.T, v string) {
+	t.Helper()
+	featuregate.SetDetectForTest(v)
+	t.Cleanup(func() { featuregate.SetDetectForTest("0.0.0") })
+}
+
+// --- clientFor tests ---
+
+func TestClientFor_EmptyProfileUsesForcedEndpoint(t *testing.T) {
+	s := New("http://forced:1") // forcedEndpoint
+	c, err := s.clientFor("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.endpoint != "http://forced:1" {
+		t.Errorf("expected forced endpoint, got %q", c.endpoint)
+	}
+}
+
+func TestClientFor_ExplicitProfileResolvesFromConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "")
+	t.Setenv("FORMAE_AGENT_PORT", "")
+	p := dir + "/profiles/p.pkl"
+	if err := os.MkdirAll(dir+"/profiles", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("cli { api { url = \"http://p-host\" port = 7000 } }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// version gate: inject a new-enough version via the version package seam.
+	withFakeVersion(t, "0.87.0")
+
+	s := New("http://forced:1")
+	c, err := s.clientFor("p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.endpoint != "http://p-host:7000" {
+		t.Errorf("expected profile endpoint, got %q", c.endpoint)
+	}
 }
