@@ -142,7 +142,9 @@ const ReadProfileDescription = `Return the PKL contents of a named configuration
 
 Use to inspect a profile before modifying it with write_profile.`
 
-const UseProfileDescription = `Switch the active formae configuration profile. Takes effect for subsequent MCP calls without restarting. Requires formae >= 0.87.0.`
+const UseProfileDescription = `Switch the GLOBAL active formae configuration profile. Takes effect for subsequent MCP calls without restarting. Requires formae >= 0.87.0.
+
+Use sparingly. The active profile is global, persisted state shared with the user's formae CLI and any other concurrent MCP sessions — switching it can redirect work in those sessions to the wrong agent. To target a specific environment for your own work, do NOT call use_profile; instead pass the optional 'profile' argument on each tool (apply / destroy / status / inventory / list_* / force_* / cancel / extract). Only call use_profile when the user explicitly asks to change their default environment/agent.`
 
 const SaveProfileDescription = `Snapshot the active profile under a new name (does not switch). Requires formae >= 0.87.0.`
 

@@ -20,7 +20,7 @@ no agent or MCP-server restart needed.
 |--------|------|-------|
 | List profiles + active | `list_profiles` | returns `{"active": "<name>", "profiles": ["..."]}` |
 | Show active | `current_profile` | returns `{"active": "<name>"}` |
-| Switch active | `use_profile` | `{ "name": "<name>" }` |
+| Switch active (default env) | `use_profile` | `{ "name": "<name>" }` — global; only on explicit "change my default" requests (see below) |
 | Snapshot active under a new name | `save_profile` | `{ "name": "<name>", "force": false }` (does not switch) |
 | Create from template | `create_profile` | `{ "name": "<name>", "force": false }` (does not switch) |
 | Delete | `delete_profile` | refuses the active profile — switch first |
@@ -45,14 +45,25 @@ away first (or `save_profile` a copy, edit the copy, then switch). Content is
 written as-is; formae has no config validator, so a malformed profile surfaces at
 the next `use_profile`/apply rather than at write time.
 
-## Per-invocation override
+## Targeting an environment — prefer `profile`, don't switch active
 
-Every agent-touching tool (apply / destroy / status / inventory / list_* /
-force_* / extract / …) accepts an optional `profile` argument to target a named
-environment for that one call without changing the active profile. The plugin-hub
-tools (`search_hub_plugins`, `get_hub_plugin`, `list_plugin_examples`,
-`get_plugin_example`) are the exception — they query the plugin hub, not the agent,
-so they take no `profile`.
+**Default to the per-invocation `profile` argument; do not switch the active
+profile to set up a session.** Every agent-touching tool (apply / destroy /
+status / inventory / list_* / force_* / cancel / extract) accepts an optional
+`profile` argument that targets that one call only and changes no global state.
+
+This matters because the active profile is **global, persisted state** shared with
+the user's `formae` CLI and every other concurrent session. Multiple sessions may
+be working against different agents at the same time, so calling `use_profile` to
+"point this session at staging" would silently redirect those other sessions too.
+Always pass `profile` per call instead.
+
+Only call `use_profile` when the user **explicitly** asks to change their default
+environment/agent (e.g. "make prod my default") — never as a per-session setup step.
+
+The plugin-hub tools (`search_hub_plugins`, `get_hub_plugin`,
+`list_plugin_examples`, `get_plugin_example`) and `create_inline_policy` do **not**
+accept `profile` (they don't talk to a specific agent) — don't pass it to them.
 
 ## Direct CLI (when not using the MCP)
 
