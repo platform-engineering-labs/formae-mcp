@@ -246,3 +246,25 @@ cli { api { url = "http://compact" port = 8080 } }
 		t.Errorf("compact block not parsed: url=%q port=%q", url, port)
 	}
 }
+
+func TestParseCliAPI_StateResetAfterCliBlock(t *testing.T) {
+	// Regression test: after a complete cli { api { ... } } block the state must
+	// be fully reset so a later agent { api { port = N } } block is not
+	// mis-parsed as cli.api values.
+	content := `amends "formae:/Config.pkl"
+cli { api { url = "http://right" port = 8080 } }
+
+agent {
+    api {
+        port = 12345
+    }
+}
+`
+	url, port := parseCliAPI(content)
+	if url != "http://right" {
+		t.Errorf("expected url 'http://right', got %q", url)
+	}
+	if port != "8080" {
+		t.Errorf("expected port '8080' (not agent.api.port 12345), got %q", port)
+	}
+}

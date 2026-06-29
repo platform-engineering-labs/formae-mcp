@@ -113,7 +113,7 @@ func parseCliAPI(content string) (url, port string) {
 				after := idx+3 < len(trimmed) && (trimmed[idx+3] >= 'a' && trimmed[idx+3] <= 'z' || trimmed[idx+3] >= 'A' && trimmed[idx+3] <= 'Z')
 				if !before && !after {
 					inCli = true
-					cliOpenCount = 1
+					cliOpenCount = 0
 				}
 			}
 		}
@@ -126,7 +126,7 @@ func parseCliAPI(content string) (url, port string) {
 				after := idx+3 < len(trimmed) && (trimmed[idx+3] >= 'a' && trimmed[idx+3] <= 'z' || trimmed[idx+3] >= 'A' && trimmed[idx+3] <= 'Z')
 				if !before && !after {
 					inAPI = true
-					apiOpenCount = 1
+					apiOpenCount = 0
 				}
 			}
 		}
