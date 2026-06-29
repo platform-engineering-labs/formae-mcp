@@ -43,6 +43,16 @@ Stacks can carry policies that govern their lifecycle:
 
 Policies live in the user's PKL forma files (inline on a Stack, or as reusable standalone objects). To set or change one, use the create_inline_policy tool to plan the file edit, then apply_forma to deploy. The /formae-policy skill orchestrates this end to end.
 
+## Profiles & targeting (which formae agent a call hits)
+
+A **profile** is a named formae config (endpoint + targets) selecting which agent/environment a command talks to. Requires formae >= 0.87.0.
+
+**Default to the per-invocation ` + "`profile`" + ` argument; do not switch the active profile.** To run a command against a specific environment, pass the optional ` + "`profile`" + ` argument on the tool call. This targets that one call only and changes no global state. It is the correct mechanism for per-session targeting, because the active profile is **global, persisted state shared with the user's CLI and every other concurrent session** — multiple sessions may be working against different agents at once, so calling ` + "`use_profile`" + ` to "set up" your session would silently redirect those other sessions to the wrong agent.
+
+- **Targeting your work** → pass ` + "`profile`" + ` on each call. Never call ` + "`use_profile`" + ` just to prepare a session.
+- **` + "`use_profile`" + ` (switching the active profile)** → only when the user **explicitly** asks to change their default environment/agent (e.g. "make prod my default"). It is not a per-session setup step.
+- **Which tools accept ` + "`profile`" + `**: the agent-touching tools — apply_forma, destroy_forma, cancel_commands, force_sync, force_discover, force_check_ttl, force_reconcile_stack, list_resources, list_stacks, list_targets, list_policies, list_commands, get_command_status, get_agent_stats, check_health, list_changes_since_last_reconcile, extract_resources. **Do not pass ` + "`profile`" + ` to** the plugin-hub tools (search_hub_plugins, get_hub_plugin, list_plugin_examples, get_plugin_example) or create_inline_policy — they do not support it and the call will be rejected.
+
 ## Query Syntax
 
 Queries use field:value pairs separated by spaces (AND-combined). See formae://docs/query-syntax for the full reference.
