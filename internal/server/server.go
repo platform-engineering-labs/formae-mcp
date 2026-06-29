@@ -230,15 +230,23 @@ func (s *Server) registerTools() {
 // Tool handlers — read-only
 
 func (s *Server) handleListResources(_ context.Context, _ *mcp.CallToolRequest, input tools.ListResourcesInput) (*mcp.CallToolResult, any, error) {
-	result, err := s.client.ListResources(input.Query)
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ListResources(input.Query)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListStacks(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	result, err := s.client.ListStacks()
+func (s *Server) handleListStacks(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ListStacks()
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -246,7 +254,11 @@ func (s *Server) handleListStacks(_ context.Context, _ *mcp.CallToolRequest, inp
 }
 
 func (s *Server) handleListTargets(_ context.Context, _ *mcp.CallToolRequest, input tools.ListTargetsInput) (*mcp.CallToolResult, any, error) {
-	result, err := s.client.ListTargets(input.Query)
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ListTargets(input.Query)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -257,7 +269,11 @@ func (s *Server) handleGetCommandStatus(_ context.Context, _ *mcp.CallToolReques
 	if input.CommandID == "" {
 		return errorResult(fmt.Errorf("command_id is required")), nil, nil
 	}
-	result, err := s.client.GetCommandStatus(input.CommandID, "formae-mcp")
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.GetCommandStatus(input.CommandID, "formae-mcp")
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -269,30 +285,46 @@ func (s *Server) handleListCommands(_ context.Context, _ *mcp.CallToolRequest, i
 	if maxResults == "" {
 		maxResults = "10"
 	}
-	result, err := s.client.ListCommands(input.Query, maxResults, "formae-mcp")
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ListCommands(input.Query, maxResults, "formae-mcp")
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleGetAgentStats(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	result, err := s.client.GetAgentStats()
+func (s *Server) handleGetAgentStats(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.GetAgentStats()
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	if err := s.client.CheckHealth(); err != nil {
+func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := c.CheckHealth(); err != nil {
 		return errorResult(err), nil, nil
 	}
 	return textResult("Formae agent is healthy and reachable."), nil, nil
 }
 
-func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	result, err := s.client.ListPolicies()
+func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ListPolicies()
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -300,8 +332,13 @@ func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, i
 }
 
 func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+
 	if input.Stack != "" {
-		result, err := s.client.ListChangesSinceLastReconcile(input.Stack)
+		result, err := c.ListChangesSinceLastReconcile(input.Stack)
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -309,7 +346,7 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	}
 
 	// No stack specified: fetch all stacks, then get drift for each
-	stacksJSON, err := s.client.ListStacks()
+	stacksJSON, err := c.ListStacks()
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to list stacks: %w", err)), nil, nil
 	}
@@ -328,7 +365,7 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	var results []stackDrift
 
 	for _, stack := range stacks {
-		driftJSON, err := s.client.ListChangesSinceLastReconcile(stack.Label)
+		driftJSON, err := c.ListChangesSinceLastReconcile(stack.Label)
 		if err != nil {
 			return errorResult(fmt.Errorf("failed to get drift for stack %s: %w", stack.Label, err)), nil, nil
 		}
