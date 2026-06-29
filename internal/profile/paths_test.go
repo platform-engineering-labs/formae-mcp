@@ -68,6 +68,51 @@ func TestResolveConfigDir_XDGWhenLegacyEmpty(t *testing.T) {
 	}
 }
 
+func TestResolveConfigDir_TildeSlash(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("FORMAE_CONFIG_DIR", "~/sub")
+	got, err := ResolveConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, "sub")
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("expected absolute path, got %q", got)
+	}
+}
+
+func TestResolveConfigDir_TildeAlone(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("FORMAE_CONFIG_DIR", "~")
+	got, err := ResolveConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != home {
+		t.Errorf("expected %q, got %q", home, got)
+	}
+}
+
+func TestResolveConfigDir_TildeFoo_NotExpanded(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("FORMAE_CONFIG_DIR", "~foo")
+	got, err := ResolveConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ~foo must NOT be tilde-expanded: result must end with /~foo, not <home>foo.
+	want, _ := filepath.Abs("~foo")
+	if got != want {
+		t.Errorf("expected %q (abs of ~foo), got %q", want, got)
+	}
+}
+
 func TestHasUserConfig(t *testing.T) {
 	// empty dir -> false
 	empty := t.TempDir()

@@ -41,10 +41,12 @@ func hasUserConfig(dir string) bool {
 // and CLI never disagree about where profiles live. First match wins.
 func ResolveConfigDir() (string, error) {
 	if v := os.Getenv("FORMAE_CONFIG_DIR"); v != "" {
-		if strings.HasPrefix(v, "~") {
-			if home, err := os.UserHomeDir(); err == nil {
-				v = filepath.Join(home, strings.TrimPrefix(v, "~"))
+		if v == "~" || strings.HasPrefix(v, "~/") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", err
 			}
+			v = filepath.Join(home, strings.TrimPrefix(v, "~"))
 		}
 		return filepath.Abs(v)
 	}
