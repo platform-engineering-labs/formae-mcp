@@ -138,6 +138,11 @@ type DiffProfilesInput struct {
 	B string `json:"b,omitempty" jsonschema:"The second profile name; defaults to the active profile when omitted."`
 }
 
+type WriteProfileInput struct {
+	Name    string `json:"name" jsonschema:"required,The existing, non-active profile to overwrite."`
+	Content string `json:"content" jsonschema:"required,The full replacement PKL content for the profile."`
+}
+
 // CreateInlinePolicyOutput is the structured response from the create_inline_policy tool.
 // The tool does NOT modify the file — the caller (skill / LLM) applies the edit using the Edit tool.
 type CreateInlinePolicyOutput struct {

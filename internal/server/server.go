@@ -162,6 +162,10 @@ func (s *Server) registerTools() {
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "create_profile", Description: tools.CreateProfileDescription, Annotations: &mcp.ToolAnnotations{}}, s.handleCreateProfile)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "delete_profile", Description: tools.DeleteProfileDescription, Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true)}}, s.handleDeleteProfile)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "diff_profiles", Description: tools.DiffProfilesDescription, Annotations: readOnly}, s.handleDiffProfiles)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "write_profile", Description: tools.WriteProfileDescription,
+		Annotations: &mcp.ToolAnnotations{},
+	}, s.handleWriteProfile)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "search_hub_plugins",

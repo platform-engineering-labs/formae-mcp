@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -152,4 +154,50 @@ func (s *Server) handleDiffProfiles(_ context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(err), nil, nil
 	}
 	return textResult(out), nil, nil
+}
+
+func (s *Server) handleWriteProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.WriteProfileInput) (*mcp.CallToolResult, any, error) {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		return errorResult(err), nil, nil
+	}
+	path, err := profile.ProfilePath(input.Name)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		return errorResult(fmt.Errorf("profile %q does not exist (use create_profile to create it): %w", input.Name, statErr)), nil, nil
+	}
+	active, aerr := profile.ActiveProfile()
+	if aerr != nil && !errors.Is(aerr, profile.ErrNotInitialized) {
+		return errorResult(aerr), nil, nil
+	}
+	if aerr == nil && input.Name == active {
+		return errorResult(fmt.Errorf("cannot rewrite the active profile %q — switch away with use_profile first, or write to a copy", input.Name)), nil, nil
+	}
+	if err := atomicWrite(path, []byte(input.Content)); err != nil {
+		return errorResult(err), nil, nil
+	}
+	return textResult(fmt.Sprintf("Wrote profile %q.", input.Name)), nil, nil
+}
+
+// atomicWrite writes data to a temp file in the same dir and renames it over path.
+func atomicWrite(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".tmp-profile-*")
+	if err != nil {
+		return fmt.Errorf("create temp: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("rename: %w", err)
+	}
+	return nil
 }

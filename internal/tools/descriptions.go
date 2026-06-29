@@ -152,6 +152,8 @@ const DeleteProfileDescription = `Delete a profile. Refuses the active profile �
 
 const DiffProfilesDescription = `Show a unified diff between two profiles (or <a> vs the active profile). Requires formae >= 0.87.0.`
 
+const WriteProfileDescription = `Overwrite an existing profile's PKL contents (the write half of "edit"). Overwrite-only — use create_profile for new profiles. Refuses the active profile: switch away with use_profile first, or write to a copy. The content is written as-is (formae 0.87.0 has no reliable config validator), so a malformed profile surfaces at next use/apply. Requires formae >= 0.87.0.`
+
 const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
 
 Use this tool when you need to see the PKL representation of existing resources — typically unmanaged resources that the user wants to bring under formae management. The extracted PKL can then be merged into the user's existing forma files.
