@@ -149,6 +149,16 @@ func (s *Server) registerTools() {
 	}, s.handleExtractResources)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
+	}, s.handleListProfiles)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "current_profile", Description: tools.CurrentProfileDescription, Annotations: readOnly,
+	}, s.handleCurrentProfile)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "read_profile", Description: tools.ReadProfileDescription, Annotations: readOnly,
+	}, s.handleReadProfile)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "search_hub_plugins",
 		Description: tools.SearchHubPluginsDescription,
 		Annotations: readOnly,

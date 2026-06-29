@@ -109,6 +109,12 @@ type GetPluginExampleInput struct {
 	Version string `json:"version,omitempty" jsonschema:"Optional plugin schema version to match (same semantics as list_plugin_examples)."`
 }
 
+// ReadProfileInput / Delete/Use share a single required name field; defined per
+// tool for clear, specific JSON schemas.
+type ReadProfileInput struct {
+	Name string `json:"name" jsonschema:"required,The profile name to read."`
+}
+
 // CreateInlinePolicyOutput is the structured response from the create_inline_policy tool.
 // The tool does NOT modify the file — the caller (skill / LLM) applies the edit using the Edit tool.
 type CreateInlinePolicyOutput struct {

@@ -132,6 +132,16 @@ const ListPluginExamplesDescription = "List the canonical example formas for a p
 
 const GetPluginExampleDescription = "Fetch the PKL files of one plugin example (live from the plugin repo's /examples dir, at the version-matched ref) to use as an authoring reference. Returns the same refUsed/versionMatched/originator trust info as list_plugin_examples."
 
+const ListProfilesDescription = `List the formae configuration profiles and the active one. Returns JSON {"active": "<name>", "profiles": ["..."]}. Requires formae >= 0.87.0.
+
+Use when the user asks which profiles exist or which is active.`
+
+const CurrentProfileDescription = `Print the active formae configuration profile name. Returns JSON {"active": "<name>"}. Requires formae >= 0.87.0.`
+
+const ReadProfileDescription = `Return the PKL contents of a named configuration profile (the read half of "edit"). Requires formae >= 0.87.0.
+
+Use to inspect a profile before modifying it with write_profile.`
+
 const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
 
 Use this tool when you need to see the PKL representation of existing resources — typically unmanaged resources that the user wants to bring under formae management. The extracted PKL can then be merged into the user's existing forma files.
