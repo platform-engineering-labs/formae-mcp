@@ -142,6 +142,16 @@ const ReadProfileDescription = `Return the PKL contents of a named configuration
 
 Use to inspect a profile before modifying it with write_profile.`
 
+const UseProfileDescription = `Switch the active formae configuration profile. Takes effect for subsequent MCP calls without restarting. Requires formae >= 0.87.0.`
+
+const SaveProfileDescription = `Snapshot the active profile under a new name (does not switch). Requires formae >= 0.87.0.`
+
+const CreateProfileDescription = `Create a new profile from the starter template (does not switch). Requires formae >= 0.87.0.`
+
+const DeleteProfileDescription = `Delete a profile. Refuses the active profile — switch away first. Requires formae >= 0.87.0.`
+
+const DiffProfilesDescription = `Show a unified diff between two profiles (or <a> vs the active profile). Requires formae >= 0.87.0.`
+
 const ExtractResourcesDescription = `Extract resources as PKL infrastructure code. Runs 'formae extract' to export matching resources as a PKL forma file that can be incorporated into an IaC codebase.
 
 Use this tool when you need to see the PKL representation of existing resources — typically unmanaged resources that the user wants to bring under formae management. The extracted PKL can then be merged into the user's existing forma files.

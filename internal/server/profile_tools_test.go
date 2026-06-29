@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -51,5 +52,40 @@ func TestReadProfile_VersionGate(t *testing.T) {
 	}
 	if !result.IsError || !strings.Contains(textContent(t, result), "requires formae >= 0.87.0") {
 		t.Fatalf("expected version-gate error, got %v / %s", result.IsError, textContent(t, result))
+	}
+}
+
+func TestCreateAndUseProfile(t *testing.T) {
+	// Requires the real formae 0.87.0 CLI on PATH (shell-out verbs).
+	if _, err := exec.LookPath("formae"); err != nil {
+		t.Skip("formae not on PATH")
+	}
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	withFakeVersion(t, "0.87.0")
+
+	session := connectTestServer(t, "http://forced:1")
+	// create
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_profile", Arguments: map[string]any{"name": "staging"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("create_profile error: %s", textContent(t, res))
+	}
+	// use
+	res, err = session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "use_profile", Arguments: map[string]any{"name": "staging"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("use_profile error: %s", textContent(t, res))
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "active")); !strings.Contains(string(got), "staging") {
+		t.Errorf("active pointer not updated: %q", string(got))
 	}
 }

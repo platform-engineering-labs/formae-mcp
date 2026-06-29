@@ -115,6 +115,29 @@ type ReadProfileInput struct {
 	Name string `json:"name" jsonschema:"required,The profile name to read."`
 }
 
+type UseProfileInput struct {
+	Name string `json:"name" jsonschema:"required,The profile name to make active."`
+}
+
+type SaveProfileInput struct {
+	Name  string `json:"name" jsonschema:"required,The new profile name to snapshot the active profile into."`
+	Force bool   `json:"force,omitempty" jsonschema:"Overwrite an existing profile of this name."`
+}
+
+type CreateProfileInput struct {
+	Name  string `json:"name" jsonschema:"required,The new profile name to create from the starter template (does not switch)."`
+	Force bool   `json:"force,omitempty" jsonschema:"Overwrite an existing profile of this name."`
+}
+
+type DeleteProfileInput struct {
+	Name string `json:"name" jsonschema:"required,The profile name to delete (cannot be the active one)."`
+}
+
+type DiffProfilesInput struct {
+	A string `json:"a" jsonschema:"required,The first profile name to compare."`
+	B string `json:"b,omitempty" jsonschema:"The second profile name; defaults to the active profile when omitted."`
+}
+
 // CreateInlinePolicyOutput is the structured response from the create_inline_policy tool.
 // The tool does NOT modify the file — the caller (skill / LLM) applies the edit using the Edit tool.
 type CreateInlinePolicyOutput struct {

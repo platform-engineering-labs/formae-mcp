@@ -67,3 +67,89 @@ func (s *Server) handleReadProfile(_ context.Context, _ *mcp.CallToolRequest, in
 	}
 	return textResult(string(data)), nil, nil
 }
+
+func (s *Server) handleUseProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.UseProfileInput) (*mcp.CallToolResult, any, error) {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := profile.ValidateName(input.Name); err != nil {
+		return errorResult(err), nil, nil
+	}
+	out, err := runFormaeProfile([]string{"use", input.Name})
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return textResult(fmt.Sprintf("Switched active profile to %q.\n%s", input.Name, out)), nil, nil
+}
+
+func (s *Server) handleSaveProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.SaveProfileInput) (*mcp.CallToolResult, any, error) {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := profile.ValidateName(input.Name); err != nil {
+		return errorResult(err), nil, nil
+	}
+	args := []string{"save", input.Name}
+	if input.Force {
+		args = append(args, "--force")
+	}
+	out, err := runFormaeProfile(args)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return textResult(out), nil, nil
+}
+
+func (s *Server) handleCreateProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.CreateProfileInput) (*mcp.CallToolResult, any, error) {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := profile.ValidateName(input.Name); err != nil {
+		return errorResult(err), nil, nil
+	}
+	args := []string{"create", input.Name}
+	if input.Force {
+		args = append(args, "--force")
+	}
+	out, err := runFormaeProfile(args)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return textResult(out), nil, nil
+}
+
+func (s *Server) handleDeleteProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.DeleteProfileInput) (*mcp.CallToolResult, any, error) {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := profile.ValidateName(input.Name); err != nil {
+		return errorResult(err), nil, nil
+	}
+	out, err := runFormaeProfile([]string{"delete", input.Name})
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return textResult(out), nil, nil
+}
+
+func (s *Server) handleDiffProfiles(_ context.Context, _ *mcp.CallToolRequest, input tools.DiffProfilesInput) (*mcp.CallToolResult, any, error) {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := profile.ValidateName(input.A); err != nil {
+		return errorResult(err), nil, nil
+	}
+	args := []string{"diff", input.A}
+	if input.B != "" {
+		if err := profile.ValidateName(input.B); err != nil {
+			return errorResult(err), nil, nil
+		}
+		args = append(args, input.B)
+	}
+	// exit code 1 means "files differ", which is success for diff.
+	out, err := runFormaeProfile(args, 1)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return textResult(out), nil, nil
+}
