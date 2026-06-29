@@ -516,6 +516,14 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	if input.Mode != "reconcile" && input.Mode != "patch" {
 		return errorResult(fmt.Errorf("mode must be 'reconcile' or 'patch', got '%s'", input.Mode)), nil, nil
 	}
+	if input.Profile != "" {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+			return errorResult(err), nil, nil
+		}
+		if err := profile.ValidateName(input.Profile); err != nil {
+			return errorResult(err), nil, nil
+		}
+	}
 
 	formaJSON, err := evalFormaFile(input.FilePath)
 	if err != nil {
@@ -539,6 +547,14 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 	}
 	if input.FilePath != "" && input.Query != "" {
 		return errorResult(fmt.Errorf("file_path and query are mutually exclusive")), nil, nil
+	}
+	if input.Profile != "" {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+			return errorResult(err), nil, nil
+		}
+		if err := profile.ValidateName(input.Profile); err != nil {
+			return errorResult(err), nil, nil
+		}
 	}
 
 	c, err := s.clientFor(input.Profile)

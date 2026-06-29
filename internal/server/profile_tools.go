@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -14,6 +15,10 @@ import (
 	"github.com/platform-engineering-labs/formae-mcp/internal/profile"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
+
+// profileMu serializes write_profile's check+rename against use_profile's
+// active-pointer switch within this process.
+var profileMu sync.Mutex
 
 // runFormaeProfile shells out to `formae profile <args...>` and returns combined
 // output. okExit lists non-zero exit codes that are NOT errors (e.g. diff's 1).
@@ -77,6 +82,8 @@ func (s *Server) handleUseProfile(_ context.Context, _ *mcp.CallToolRequest, inp
 	if err := profile.ValidateName(input.Name); err != nil {
 		return errorResult(err), nil, nil
 	}
+	profileMu.Lock()
+	defer profileMu.Unlock()
 	out, err := runFormaeProfile([]string{"use", input.Name})
 	if err != nil {
 		return errorResult(err), nil, nil
@@ -167,6 +174,8 @@ func (s *Server) handleWriteProfile(_ context.Context, _ *mcp.CallToolRequest, i
 	if _, statErr := os.Stat(path); statErr != nil {
 		return errorResult(fmt.Errorf("profile %q does not exist (use create_profile to create it): %w", input.Name, statErr)), nil, nil
 	}
+	profileMu.Lock()
+	defer profileMu.Unlock()
 	active, aerr := profile.ActiveProfile()
 	if aerr != nil && !errors.Is(aerr, profile.ErrNotInitialized) {
 		return errorResult(aerr), nil, nil
@@ -181,6 +190,7 @@ func (s *Server) handleWriteProfile(_ context.Context, _ *mcp.CallToolRequest, i
 }
 
 // atomicWrite writes data to a temp file in the same dir and renames it over path.
+// If the target already exists its permissions are preserved on the replacement.
 func atomicWrite(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".tmp-profile-*")
@@ -195,6 +205,11 @@ func atomicWrite(path string, data []byte) error {
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp: %w", err)
+	}
+	// Preserve the existing file's permissions so a rewrite does not downgrade
+	// them to the CreateTemp default (0600).
+	if fi, err := os.Stat(path); err == nil {
+		_ = os.Chmod(tmpName, fi.Mode().Perm())
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("rename: %w", err)

@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"os"
 	"path/filepath"
 )
 
@@ -14,7 +15,10 @@ func ActiveProfile() (string, error) {
 	}
 	name, err := readActive(dir)
 	if err != nil {
-		return "", ErrNotInitialized
+		if os.IsNotExist(err) {
+			return "", ErrNotInitialized
+		}
+		return "", err
 	}
 	if err := ValidateName(name); err != nil {
 		return "", err
