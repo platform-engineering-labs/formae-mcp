@@ -7,6 +7,10 @@ description: "Use when the user asks about deployed infrastructure, what resourc
 
 Use the `list_resources` MCP tool to query the formae agent for infrastructure resources.
 
+## Targeting an environment (`profile`)
+
+`list_resources` (and `get_agent_stats`) hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on each query in this flow so it targets that environment — for this session only, without changing global state. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+
 ## Important: Avoid Unbounded Queries
 
 The resources endpoint returns ALL matching resources with full properties. An empty query on a large environment can return hundreds of thousands of characters, overwhelming the context window.

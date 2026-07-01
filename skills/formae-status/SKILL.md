@@ -7,6 +7,10 @@ description: "Use when the user asks about running commands, deployment progress
 
 Use `list_commands` and `get_command_status` MCP tools to monitor formae operations.
 
+## Targeting an environment (`profile`)
+
+`list_commands` and `get_command_status` hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on each call in this flow so it targets that environment — for this session only, without changing global state. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+
 ## Workflow
 
 1. For an overview: call `list_commands` (optionally with a query)

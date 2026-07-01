@@ -7,6 +7,10 @@ description: "Use when the user needs to make an urgent targeted infrastructure 
 
 Use the `apply_forma` MCP tool in **patch** mode for urgent targeted changes.
 
+## Targeting an environment (`profile`)
+
+`apply_forma` (and `get_command_status`) hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on the `apply_forma` call and any `get_command_status` follow-up so it targets that environment — for this session only, without changing global state. Patches are usually incident/hotfix work against one environment. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+
 ## How Patch Works
 
 Patch only applies the changes explicitly specified in the forma file. Other resources are untouched. Use this for:

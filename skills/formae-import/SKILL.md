@@ -9,6 +9,10 @@ Bring discovered (unmanaged) resources under formae management by incorporating 
 
 > **Routing note:** The `formae-author` router dispatches here when the user wants to bring EXISTING cloud resources under management (as opposed to authoring new infrastructure from scratch).
 
+## Targeting an environment (`profile`)
+
+These tools hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on each agent call in this flow (`extract_resources`, `list_resources`, `apply_forma`) so it targets that environment — for this session only, without changing global state. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+
 ## Workflow
 
 ### 1. Identify the IaC codebase

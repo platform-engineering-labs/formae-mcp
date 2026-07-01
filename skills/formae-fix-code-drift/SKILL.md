@@ -5,6 +5,10 @@ description: "Use when the user wants to check for infrastructure drift, see wha
 
 # Drift Detection and Absorption
 
+## Targeting an environment (`profile`)
+
+These tools hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on **every** agent call in this flow (`list_changes_since_last_reconcile`, `apply_forma`, `extract_resources`, `get_command_status`) so it targets that environment — for this session only, without changing global state. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+
 ## MANDATORY RULE: Absorb = Edit + Simulate
 
 When absorbing drift, you MUST run a reconcile simulation immediately after editing the PKL file — in the same turn, without asking, without pausing, without reporting success. An absorption is only complete when the simulation confirms no changes required. Telling the user "done" after an edit without simulating is WRONG.
