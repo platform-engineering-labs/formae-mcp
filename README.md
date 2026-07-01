@@ -1,6 +1,6 @@
 # formae-mcp
 
-MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 22 MCP tools for querying and managing cloud infrastructure, plus 19 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
+MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [formae](https://formae.io). Provides 31 MCP tools for querying and managing cloud infrastructure, plus 19 skills that teach your AI coding assistant how to perform common infrastructure workflows through formae.
 
 ## Prerequisites
 
@@ -81,7 +81,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-import` | Bring unmanaged/discovered resources under formae management |
 | `formae-plugin-new` | Scaffold a new formae resource plugin |
 | `formae-plugin-add-resource` | Add a new resource type to an existing plugin |
-| `formae-config` | Manage named formae configuration profiles in `~/.config/formae/` via the `fcfg` CLI |
+| `formae-config` | Switch, list, save, create, delete, compare, view, and edit named formae configuration profiles (drives `formae profile`; requires formae >= 0.87.0) |
 
 ## Available MCP Tools
 
@@ -117,6 +117,22 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `force_reconcile_stack` | Force a one-shot reconcile on a stack (requires auto-reconcile policy attached) |
 | `create_inline_policy` | Plan a TTL or auto-reconcile policy edit on a stack (returns snippet + insertion anchor; caller applies via Edit) |
 
+### Profiles (requires formae >= 0.87.0)
+
+Manage named formae environments (endpoint + targets) from your assistant.
+
+| Tool | Description |
+|------|-------------|
+| `list_profiles` | List configuration profiles and which one is active |
+| `current_profile` | Show the active profile |
+| `use_profile` | Switch the active profile (global; only on explicit "change my default" requests) |
+| `save_profile` | Snapshot the active profile under a new name |
+| `create_profile` | Create a new profile from the starter template |
+| `delete_profile` | Delete a profile (cannot be the active one) |
+| `diff_profiles` | Compare two profiles (or one against the active) |
+| `read_profile` | Return a profile's PKL contents |
+| `write_profile` | Replace a profile's PKL (overwrite-only; refuses the active profile) |
+
 ## Configuration
 
 By default, formae-mcp connects to the formae agent at `http://localhost:49684`. To override this:
@@ -128,7 +144,7 @@ export FORMAE_AGENT_URL=http://my-agent-host
 export FORMAE_AGENT_PORT=8080
 ```
 
-**Config file** (`~/.config/formae/formae.conf.pkl`):
+**Profile** (formae >= 0.87.0): when no environment variables are set, formae-mcp reads the agent endpoint from your **active** formae profile — or from the profile named by a tool's `profile` argument. Profiles live at `~/.config/formae/profiles/<name>.pkl` and are managed with `formae profile` (or the profile tools above); each looks like:
 
 ```pkl
 amends "formae:/Config.pkl"
@@ -141,7 +157,7 @@ cli {
 }
 ```
 
-Precedence: environment variables > config file > defaults.
+Precedence: environment variables > per-call `profile` / active profile > `http://localhost:49684` default.
 
 ## License
 
