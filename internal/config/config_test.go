@@ -294,6 +294,27 @@ cli {
 	}
 }
 
+func TestAgentEndpoint_ProfileMissingURLDefaultsLocalhost(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	writeProfile(t, dir, "prod", `amends "formae:/Config.pkl"
+cli {
+    api {
+        port = 7000
+    }
+}
+`)
+	url, port, err := AgentEndpoint("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url != "http://localhost" || port != "7000" {
+		t.Errorf("expected default url + profile port (never env), got %s:%s", url, port)
+	}
+}
+
 func TestAgentEndpoint_RequestedMissingProfileHardErrors(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("FORMAE_CONFIG_DIR", dir)
