@@ -150,7 +150,7 @@ cli {
 }
 `
 
-func TestAgentEndpoint_BothEnvVarsShortCircuit(t *testing.T) {
+func TestAgentEndpoint_NoProfileBothEnvFallback(t *testing.T) {
 	t.Setenv("FORMAE_CONFIG_DIR", t.TempDir()) // empty, no active
 	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
 	t.Setenv("FORMAE_AGENT_PORT", "1234")
@@ -160,6 +160,101 @@ func TestAgentEndpoint_BothEnvVarsShortCircuit(t *testing.T) {
 	}
 	if url != "http://env-host" || port != "1234" {
 		t.Errorf("got %s:%s", url, port)
+	}
+}
+
+func TestAgentEndpoint_NoProfileOnlyURLFallback(t *testing.T) {
+	t.Setenv("FORMAE_CONFIG_DIR", t.TempDir()) // empty, no active
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "")
+	url, port, err := AgentEndpoint("")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if url != "http://env-host" || port != "49684" {
+		t.Errorf("expected env url + default port, got %s:%s", url, port)
+	}
+}
+
+func TestAgentEndpoint_NoProfileOnlyPortFallback(t *testing.T) {
+	t.Setenv("FORMAE_CONFIG_DIR", t.TempDir()) // empty, no active
+	t.Setenv("FORMAE_AGENT_URL", "")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	url, port, err := AgentEndpoint("")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if url != "http://localhost" || port != "1234" {
+		t.Errorf("expected default url + env port, got %s:%s", url, port)
+	}
+}
+
+func TestAgentEndpoint_ActiveProfileBeatsEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	writeProfile(t, dir, "prod", sampleProfile)
+	if err := os.WriteFile(filepath.Join(dir, "active"), []byte("prod\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	url, port, err := AgentEndpoint("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url != "http://agent.example.com" || port != "9000" {
+		t.Errorf("profile must win over env, got %s:%s", url, port)
+	}
+}
+
+func TestAgentEndpoint_ExplicitProfileBeatsActiveAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	writeProfile(t, dir, "a", `amends "formae:/Config.pkl"
+cli {
+    api {
+        url = "http://profile-a"
+        port = 1111
+    }
+}
+`)
+	writeProfile(t, dir, "b", sampleProfile)
+	if err := os.WriteFile(filepath.Join(dir, "active"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	url, port, err := AgentEndpoint("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url != "http://profile-a" || port != "1111" {
+		t.Errorf("explicit profile must win over active and env, got %s:%s", url, port)
+	}
+}
+
+func TestAgentEndpoint_EnvDoesNotRescueStaleActive(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	if err := os.WriteFile(filepath.Join(dir, "active"), []byte("ghost\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := AgentEndpoint("")
+	if err == nil {
+		t.Fatal("expected hard error for stale active pointer; env must not rescue it")
+	}
+}
+
+func TestAgentEndpoint_EnvDoesNotRescueMissingExplicit(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	_, _, err := AgentEndpoint("ghost")
+	if err == nil {
+		t.Fatal("expected hard error for missing requested profile; env must not rescue it")
 	}
 }
 
@@ -175,6 +270,48 @@ func TestAgentEndpoint_ExplicitProfile(t *testing.T) {
 	}
 	if url != "http://agent.example.com" || port != "9000" {
 		t.Errorf("got %s:%s", url, port)
+	}
+}
+
+func TestAgentEndpoint_ProfileMissingPortDefaultsLocalhost(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	writeProfile(t, dir, "prod", `amends "formae:/Config.pkl"
+cli {
+    api {
+        url = "http://url-only"
+    }
+}
+`)
+	url, port, err := AgentEndpoint("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url != "http://url-only" || port != "49684" {
+		t.Errorf("expected profile url + default port (never env), got %s:%s", url, port)
+	}
+}
+
+func TestAgentEndpoint_ProfileMissingURLDefaultsLocalhost(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "http://env-host")
+	t.Setenv("FORMAE_AGENT_PORT", "1234")
+	writeProfile(t, dir, "prod", `amends "formae:/Config.pkl"
+cli {
+    api {
+        port = 7000
+    }
+}
+`)
+	url, port, err := AgentEndpoint("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url != "http://localhost" || port != "7000" {
+		t.Errorf("expected default url + profile port (never env), got %s:%s", url, port)
 	}
 }
 
