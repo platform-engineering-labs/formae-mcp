@@ -24,14 +24,14 @@ func connectServer(t *testing.T, s *Server) *mcp.ClientSession {
 	if err != nil {
 		t.Fatalf("server.Connect failed: %v", err)
 	}
-	t.Cleanup(func() { serverSession.Close() })
+	t.Cleanup(func() { _ = serverSession.Close() })
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, t2, nil)
 	if err != nil {
 		t.Fatalf("client.Connect failed: %v", err)
 	}
-	t.Cleanup(func() { clientSession.Close() })
+	t.Cleanup(func() { _ = clientSession.Close() })
 
 	return clientSession
 }

@@ -423,7 +423,7 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to create temp directory: %w", err)), nil, nil
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	outFile := tmpDir + "/extracted.pkl"
 	args := []string{"extract", "--query", input.Query, "--yes"}
