@@ -3,9 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/platform-engineering-labs/formae-mcp/internal/profile"
 )
@@ -15,46 +17,46 @@ const (
 	defaultPort = "49684"
 )
 
+// deprecatedEnvWarnOnce ensures the FORMAE_AGENT_URL/PORT deprecation warning is
+// emitted at most once per process, since AgentEndpoint runs per MCP tool call.
+var deprecatedEnvWarnOnce sync.Once
+
 // AgentEndpoint resolves the formae agent endpoint for an optional profile.
-// Precedence: both env vars > explicit profile > active pointer > localhost
-// default (only when genuinely unconfigured). A requested or active-but-
-// unparseable profile is a hard error, never a silent localhost fallback.
+// Precedence: a profile always wins. An explicit requested profile is resolved
+// first, else the active pointer; either resolving-but-unparseable is a hard
+// error, never a silent fallback. Only when no profile is configured at all do
+// the deprecated FORMAE_AGENT_URL/FORMAE_AGENT_PORT env vars apply, falling back
+// to the localhost default for whichever endpoint field they leave unset.
 func AgentEndpoint(profileName string) (url, port string, err error) {
 	envURL := os.Getenv("FORMAE_AGENT_URL")
 	envPort := os.Getenv("FORMAE_AGENT_PORT")
-	if envURL != "" && envPort != "" {
-		return envURL, envPort, nil
+	if envURL != "" || envPort != "" {
+		deprecatedEnvWarnOnce.Do(func() {
+			slog.Warn("FORMAE_AGENT_URL/FORMAE_AGENT_PORT are deprecated in favour of formae profiles and will be removed. " +
+				"When a profile is configured (active or per-call) it takes precedence and these variables are ignored; set up a profile instead.")
+		})
 	}
 
 	switch {
 	case profileName != "":
 		url, port, err = endpointFromProfile(profileName)
-		if err != nil {
-			return "", "", err
-		}
 	default:
 		active, aerr := profile.ActiveProfile()
-		if aerr != nil {
-			if errors.Is(aerr, profile.ErrNotInitialized) {
-				// genuinely unconfigured: fall through to defaults
-			} else {
-				return "", "", aerr
-			}
-		} else {
+		if aerr == nil {
 			url, port, err = endpointFromProfile(active)
-			if err != nil {
-				return "", "", err
-			}
+		} else if !errors.Is(aerr, profile.ErrNotInitialized) {
+			return "", "", aerr
+		} else {
+			// genuinely unconfigured: deprecated env fallback below
+			url, port = envURL, envPort
 		}
 	}
+	if err != nil {
+		return "", "", err
+	}
 
-	// single-env overlay
-	if envURL != "" {
-		url = envURL
-	}
-	if envPort != "" {
-		port = envPort
-	}
+	// Fill absent endpoint fields from the localhost default (never from env,
+	// which is only consulted when no profile is configured at all).
 	if url == "" {
 		url = defaultURL
 	}
