@@ -27,15 +27,45 @@
    ln -s ~/.codex/formae-mcp/skills ~/.agents/skills/formae-mcp
    ```
 
-4. Restart Codex.
+4. Register the MCP server. The skills drive the `formae-mcp` tools, so Codex
+   must know how to start the server. Either use the CLI:
+
+   ```bash
+   codex mcp add formae -- formae-mcp
+   ```
+
+   or merge this block into `~/.codex/config.toml` (add to the existing file —
+   don't replace it):
+
+   ```toml
+   [mcp_servers.formae]
+   command = "formae-mcp"
+   ```
+
+   `formae-mcp` must be resolvable on your `PATH` (`go install` puts it in
+   `$(go env GOPATH)/bin`). If Codex can't find it — GUI/IDE launches often have
+   a narrower `PATH` — use the absolute path instead of the bare name (run
+   `go env GOPATH` to find it, then point at `<gopath>/bin/formae-mcp`).
+
+5. Restart Codex.
 
 ## Verify
 
-```bash
-ls -la ~/.agents/skills/formae-mcp
-```
+Two checks — the first confirms Codex sees the server, the second confirms it
+actually works end-to-end.
 
-You should see the skill directories (formae-status, formae-apply, etc.).
+1. Confirm the server is registered:
+
+   ```bash
+   codex mcp list
+   ```
+
+   `formae` should appear in the list.
+
+2. With a formae agent running (`formae agent start`), ask Codex for formae
+   status (invoke the `formae-status` skill, e.g. "what formae commands are
+   running?") and confirm a tool call returns live agent data — not just that
+   the skill loaded.
 
 ## Updating
 
@@ -46,9 +76,13 @@ cd ~/.codex/formae-mcp && git pull && go install ./cmd/formae-mcp/
 ## Uninstalling
 
 ```bash
+codex mcp remove formae
 rm ~/.agents/skills/formae-mcp
 rm -rf ~/.codex/formae-mcp
 ```
+
+If you registered the server by editing `~/.codex/config.toml`, delete the
+`[mcp_servers.formae]` block instead of running `codex mcp remove`.
 
 Optionally remove the binary:
 
