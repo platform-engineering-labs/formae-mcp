@@ -54,6 +54,21 @@ func (s *Server) fetchPolicies() ([]policyInventoryItem, error) {
 	return items, nil
 }
 
+// standaloneTypeOf resolves a standalone policy label to its MCP policy type,
+// consulting the agent inventory first and falling back to the workspace source
+// (for policies declared but not yet applied). Returns ok=false when the label
+// resolves nowhere.
+func (s *Server) standaloneTypeOf(label string, items []policyInventoryItem, cwd string) (string, bool) {
+	if item, known := findPolicyByLabel(items, label); known {
+		return mcpPolicyType(item.Type), true
+	}
+	t, found, err := standalonePolicyTypeFromWorkspace(cwd, label, currentEvalFunc())
+	if err != nil || !found {
+		return "", false
+	}
+	return t, true
+}
+
 // findPolicyByLabel returns the inventory entry for a label.
 func findPolicyByLabel(items []policyInventoryItem, label string) (policyInventoryItem, bool) {
 	for _, item := range items {
@@ -257,6 +272,25 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	plan, err := planAttachStandalonePolicy(string(source), input.Stack, input.PolicyLabel, policyType)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+
+	// Pre-check 3: a same-type standalone already attached in SOURCE. Pre-check 2
+	// only sees the agent inventory, so a source-only attachment (created and
+	// attached before the first apply) would slip through and leave two policies
+	// of the same type in one listing. Only relevant when we would actually add
+	// one — an idempotent re-attach plans a noop and is left alone.
+	if plan.Operation == "attach" {
+		for _, lbl := range resolvableLabelsInPoliciesBlock(string(source), input.Stack) {
+			if lbl == input.PolicyLabel {
+				continue
+			}
+			if t, ok := s.standaloneTypeOf(lbl, items, cwd); ok && t == policyType {
+				return errorResult(fmt.Errorf(
+					"stack %q already has standalone policy %q of type %s attached in source; a stack may "+
+						"hold only one policy per type. Detach %q first (detach_standalone_policy)",
+					input.Stack, lbl, policyType, lbl)), nil, nil
+			}
+		}
 	}
 
 	out := tools.AttachStandalonePolicyOutput{

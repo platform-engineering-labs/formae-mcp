@@ -593,3 +593,70 @@ func TestCreateStandalonePolicyDuplicateInAnotherFileIsNoop(t *testing.T) {
 		t.Error("got:\nno notes\nwant:\na note naming the file that already declares it")
 	}
 }
+
+// TestAttachStandalonePolicySourceOnlySameTypeConflict is the regression test
+// for the second-pass review finding: attaching a same-type standalone when the
+// stack already carries one in SOURCE (created and attached before the first
+// apply, so the agent inventory is empty) must be refused, not planned.
+func TestAttachStandalonePolicySourceOnlySameTypeConflict(t *testing.T) {
+	withFixtureWorkspace(t, "source_conflict_fixture")
+	prev := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"app"}],` +
+			`"Policies":[{"Label":"ttl-a","Type":"ttl"},{"Label":"ttl-b","Type":"ttl"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prev })
+
+	// Agent knows nothing yet — nothing applied.
+	agent := mockAgent(t, policiesHandler(t, `[]`))
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "attach_standalone_policy",
+		Arguments: map[string]any{
+			"stack":        "app",
+			"policy_label": "ttl-b",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (app already has a source-only TTL standalone attached)")
+	}
+	if !strings.Contains(textContent(t, result), "ttl-a") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the conflicting source-only standalone ttl-a", textContent(t, result))
+	}
+}
+
+// TestAttachStandalonePolicySourceOnlyDifferentTypeOK pins the mirror: a
+// different-type standalone attached in source is not a conflict.
+func TestAttachStandalonePolicySourceOnlyDifferentTypeOK(t *testing.T) {
+	withFixtureWorkspace(t, "source_conflict_fixture")
+	prev := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"app"}],` +
+			`"Policies":[{"Label":"ttl-a","Type":"ttl"},{"Label":"reconcile-x","Type":"auto-reconcile"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prev })
+
+	agent := mockAgent(t, policiesHandler(t, `[]`))
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "attach_standalone_policy",
+		Arguments: map[string]any{
+			"stack":        "app",
+			"policy_label": "reconcile-x",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (app has a TTL in source, reconcile-x is a different type)",
+			textContent(t, result))
+	}
+}

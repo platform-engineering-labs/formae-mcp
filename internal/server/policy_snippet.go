@@ -595,3 +595,41 @@ func findResolvableInPoliciesBlock(source, stackLabel, policyLabel string) (int,
 
 	return 0, 0, false
 }
+
+// resolvableLabelsInPoliciesBlock returns the labels of every standalone policy
+// attached to the named stack in source — both direct
+// `new formae.PolicyResolvable { label = "X" }` entries and `<binding>.res`
+// references (resolved against the file). Used to detect same-type conflicts
+// that live only in source, before the first apply makes them visible to the
+// agent.
+func resolvableLabelsInPoliciesBlock(source, stackLabel string) []string {
+	innerStart, innerEnd, ok := findPoliciesBlock(source, stackLabel)
+	if !ok {
+		return nil
+	}
+	startOffset := offsetOfLine(source, innerStart)
+	endOffset := offsetOfLine(source, innerEnd+1)
+	if endOffset > len(source) {
+		endOffset = len(source)
+	}
+	body := source[startOffset:endOffset]
+
+	var labels []string
+	for _, m := range policyResolvableEntryRE.FindAllStringIndex(body, -1) {
+		openIdx := strings.Index(body[m[0]:], "{") + m[0]
+		closeIdx, matched := matchBrace(body, openIdx)
+		if !matched {
+			continue
+		}
+		if lm := stackLabelRE.FindStringSubmatch(body[openIdx+1 : closeIdx]); lm != nil {
+			labels = append(labels, lm[1])
+		}
+	}
+	for _, m := range policyResBindingCaptureRE.FindAllStringSubmatchIndex(body, -1) {
+		binding := body[m[2]:m[3]]
+		if lbl, ok := policyLabelForBinding(source, binding); ok {
+			labels = append(labels, lbl)
+		}
+	}
+	return labels
+}

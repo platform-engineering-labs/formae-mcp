@@ -971,3 +971,49 @@ func TestFindStandalonePolicyDeclarationReportsTTLType(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", decl.PolicyType, "ttl")
 	}
 }
+
+func TestResolvableLabelsInPoliciesBlockDirectAndBinding(t *testing.T) {
+	// Line 1 = import, 2-6 = local ephemeral decl, 7 = forma, 8 = bare ref,
+	// 9 = Stack, 10 = label, 11 = policies listing,
+	// 12 = direct resolvable "ttl-a", 13 = ephemeral.res, 14 = `}` listing.
+	source := `import "@formae/formae.pkl"
+local ephemeral = new formae.TTLPolicy {
+  label = "ephemeral-1h"
+  ttl = 1.h
+  onDependents = "abort"
+}
+forma {
+  ephemeral
+  new formae.Stack {
+    label = "app"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "ttl-a" }
+      ephemeral.res
+    }
+  }
+}
+`
+	got := resolvableLabelsInPoliciesBlock(source, "app")
+	want := map[string]bool{"ttl-a": true, "ephemeral-1h": true}
+	if len(got) != 2 {
+		t.Fatalf("got:\n%v\nwant:\n2 labels (ttl-a, ephemeral-1h)", got)
+	}
+	for _, l := range got {
+		if !want[l] {
+			t.Errorf("got unexpected label %q; want one of %v", l, want)
+		}
+	}
+}
+
+func TestResolvableLabelsInPoliciesBlockNone(t *testing.T) {
+	source := `forma {
+  new formae.Stack {
+    label = "app"
+    description = "no policies"
+  }
+}
+`
+	if got := resolvableLabelsInPoliciesBlock(source, "app"); len(got) != 0 {
+		t.Errorf("got:\n%v\nwant:\nno labels (stack has no policies block)", got)
+	}
+}
