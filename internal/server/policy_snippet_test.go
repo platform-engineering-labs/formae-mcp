@@ -1040,3 +1040,46 @@ forma {
 		t.Fatalf("got:\n%v\nwant:\n2 labels (shared, other) across both stacks", got)
 	}
 }
+
+// TestMultilineLocalBindingResolves pins that a `local` policy binding written
+// with a newline after `=` is still resolved — Go's \s matches newlines, so the
+// binding-resolution regex handles the multiline form. Guards against a future
+// regex tightening that would silently break `.res` matching on such source
+// (which would let attach add a duplicate and detach/delete miss the reference).
+func TestMultilineLocalBindingResolves(t *testing.T) {
+	source := `import "@formae/formae.pkl"
+local ttl =
+  new formae.TTLPolicy {
+    label = "ephemeral-1h"
+    ttl = 1.h
+    onDependents = "abort"
+  }
+forma {
+  ttl
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      ttl.res
+    }
+  }
+}
+`
+	lbl, ok := policyLabelForBinding(source, "ttl")
+	if !ok || lbl != "ephemeral-1h" {
+		t.Fatalf("policyLabelForBinding got:\n%q, ok=%v\nwant:\nephemeral-1h, true", lbl, ok)
+	}
+	if _, _, found := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h"); !found {
+		t.Error("findResolvableInPoliciesBlock did not find the multiline-bound .res attachment")
+	}
+	// The whole-file reference scan (used by delete) must also see it.
+	refs := resolvableLabelsInSource(source)
+	seen := false
+	for _, r := range refs {
+		if r == "ephemeral-1h" {
+			seen = true
+		}
+	}
+	if !seen {
+		t.Errorf("resolvableLabelsInSource got:\n%v\nwant:\nto include ephemeral-1h", refs)
+	}
+}
