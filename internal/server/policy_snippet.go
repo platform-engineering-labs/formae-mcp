@@ -437,9 +437,28 @@ func findFormaBlock(source string) (int, int, bool) {
 // in which case deleting the declaration alone leaves a dangling reference —
 // callers must surface that to the user.
 type standaloneDeclaration struct {
-	StartLine    int
-	EndLine      int
+	StartLine int
+	EndLine   int
+	// PolicyType is the MCP wire form ("ttl" | "auto_reconcile"), derived from
+	// the declared PKL class. Lets callers learn a policy's type from source
+	// when the agent does not know it yet (declared but not yet applied).
+	PolicyType   string
 	LocalBinding string
+}
+
+// policyClassNameRE captures the class name of a policy declaration, e.g.
+// "TTLPolicy" from `new formae.TTLPolicy {`.
+var policyClassNameRE = regexp.MustCompile(`new\s+formae\.(\w+Policy)\s*\{`)
+
+// mcpTypeForPolicyClass reverses policyTypeClassMap: PKL class name -> MCP
+// wire type. Returns "" for an unrecognised class.
+func mcpTypeForPolicyClass(className string) string {
+	for mcpType, class := range policyTypeClassMap {
+		if class == className {
+			return mcpType
+		}
+	}
+	return ""
 }
 
 // allStackBlockRanges returns the byte-offset [start, end] range of every
@@ -495,6 +514,9 @@ func findStandalonePolicyDeclaration(source, label string) (standaloneDeclaratio
 		decl := standaloneDeclaration{
 			StartLine: lineNumber(source, startIdx),
 			EndLine:   lineNumber(source, closeIdx),
+		}
+		if classMatch := policyClassNameRE.FindStringSubmatch(source[startIdx : openIdx+1]); classMatch != nil {
+			decl.PolicyType = mcpTypeForPolicyClass(classMatch[1])
 		}
 		// Look backwards on the same line for a `local <name> = ` prefix.
 		lineStart := offsetOfLine(source, decl.StartLine)

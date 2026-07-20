@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -218,4 +220,31 @@ func planDeleteStandalonePolicy(source string, spec StandalonePolicySpec) (Stand
 		AnchorEnd:       decl.EndLine,
 		Notes:           notes,
 	}, nil
+}
+
+// standalonePolicyTypeFromWorkspace finds a standalone policy's declaration in
+// the workspace and reports its MCP policy type. Used when the agent does not
+// know the policy yet — a declaration written to source but not yet applied is
+// legitimately absent from the agent inventory.
+//
+// Returns found=false when no file declares it. Propagates the ambiguity error
+// when several files do, since that is a real problem the user must resolve.
+func standalonePolicyTypeFromWorkspace(root, label string, eval EvalFunc) (string, bool, error) {
+	path, err := resolveStandalonePolicyFile(root, label, eval)
+	if err != nil {
+		var notFound *policySourceNotFoundError
+		if errors.As(err, &notFound) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return "", false, fmt.Errorf("read %s: %w", path, err)
+	}
+	decl, ok := findStandalonePolicyDeclaration(string(source), label)
+	if !ok || decl.PolicyType == "" {
+		return "", false, nil
+	}
+	return decl.PolicyType, true, nil
 }

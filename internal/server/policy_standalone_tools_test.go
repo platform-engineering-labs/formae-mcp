@@ -469,3 +469,127 @@ func TestDeleteStandalonePolicyUnknownPolicy(t *testing.T) {
 		t.Fatalf("got:\nsuccess\nwant:\nerror (the policy is unknown to the agent)")
 	}
 }
+
+// TestAttachStandalonePolicyDeclaredButNotYetApplied is the regression test for
+// the create-then-attach workflow: the skill declares a standalone, edits the
+// file, and attaches BEFORE the first apply. At that moment the policy exists in
+// source but not in the agent inventory. Attaching must still work.
+func TestAttachStandalonePolicyDeclaredButNotYetApplied(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+	stubStandaloneFixtureEval(t)
+
+	// The agent knows NO policies yet — nothing has been applied.
+	agent := mockAgent(t, policiesHandler(t, `[]`))
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "attach_standalone_policy",
+		Arguments: map[string]any{
+			"stack":        "staging",
+			"policy_label": "ephemeral-1h",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (the policy is declared in source, just not applied yet)",
+			textContent(t, result))
+	}
+
+	var out struct {
+		Operation  string   `json:"operation"`
+		PKLSnippet string   `json:"pkl_snippet"`
+		Notes      []string `json:"notes"`
+	}
+	if err := json.Unmarshal([]byte(textContent(t, result)), &out); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if out.Operation != "attach" {
+		t.Errorf("got:\n%s\nwant:\n%s", out.Operation, "attach")
+	}
+	found := false
+	for _, n := range out.Notes {
+		if strings.Contains(n, "not yet applied") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("got:\n%v\nwant:\na note saying the policy is declared but not yet applied", out.Notes)
+	}
+}
+
+// TestAttachStandalonePolicyUnknownEverywhere pins the genuine not-found case:
+// absent from BOTH the agent and the workspace source.
+func TestAttachStandalonePolicyUnknownEverywhere(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+	stubStandaloneFixtureEval(t)
+
+	agent := mockAgent(t, policiesHandler(t, `[]`))
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "attach_standalone_policy",
+		Arguments: map[string]any{
+			"stack":        "staging",
+			"policy_label": "never-declared",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (the policy exists neither in the agent nor in source)")
+	}
+}
+
+// TestCreateStandalonePolicyDuplicateInAnotherFileIsNoop is the regression test
+// for the multi-file duplicate case: the label is already declared in a
+// DIFFERENT file than the one create would target. Emitting a second
+// declaration would produce two standalone policies sharing a label.
+func TestCreateStandalonePolicyDuplicateInAnotherFileIsNoop(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+
+	// main.pkl has the stacks (so it wins "main forma file"), but the policy is
+	// declared in a separate other.pkl.
+	prev := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		if filepath.Base(path) == "main.pkl" {
+			return []byte(`{"Stacks":[{"Label":"lifeline"},{"Label":"staging"}],"Policies":[]}`), nil
+		}
+		return []byte(`{"Stacks":[],"Policies":[{"Label":"shared-ttl","Type":"ttl"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prev })
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_standalone_policy",
+		Arguments: map[string]any{
+			"label":       "shared-ttl",
+			"policy_type": "ttl",
+			"ttl_seconds": 3600,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success (noop), got error: %s", textContent(t, result))
+	}
+
+	var out struct {
+		Operation string   `json:"operation"`
+		Notes     []string `json:"notes"`
+	}
+	if err := json.Unmarshal([]byte(textContent(t, result)), &out); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if out.Operation != "noop" {
+		t.Errorf("got:\n%s\nwant:\n%s (the label is already declared in another file)", out.Operation, "noop")
+	}
+	if len(out.Notes) == 0 {
+		t.Error("got:\nno notes\nwant:\na note naming the file that already declares it")
+	}
+}

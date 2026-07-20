@@ -937,3 +937,37 @@ forma {
 		t.Error("got:\nfound\nwant:\nnot found (the binding is not declared in this file)")
 	}
 }
+
+func TestFindStandalonePolicyDeclarationReportsPolicyType(t *testing.T) {
+	source := `forma {
+  new formae.AutoReconcilePolicy {
+    label = "nightly-drift"
+    interval = 5.min
+  }
+}
+`
+	decl, ok := findStandalonePolicyDeclaration(source, "nightly-drift")
+	if !ok {
+		t.Fatal("expected to find the standalone declaration")
+	}
+	if decl.PolicyType != "auto_reconcile" {
+		t.Errorf("got:\n%s\nwant:\n%s", decl.PolicyType, "auto_reconcile")
+	}
+}
+
+func TestFindStandalonePolicyDeclarationReportsTTLType(t *testing.T) {
+	source := `forma {
+  new formae.TTLPolicy {
+    label = "ephemeral-1h"
+    ttl = 1.h
+  }
+}
+`
+	decl, ok := findStandalonePolicyDeclaration(source, "ephemeral-1h")
+	if !ok {
+		t.Fatal("expected to find the standalone declaration")
+	}
+	if decl.PolicyType != "ttl" {
+		t.Errorf("got:\n%s\nwant:\n%s", decl.PolicyType, "ttl")
+	}
+}

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -100,12 +101,39 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 		return errorResult(err), nil, nil
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
+	}
+
+	// A label must be unique across the whole project, not just the target
+	// file — stacks reference standalone policies by label alone, so two
+	// declarations sharing one is an invalid project state. Check the whole
+	// workspace before planning, since the declaration may live in a file
+	// other than the one we are about to edit.
+	if existing, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc()); err == nil {
+		out := tools.CreateStandalonePolicyOutput{
+			FilePath:  existing,
+			Operation: "noop",
+			Notes: []string{fmt.Sprintf(
+				"a standalone policy labelled %q is already declared in %s; labels must be unique across "+
+					"the project. Updating a standalone in place is not supported — delete it and recreate it",
+				input.Label, existing)},
+		}
+		body, err := json.Marshal(out)
+		if err != nil {
+			return errorResult(fmt.Errorf("marshal output: %w", err)), nil, nil
+		}
+		return jsonResult(body), nil, nil
+	} else {
+		var ambiguous *policySourceAmbiguousError
+		if errors.As(err, &ambiguous) {
+			return errorResult(err), nil, nil
+		}
+	}
+
 	filePath := input.FormaFile
 	if filePath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
-		}
 		resolved, err := resolveMainFormaFile(cwd, currentEvalFunc())
 		if err != nil {
 			return errorResult(err), nil, nil
@@ -157,21 +185,40 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 		return errorResult(fmt.Errorf("policy_label is required")), nil, nil
 	}
 
-	// Pre-check 1: the standalone policy must exist in the agent inventory.
-	// This runs in the tool rather than the skill so the rule holds even if a
-	// future skill author forgets it.
-	items, err := s.fetchPolicies()
+	cwd, err := os.Getwd()
 	if err != nil {
-		return errorResult(err), nil, nil
+		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
 	}
-	item, known := findPolicyByLabel(items, input.PolicyLabel)
-	if !known {
-		return errorResult(fmt.Errorf(
-			"no standalone policy labelled %q is known to the agent; known labels: %v. "+
-				"Declare it first with create_standalone_policy and apply, then attach",
-			input.PolicyLabel, policyLabelsOf(items))), nil, nil
+
+	// Pre-check 1: identify the policy and its type. The agent inventory is
+	// authoritative, but a policy declared in source and not yet applied is
+	// legitimately absent from it — the create-then-attach workflow attaches
+	// before the first apply. Fall back to the workspace source in that case
+	// rather than refusing a documented flow.
+	var notes []string
+	items, fetchErr := s.fetchPolicies()
+	if fetchErr != nil {
+		items = nil
 	}
-	policyType := mcpPolicyType(item.Type)
+	policyType := ""
+	if item, known := findPolicyByLabel(items, input.PolicyLabel); known {
+		policyType = mcpPolicyType(item.Type)
+	} else {
+		declType, found, err := standalonePolicyTypeFromWorkspace(cwd, input.PolicyLabel, currentEvalFunc())
+		if err != nil {
+			return errorResult(err), nil, nil
+		}
+		if !found {
+			return errorResult(fmt.Errorf(
+				"no standalone policy labelled %q is known to the agent or declared anywhere in the "+
+					"workspace; known to the agent: %v. Declare it first with create_standalone_policy",
+				input.PolicyLabel, policyLabelsOf(items))), nil, nil
+		}
+		policyType = declType
+		notes = append(notes, fmt.Sprintf(
+			"standalone policy %q is declared in source but not yet applied — the agent does not know it. "+
+				"Apply the declaring file along with this attachment", input.PolicyLabel))
+	}
 
 	// Pre-check 2: no OTHER standalone of the same type may already be attached
 	// to this stack — a stack may hold only one policy per type.
@@ -191,10 +238,6 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
-		}
 		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc())
 		if err != nil {
 			return errorResult(err), nil, nil
@@ -223,7 +266,7 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 		InsertionAnchorStart: plan.AnchorStart,
 		InsertionAnchorEnd:   plan.AnchorEnd,
 		ImportsToAdd:         plan.ImportsToAdd,
-		Notes:                plan.Notes,
+		Notes:                append(notes, plan.Notes...),
 	}
 	body, err := json.Marshal(out)
 	if err != nil {
