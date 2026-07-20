@@ -41,9 +41,15 @@ func mcpPolicyType(agentType string) string {
 	return agentType
 }
 
-// fetchPolicies reads the agent's standalone policy inventory.
+// fetchPolicies reads the agent's standalone policy inventory from the
+// active/default profile's agent (empty profile = active/default, matching the
+// server's per-call client resolution).
 func (s *Server) fetchPolicies() ([]policyInventoryItem, error) {
-	body, err := s.client.ListPolicies()
+	c, err := s.clientFor("")
+	if err != nil {
+		return nil, err
+	}
+	body, err := c.ListPolicies()
 	if err != nil {
 		return nil, fmt.Errorf("list policies from agent: %w", err)
 	}

@@ -86,3 +86,39 @@ func TestInstructionsDiscourageGuessing(t *testing.T) {
 		t.Error("server instructions should reference formae://docs/index")
 	}
 }
+
+// TestDocsIndexListsAuthoringResources verifies that the docs index (served at
+// formae://docs/index) lists the four new authoring in-server resources added
+// in Tasks 1-5.
+func TestDocsIndexListsAuthoringResources(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	res, _ := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "formae://docs/index"})
+	text := res.Contents[0].Text
+	for _, uri := range []string{"formae://docs/examples", "formae://docs/forma-structure", "formae://docs/stack-design", "formae://docs/authoring-pitfalls"} {
+		if !strings.Contains(text, uri) {
+			t.Errorf("index missing %s", uri)
+		}
+	}
+}
+
+// TestServerInstructionsAuthoringSection verifies that the server instructions
+// contain an Authoring section naming the four plugin-hub tools, the key docs,
+// and the schema-vs-agent-plugin rule.
+func TestServerInstructionsAuthoringSection(t *testing.T) {
+	for _, want := range []string{
+		"search_hub_plugins",
+		"get_hub_plugin",
+		"list_plugin_examples",
+		"get_plugin_example",
+		"formae://docs/forma-structure",
+		"formae://docs/stack-design",
+		"formae://docs/examples",
+		"formae://docs/authoring-pitfalls",
+		"schema",
+		"agent",
+	} {
+		if !strings.Contains(serverInstructions, want) {
+			t.Errorf("server instructions missing %q", want)
+		}
+	}
+}

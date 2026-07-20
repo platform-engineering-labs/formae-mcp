@@ -10,14 +10,14 @@ Use this skill to manage formae stack policies via natural language. Two policy 
 - **TTL** — destroys a stack after a duration (`TTLPolicy`).
 - **Auto-reconcile** — periodically reverts out-of-band changes (`AutoReconcilePolicy`).
 
-Policies come in two shapes:
+## Inline vs standalone — pick the right kind
 
-- **Inline** — declared directly on one stack. Use for a policy only that stack needs.
-- **Standalone (reusable)** — declared once at the top level of `forma { }` and attached to any number of stacks by reference. Use when the same policy should govern several stacks.
+- **Inline policy** — declared inside a single stack block. Use when the policy is one-off and applies to exactly one stack.
+- **Standalone (reusable) policy** — declared at the top level of `forma { }` and referenced from one or more stacks via `PolicyResolvable`. Use when the same policy governs multiple stacks (e.g. a shared 1-hour ephemeral TTL applied to `lifeline`, `dev`, and `staging`).
+
+When the user mentions attaching the same policy to more than one stack, or explicitly says "reusable" or "shared", default to standalone. Otherwise default to inline.
 
 **A stack may hold at most one policy per type.** It cannot carry both an inline TTL and a standalone TTL. The tools enforce this and will refuse with an error naming the conflict; relay that error and offer to detach or remove the conflicting policy rather than working around it.
-
-Prefer standalone when the user says "the same policy", "reuse", "apply X to all of these", or names more than one stack. Prefer inline for a one-off.
 
 ## Defaults
 
@@ -40,8 +40,8 @@ User says something like "expire lifeline in 20 minutes" or "auto-reconcile prod
    - `insertion_anchor_start` / `insertion_anchor_end` — the line range; for `create` they are equal (insert before that line); for `update` they cover the existing block (replace those lines).
    - `existing_policy_snippet` — only for `update`; show this as the "before" in the diff.
    - `imports_to_add` — add each entry near the top of the file if missing.
-5. **Read the file** with the Read tool.
-6. **Apply the edit** with the Edit tool. For `create` insert the snippet before the anchor line; for `update` replace the lines covered by the anchor range. Add any missing imports near the top of the file. Indent the snippet to match the surrounding context (the snippet is emitted unindented).
+5. **Read the file.**
+6. **Apply the edit.** For `create` insert the snippet before the anchor line; for `update` replace the lines covered by the anchor range. Add any missing imports near the top of the file. Indent the snippet to match the surrounding context (the snippet is emitted unindented).
 7. **Show the diff** to the user.
 8. **Ask whether to apply to infrastructure.** Default phrasing: *"Apply this change with `reconcile` (simulate first)?"* If the user declines, stop — the file edit stands and the policy will activate on the next manual apply.
 9. **Simulate.** Call `apply_forma` with `mode: "reconcile"`, `simulate: true`, `force: true`, `file_path: <returned file_path>`.
@@ -56,7 +56,7 @@ Same shape as set, but call `create_inline_policy` with `operation: "remove"`. T
 - `operation: "remove"` — apply the deletion at the anchor lines.
 - `operation: "noop"` — no policy of that type was attached. Tell the user there's nothing to remove and stop.
 
-For `remove`, the Edit tool deletes the lines covered by the anchor range. The `existing_policy_snippet` shows what's being removed; surface it in the diff.
+For `remove`, delete the lines covered by the anchor range. The `existing_policy_snippet` shows what's being removed; surface it in the diff.
 
 If `notes` mentions "removed empty policies block", explain to the user that the stack's `policies = new Listing { ... }` wrapper was also removed because that was the last policy.
 
@@ -113,6 +113,8 @@ User says "delete the ephemeral-1h policy".
 7. Delete the temp file.
 
 If the destroy returns a `Skip` operation with `ReferencingStacks`, someone attached the policy between the pre-check and the destroy. Say plainly that the source PKL has already been edited but the policy still exists in the agent, and name the attaching stacks.
+
+**Version gating.** The standalone-policy tools require formae ≥ 0.82.0, and the auto-reconcile policy type requires formae ≥ 0.88.0. On an older local formae the tool refuses with a `requires formae >= X.Y.Z` message — relay it and suggest upgrading, or fall back to an inline TTL policy where that fits.
 
 ## Workflow — show policies on a stack
 

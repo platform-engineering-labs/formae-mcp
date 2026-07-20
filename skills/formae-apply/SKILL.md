@@ -7,6 +7,10 @@ description: "Use when the user wants to deploy infrastructure, apply a forma fi
 
 Use the `apply_forma` MCP tool in **reconcile** mode to deploy or update infrastructure.
 
+## Targeting an environment (`profile`)
+
+`apply_forma` (and `get_command_status`) hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on the `apply_forma` call and any `get_command_status` follow-up so it targets that environment — for this session only, without changing global state. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+
 ## How Reconcile Works
 
 Reconcile guarantees the target infrastructure matches the forma file exactly:
@@ -45,7 +49,7 @@ If `get_command_status` returns a **failed** state:
 ## Force Flag
 
 If the simulation reports drift (out-of-band changes detected), the apply may be rejected. The user can choose to:
-- **Investigate**: Use `/formae-fix-code-drift` to understand the changes
+- **Investigate**: Use the `formae-fix-code-drift` skill to understand the changes
 - **Force**: Set `force: true` to overwrite the drift
 
 ## Important
@@ -53,4 +57,4 @@ If the simulation reports drift (out-of-band changes detected), the apply may be
 - NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
 - NEVER skip the simulation step
 - NEVER apply without user confirmation
-- For targeted urgent fixes, use `/formae-patch` instead
+- For targeted urgent fixes, use the `formae-patch` skill instead

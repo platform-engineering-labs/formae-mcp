@@ -28,15 +28,44 @@
    ln -s ~/.config/opencode/formae-mcp/skills ~/.config/opencode/skills/formae-mcp
    ```
 
-4. Restart OpenCode.
+4. Register the MCP server. The skills drive the `formae-mcp` tools, so OpenCode
+   must know how to start the server. Merge this into
+   `~/.config/opencode/opencode.json` (add to your existing config — don't
+   overwrite other keys):
+
+   ```json
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "mcp": {
+       "formae": { "type": "local", "command": ["formae-mcp"], "enabled": true }
+     }
+   }
+   ```
+
+   `formae-mcp` must be resolvable on your `PATH` (`go install` puts it in
+   `$(go env GOPATH)/bin`). If OpenCode can't find it — GUI/IDE launches often
+   have a narrower `PATH` — use the absolute path as the command element instead
+   of the bare name (run `go env GOPATH`, then use `["<gopath>/bin/formae-mcp"]`).
+
+5. Restart OpenCode.
 
 ## Verify
 
-```bash
-ls -la ~/.config/opencode/skills/formae-mcp
-```
+Two checks — the first confirms OpenCode sees the server, the second confirms it
+actually works end-to-end.
 
-You should see the skill directories (formae-status, formae-apply, etc.).
+1. Confirm the server is registered and connected:
+
+   ```bash
+   opencode mcp list
+   ```
+
+   `formae` should appear in the list.
+
+2. With a formae agent running (`formae agent start`), ask OpenCode for formae
+   status (invoke the `formae-status` skill, e.g. "what formae commands are
+   running?") and confirm a tool call returns live agent data — not just that
+   the skill loaded.
 
 ## Updating
 
@@ -45,6 +74,9 @@ cd ~/.config/opencode/formae-mcp && git pull && go install ./cmd/formae-mcp/
 ```
 
 ## Uninstalling
+
+Delete the `mcp.formae` block from `~/.config/opencode/opencode.json`, then
+remove the skills symlink and clone:
 
 ```bash
 rm ~/.config/opencode/skills/formae-mcp
