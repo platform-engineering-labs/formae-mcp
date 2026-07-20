@@ -1,0 +1,22 @@
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+forma {
+  new formae.TTLPolicy {
+    label = "ephemeral-1h"
+    ttl = 1.h
+    onDependents = "abort"
+  }
+
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "ephemeral-1h" }
+    }
+  }
+
+  new formae.Stack {
+    label = "staging"
+    description = "no policies yet"
+  }
+}

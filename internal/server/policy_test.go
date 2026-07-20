@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,5 +145,168 @@ func TestCreateInlinePolicyExplicitFormaFile(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyRejectsOldSchema(t *testing.T) {
+	dir := t.TempDir()
+	pklProject := `amends "pkl:Project"
+
+dependencies {
+  ["formae"] {
+    uri = "package://hub.platform.engineering/plugins/pkl/schema/pkl/formae/formae@0.80.1"
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "PklProject"), []byte(pklProject), 0o644); err != nil {
+		t.Fatalf("write PklProject: %v", err)
+	}
+	forma := `amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+forma {
+  new formae.Stack {
+    label = "lifeline"
+  }
+}
+`
+	formaFile := filepath.Join(dir, "main.pkl")
+	if err := os.WriteFile(formaFile, []byte(forma), 0o644); err != nil {
+		t.Fatalf("write main.pkl: %v", err)
+	}
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+			"forma_file":  formaFile,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (schema pin 0.80.1 predates policies)")
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "0.82.0") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the minimum version 0.82.0", text)
+	}
+	if strings.Contains(text, "Cannot find type") {
+		t.Errorf("got:\n%s\nwant:\nan actionable message, not a raw PKL trace", text)
+	}
+}
+
+func TestCreateInlinePolicyRefusesWhenStandaloneAttached(t *testing.T) {
+	withFixtureWorkspace(t, "lifeline_fixture")
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[{"Label":"ephemeral-1h","Type":"ttl",`+
+				`"Config":{"Type":"ttl","TTLSeconds":3600,"OnDependents":"abort"},`+
+				`"AttachedStacks":["lifeline"]}]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (a standalone TTL policy is attached to lifeline)")
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "ephemeral-1h") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the attached standalone", text)
+	}
+}
+
+func TestCreateInlinePolicyAllowsDifferentStandaloneType(t *testing.T) {
+	withFixtureWorkspace(t, "lifeline_fixture")
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	// An auto-reconcile standalone is attached; setting an inline TTL is fine.
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[{"Label":"nightly-drift","Type":"auto-reconcile",`+
+				`"Config":{"Type":"auto-reconcile","IntervalSeconds":300},`+
+				`"AttachedStacks":["lifeline"]}]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (the standalone is a different policy type)", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyRemoveSkipsStandaloneCheck(t *testing.T) {
+	withFixtureWorkspace(t, "lifeline_fixture")
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	// No agent handler registered: removing must not call list_policies at all.
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "remove",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (remove must not consult the agent)", textContent(t, result))
 	}
 }

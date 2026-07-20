@@ -118,7 +118,10 @@ Output fields:
 
 After applying the edit, run apply_forma in reconcile mode (simulate=true first, then simulate=false on confirmation) on the returned file_path.
 
-Errors when: the stack is unknown, no PKL file in the workspace declares it, or multiple files declare the same label.`
+Errors when: the stack is unknown, no PKL file in the workspace declares it, or multiple files declare the same label.
+
+Refuses when the stack already has a standalone (reusable) policy of the same type attached — a stack may hold only one policy per type. The error names the standalone; detach it with detach_standalone_policy, or update the standalone instead of setting an inline policy. This check runs only for operation="set".
+`
 
 const ListChangesSinceLastReconcileDescription = `List infrastructure changes detected since the last reconcile.
 
@@ -135,3 +138,70 @@ Use this tool when you need to see the PKL representation of existing resources 
 The query parameter selects which resources to extract. Always include at least one filter to avoid extracting the entire inventory.
 
 Returns the extracted PKL source code as text.`
+
+const CreateStandalonePolicyDescription = `Plan the declaration of a standalone (reusable) policy in a forma file. A standalone policy is declared once at the top level of the forma block and can then be attached to any number of stacks with attach_standalone_policy. Use this instead of create_inline_policy when the same policy should govern more than one stack.
+
+The tool does NOT modify the file — apply the returned snippet at the returned line range using the Edit tool.
+
+Output fields:
+- file_path: the forma file that should carry the declaration (the workspace's main forma file unless forma_file was given)
+- operation: "create", or "noop" when a standalone with that label already exists
+- pkl_snippet: the declaration to insert
+- insertion_anchor_start / insertion_anchor_end: 1-indexed inclusive line range; these are equal, and the snippet is inserted BEFORE that line (the closing brace of the forma block)
+- imports_to_add: import statements to add at the top of the file if missing
+- notes: human-readable observations
+
+Creating a standalone policy attaches it to nothing and changes no infrastructure on its own. Follow up with attach_standalone_policy for each stack that should carry it, then apply.
+
+Errors when: no single main forma file can be identified (pass forma_file to disambiguate), the target file has no forma block, or the project pins a formae PKL schema older than 0.82.0 (policies did not exist yet).`
+
+const AttachStandalonePolicyDescription = `Plan the attachment of an existing standalone (reusable) policy to a stack. Inserts a PolicyResolvable reference into the stack's policies listing, creating the listing if the stack has none.
+
+The tool does NOT modify the file — apply the returned snippet at the returned line range using the Edit tool, then simulate and apply with apply_forma in reconcile mode.
+
+Output fields:
+- file_path: the PKL file declaring the stack
+- operation: "attach", or "noop" when this policy is already attached to this stack
+- pkl_snippet: the entry to insert (wrapped in policies = new Listing { ... } when the stack had no listing)
+- insertion_anchor_start / insertion_anchor_end: 1-indexed inclusive line range; these are equal and the snippet is inserted BEFORE that line
+- imports_to_add: import statements to add at the top of the file if missing
+- notes: human-readable observations
+
+Hard-refuses when the stack already carries an inline policy of the same type, or a different standalone of the same type — a stack may hold only one policy per type. The error names the conflicting policy so it can be removed or detached first.
+
+Errors when: the standalone policy is unknown to the agent, the stack is unknown, no PKL file declares the stack, several files declare it, or the project pins a formae PKL schema older than 0.82.0.`
+
+const DetachStandalonePolicyDescription = `Plan the detachment of a standalone (reusable) policy from a stack. Locates the PolicyResolvable entry in the stack's policies listing — both the direct 'new formae.PolicyResolvable { label = "X" }' form and the '<binding>.res' form are recognised — and returns the line range to delete.
+
+The tool does NOT modify the file — delete the returned line range using the Edit tool, then simulate and apply with apply_forma in reconcile mode. Detaching does not delete the policy; it stays declared and stays attached to any other stacks.
+
+Output fields:
+- file_path: the PKL file declaring the stack
+- operation: "detach", or "noop" when the policy is not attached to this stack
+- source_anchor_start / source_anchor_end: 1-indexed inclusive line range to DELETE
+- existing_resolvable_snippet: the text being removed, for the diff
+- notes: human-readable observations; includes "removed empty policies block" when the entry was the listing's only member, in which case the anchor covers the whole policies = new Listing { ... } wrapper
+
+Errors when: the stack is unknown, no PKL file declares it, or several files declare it.`
+
+const DeleteStandalonePolicyDescription = `Plan the deletion of a standalone (reusable) policy. Refuses while the policy is still attached to any stack.
+
+The tool does NOT modify anything. Applying the plan is a two-step sequence and THE ORDER MATTERS:
+1. Delete source_anchor_start..source_anchor_end from file_path with the Edit tool.
+2. Write destroy_forma_pkl to a temporary file and call destroy_forma on it (simulate first, then for real).
+
+Source edit BEFORE destroy: if a reconcile happens between the two steps the agent sees no policy in any forma and does nothing. In the reverse order a reconcile in between would recreate the policy.
+
+Output fields:
+- file_path: the PKL file declaring the standalone policy
+- operation: "delete"
+- source_anchor_start / source_anchor_end: 1-indexed inclusive line range to DELETE
+- existing_policy_snippet: the declaration being removed, for the diff
+- destroy_forma_pkl: a complete standalone forma declaring only this policy, rendered from the agent's stored config — write it to a temp file and pass it to destroy_forma
+- notes: human-readable observations, including a warning when the declaration is bound to a PKL local and leaves references behind
+
+Hard-refuses when the policy is still attached to one or more stacks; the error lists them. Detach it from each (detach_standalone_policy) and apply those changes first.
+
+If destroy_forma later returns a Skip operation with ReferencingStacks, someone attached the policy between the pre-check and the destroy: the source is already edited but the policy still exists in the agent. Report that plainly and name the attaching stacks.
+
+Errors when: the policy is unknown to the agent, or its source declaration cannot be located in the workspace.`

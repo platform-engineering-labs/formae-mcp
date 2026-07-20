@@ -27,6 +27,35 @@ func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequ
 		return errorResult(err), nil, nil
 	}
 
+	// A stack may hold only one policy per type. If a standalone of this type is
+	// already attached, setting an inline one would conflict — refuse up front so
+	// the rule holds even if a skill author forgets it. Removal is exempt:
+	// deleting an inline policy can never create a conflict, and the check would
+	// make `remove` fail whenever the agent is unreachable.
+	//
+	// An unreachable agent is not fatal here either: this tool's real work is
+	// local file planning, so a transport failure downgrades to "no standalone
+	// policies known" rather than blocking the edit.
+	if input.Operation == "set" {
+		if inventory, err := s.fetchPolicies(); err == nil {
+			for _, item := range inventory {
+				if mcpPolicyType(item.Type) != input.PolicyType {
+					continue
+				}
+				for _, attached := range item.AttachedStacks {
+					if attached != input.Stack {
+						continue
+					}
+					return errorResult(fmt.Errorf(
+						"stack %q already has standalone policy %q of type %s attached; a stack cannot hold "+
+							"both an inline and a standalone policy of the same type. Detach %q first "+
+							"(detach_standalone_policy), or update the standalone instead",
+						input.Stack, item.Label, input.PolicyType, item.Label)), nil, nil
+				}
+			}
+		}
+	}
+
 	filePath := input.FormaFile
 	if filePath == "" {
 		cwd, err := os.Getwd()
@@ -38,6 +67,10 @@ func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequ
 			return errorResult(err), nil, nil
 		}
 		filePath = resolved
+	}
+
+	if err := checkPolicySchemaSupport(filePath); err != nil {
+		return errorResult(err), nil, nil
 	}
 
 	source, err := os.ReadFile(filePath)
