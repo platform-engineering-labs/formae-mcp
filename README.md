@@ -76,7 +76,7 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-rename` | Rename a resource's label via `alias` without destroying the cloud object |
 | `formae-destroy` | Tear down infrastructure resources, stacks, or environments |
 | `formae-fix-code-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
-| `formae-policy` | Set, remove, or inspect TTL and auto-reconcile policies on a stack |
+| `formae-policy` | Set, remove, or inspect TTL and auto-reconcile policies — inline on one stack, or standalone and reused across several |
 | `formae-discover` | Find unmanaged resources in cloud accounts |
 | `formae-import` | Bring unmanaged/discovered resources under formae management |
 | `formae-plugin-new` | Scaffold a new formae resource plugin |
@@ -116,6 +116,10 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `force_check_ttl` | Trigger an immediate TTL expiry sweep across all stacks |
 | `force_reconcile_stack` | Force a one-shot reconcile on a stack (requires auto-reconcile policy attached) |
 | `create_inline_policy` | Plan a TTL or auto-reconcile policy edit on a stack (returns snippet + insertion anchor; caller applies via Edit) |
+| `create_standalone_policy` | Plan the declaration of a reusable policy in a forma file (returns snippet + insertion anchor) |
+| `attach_standalone_policy` | Plan the attachment of a standalone policy to a stack |
+| `detach_standalone_policy` | Plan the detachment of a standalone policy from a stack |
+| `delete_standalone_policy` | Plan the deletion of an unattached standalone policy (returns source anchor + a destroy forma) |
 
 ### Profiles (requires formae >= 0.87.0)
 

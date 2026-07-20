@@ -1,0 +1,13 @@
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+// A second forma file declaring a standalone policy but no stacks. Exercises
+// the cross-file duplicate-label check: create_standalone_policy must notice a
+// label already declared here, even when it would target main.pkl.
+forma {
+  new formae.TTLPolicy {
+    label = "shared-ttl"
+    ttl = 2.h
+    onDependents = "abort"
+  }
+}

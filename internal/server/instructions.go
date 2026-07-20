@@ -41,7 +41,14 @@ Stacks can carry policies that govern their lifecycle:
 - **TTL** — destroys the stack after a duration. Fields: ttl, onDependents ("abort" | "cascade").
 - **Auto-reconcile** — periodically reverts out-of-band changes. Field: interval.
 
-Policies live in the user's PKL forma files (inline on a Stack, or as reusable standalone objects). To set or change one, use the create_inline_policy tool to plan the file edit, then apply_forma to deploy. The /formae-policy skill orchestrates this end to end.
+Policies live in the user's PKL forma files in one of two shapes:
+
+- **Inline** — declared on a single Stack. Plan edits with create_inline_policy.
+- **Standalone (reusable)** — declared once at the top level of forma { } and attached to any number of stacks by reference. Plan with create_standalone_policy, attach_standalone_policy, detach_standalone_policy and delete_standalone_policy.
+
+A stack may hold at most one policy per type: it cannot carry both an inline TTL and a standalone TTL. The tools enforce this and refuse with an error naming the conflict.
+
+All of these tools PLAN edits and return a snippet plus a line anchor; they never write files. Apply the plan with Edit, then deploy with apply_forma (or destroy_forma when deleting a standalone). Standalone policies are created and deleted, never updated in place. The /formae-policy skill orchestrates all of this end to end.
 
 ## Profiles & targeting (which formae agent a call hits)
 

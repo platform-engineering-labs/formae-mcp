@@ -1,0 +1,14 @@
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.TTLPolicy {
+        ttl = 30.min
+        onDependents = "abort"
+      }
+    }
+  }
+}

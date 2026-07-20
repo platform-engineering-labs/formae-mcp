@@ -155,3 +155,80 @@ type CreateInlinePolicyOutput struct {
 	ImportsToAdd          []string `json:"imports_to_add,omitempty"`
 	Notes                 []string `json:"notes,omitempty"`
 }
+
+// CreateStandalonePolicyInput is the input for the create_standalone_policy tool.
+type CreateStandalonePolicyInput struct {
+	Label           string `json:"label" jsonschema:"required,The label for the new standalone policy. This is how stacks reference it, so it must be unique across the project. Prefer descriptive labels like 'ephemeral-1h' or 'nightly-drift'."`
+	PolicyType      string `json:"policy_type" jsonschema:"required,The policy type. Must be 'ttl' or 'auto_reconcile'."`
+	TTLSeconds      int64  `json:"ttl_seconds,omitempty" jsonschema:"Required when policy_type is 'ttl'. Time-to-live in seconds. Formatted as a PKL Duration using the largest clean unit (e.g. 1200 -> 20.min, 14400 -> 4.h, 86400 -> 1.d)."`
+	OnDependents    string `json:"on_dependents,omitempty" jsonschema:"Optional, only applies to TTL. 'abort' (default) refuses to expire if other stacks depend on this one; 'cascade' destroys dependents too."`
+	IntervalSeconds int64  `json:"interval_seconds,omitempty" jsonschema:"Required when policy_type is 'auto_reconcile'. Reconcile interval in seconds. Default suggested value is 300 (5 minutes)."`
+	FormaFile       string `json:"forma_file,omitempty" jsonschema:"Optional explicit path to the forma file that should carry the declaration. When omitted the tool picks the workspace's main forma file (the one declaring the most stacks) and errors if there is no single winner."`
+}
+
+// CreateStandalonePolicyOutput describes the planned edit. The tool does NOT
+// modify the file — the caller applies the edit using the Edit tool.
+type CreateStandalonePolicyOutput struct {
+	FilePath             string   `json:"file_path"`
+	Operation            string   `json:"operation"`
+	PKLSnippet           string   `json:"pkl_snippet,omitempty"`
+	InsertionAnchorStart int      `json:"insertion_anchor_start"`
+	InsertionAnchorEnd   int      `json:"insertion_anchor_end"`
+	ImportsToAdd         []string `json:"imports_to_add,omitempty"`
+	Notes                []string `json:"notes,omitempty"`
+}
+
+// AttachStandalonePolicyInput is the input for the attach_standalone_policy tool.
+type AttachStandalonePolicyInput struct {
+	Stack       string `json:"stack" jsonschema:"required,The label of the stack to attach the policy to."`
+	PolicyLabel string `json:"policy_label" jsonschema:"required,The label of the existing standalone policy to attach."`
+	FormaFile   string `json:"forma_file,omitempty" jsonschema:"Optional explicit path to the forma file declaring the stack. When omitted the tool searches the workspace using formae eval."`
+}
+
+// AttachStandalonePolicyOutput describes the planned edit. The tool does NOT
+// modify the file — the caller applies the edit using the Edit tool.
+type AttachStandalonePolicyOutput struct {
+	FilePath             string   `json:"file_path"`
+	Operation            string   `json:"operation"`
+	PKLSnippet           string   `json:"pkl_snippet,omitempty"`
+	InsertionAnchorStart int      `json:"insertion_anchor_start"`
+	InsertionAnchorEnd   int      `json:"insertion_anchor_end"`
+	ImportsToAdd         []string `json:"imports_to_add,omitempty"`
+	Notes                []string `json:"notes,omitempty"`
+}
+
+// DetachStandalonePolicyInput is the input for the detach_standalone_policy tool.
+type DetachStandalonePolicyInput struct {
+	Stack       string `json:"stack" jsonschema:"required,The label of the stack to detach the policy from."`
+	PolicyLabel string `json:"policy_label" jsonschema:"required,The label of the standalone policy to detach."`
+	FormaFile   string `json:"forma_file,omitempty" jsonschema:"Optional explicit path to the forma file declaring the stack. When omitted the tool searches the workspace using formae eval."`
+}
+
+// DetachStandalonePolicyOutput describes the planned edit. The tool does NOT
+// modify the file — the caller applies the edit using the Edit tool.
+type DetachStandalonePolicyOutput struct {
+	FilePath                  string   `json:"file_path"`
+	Operation                 string   `json:"operation"`
+	SourceAnchorStart         int      `json:"source_anchor_start"`
+	SourceAnchorEnd           int      `json:"source_anchor_end"`
+	ExistingResolvableSnippet string   `json:"existing_resolvable_snippet,omitempty"`
+	Notes                     []string `json:"notes,omitempty"`
+}
+
+// DeleteStandalonePolicyInput is the input for the delete_standalone_policy tool.
+type DeleteStandalonePolicyInput struct {
+	Label string `json:"label" jsonschema:"required,The label of the standalone policy to delete. The policy must not be attached to any stack — detach it everywhere first."`
+}
+
+// DeleteStandalonePolicyOutput describes the planned deletion. The tool does
+// NOT modify anything — the caller removes the source lines with Edit, then
+// writes destroy_forma_pkl to a temp file and calls destroy_forma on it.
+type DeleteStandalonePolicyOutput struct {
+	FilePath              string   `json:"file_path"`
+	Operation             string   `json:"operation"`
+	SourceAnchorStart     int      `json:"source_anchor_start"`
+	SourceAnchorEnd       int      `json:"source_anchor_end"`
+	ExistingPolicySnippet string   `json:"existing_policy_snippet,omitempty"`
+	DestroyFormaPKL       string   `json:"destroy_forma_pkl,omitempty"`
+	Notes                 []string `json:"notes,omitempty"`
+}

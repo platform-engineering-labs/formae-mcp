@@ -240,6 +240,30 @@ func (s *Server) registerTools() {
 		Description: tools.CreateInlinePolicyDescription,
 		Annotations: &mcp.ToolAnnotations{},
 	}, s.handleCreateInlinePolicy)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "create_standalone_policy",
+		Description: tools.CreateStandalonePolicyDescription,
+		Annotations: &mcp.ToolAnnotations{},
+	}, s.handleCreateStandalonePolicy)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "attach_standalone_policy",
+		Description: tools.AttachStandalonePolicyDescription,
+		Annotations: &mcp.ToolAnnotations{},
+	}, s.handleAttachStandalonePolicy)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "detach_standalone_policy",
+		Description: tools.DetachStandalonePolicyDescription,
+		Annotations: &mcp.ToolAnnotations{},
+	}, s.handleDetachStandalonePolicy)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "delete_standalone_policy",
+		Description: tools.DeleteStandalonePolicyDescription,
+		Annotations: &mcp.ToolAnnotations{},
+	}, s.handleDeleteStandalonePolicy)
 }
 
 // Tool handlers — read-only

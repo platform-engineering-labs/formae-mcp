@@ -463,3 +463,623 @@ func TestPlanPolicyEditStackNotFound(t *testing.T) {
 		t.Fatal("expected error for missing stack")
 	}
 }
+
+func TestCountPoliciesInBlockCountsDirectResolvable(t *testing.T) {
+	// Line 1 = `import ...`, 2 = `forma {`, 3 = `new formae.Stack {`, 4 = label,
+	// 5 = `policies = new Listing {`, 6-9 = the inline TTL block,
+	// 10 = the PolicyResolvable entry, 11 = `}` of the listing.
+	source := `import "@formae/formae.pkl"
+forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.TTLPolicy {
+        ttl = 1.h
+        onDependents = "abort"
+      }
+      new formae.PolicyResolvable { label = "ephemeral-1h" }
+    }
+  }
+}
+`
+	got, ok := countPoliciesInBlock(source, "lifeline")
+	if !ok {
+		t.Fatal("expected to find a policies block on stack lifeline")
+	}
+	if got != 2 {
+		t.Errorf("got:\n%d\nwant:\n%d", got, 2)
+	}
+}
+
+func TestCountPoliciesInBlockCountsResBinding(t *testing.T) {
+	// Line 1 = import, 2-6 = the `local ephemeral` declaration, 7 = `forma {`,
+	// 8 = the bare `ephemeral` reference, 9 = `new formae.Stack {`, 10 = label,
+	// 11 = `policies = new Listing {`, 12-14 = the inline auto-reconcile block,
+	// 15 = `ephemeral.res`, 16 = `}` of the listing.
+	source := `import "@formae/formae.pkl"
+local ephemeral = new formae.TTLPolicy {
+  label = "ephemeral-1h"
+  ttl = 1.h
+  onDependents = "abort"
+}
+forma {
+  ephemeral
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.AutoReconcilePolicy {
+        interval = 5.min
+      }
+      ephemeral.res
+    }
+  }
+}
+`
+	got, ok := countPoliciesInBlock(source, "lifeline")
+	if !ok {
+		t.Fatal("expected to find a policies block on stack lifeline")
+	}
+	if got != 2 {
+		t.Errorf("got:\n%d\nwant:\n%d", got, 2)
+	}
+}
+
+// TestPlanPolicyEditRemovePreservesSiblingResolvable is the regression test for
+// the data-loss defect: removing the inline policy must NOT take the live
+// resolvable with it.
+func TestPlanPolicyEditRemovePreservesSiblingResolvable(t *testing.T) {
+	// Same line layout as TestCountPoliciesInBlockCountsDirectResolvable:
+	// the inline TTL block occupies lines 6-9; the whole policies wrapper is 5-11.
+	source := `import "@formae/formae.pkl"
+forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.TTLPolicy {
+        ttl = 1.h
+        onDependents = "abort"
+      }
+      new formae.PolicyResolvable { label = "ephemeral-1h" }
+    }
+  }
+}
+`
+	plan, err := planPolicyEdit(source, PolicySpec{
+		StackLabel: "lifeline",
+		PolicyType: "ttl",
+		Operation:  "remove",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if plan.Operation != "remove" {
+		t.Errorf("got:\n%s\nwant:\n%s", plan.Operation, "remove")
+	}
+	// Must cover ONLY the TTL block (6-9), not the whole wrapper (5-11).
+	if plan.InsertionAnchorStart != 6 || plan.InsertionAnchorEnd != 9 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", plan.InsertionAnchorStart, plan.InsertionAnchorEnd, 6, 9)
+	}
+	for _, n := range plan.Notes {
+		if strings.Contains(n, "removed empty policies") {
+			t.Errorf("got:\n%v\nwant:\nno 'removed empty policies' note (a resolvable is still attached)", plan.Notes)
+		}
+	}
+}
+
+func TestPlanPolicyEditRemovePreservesSiblingResBinding(t *testing.T) {
+	// Same line layout as TestCountPoliciesInBlockCountsResBinding:
+	// the inline auto-reconcile block occupies lines 12-14.
+	source := `import "@formae/formae.pkl"
+local ephemeral = new formae.TTLPolicy {
+  label = "ephemeral-1h"
+  ttl = 1.h
+  onDependents = "abort"
+}
+forma {
+  ephemeral
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.AutoReconcilePolicy {
+        interval = 5.min
+      }
+      ephemeral.res
+    }
+  }
+}
+`
+	plan, err := planPolicyEdit(source, PolicySpec{
+		StackLabel: "lifeline",
+		PolicyType: "auto_reconcile",
+		Operation:  "remove",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if plan.InsertionAnchorStart != 12 || plan.InsertionAnchorEnd != 14 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", plan.InsertionAnchorStart, plan.InsertionAnchorEnd, 12, 14)
+	}
+}
+
+func TestRenderStandalonePolicyPKLTTL(t *testing.T) {
+	got := renderStandalonePolicyPKL(StandalonePolicySpec{
+		Label:        "ephemeral-1h",
+		PolicyType:   "ttl",
+		TTLSeconds:   3600,
+		OnDependents: "abort",
+	})
+	want := `new formae.TTLPolicy {
+  label = "ephemeral-1h"
+  ttl = 1.h
+  onDependents = "abort"
+}`
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestRenderStandalonePolicyPKLTTLDefaultsOnDependents(t *testing.T) {
+	got := renderStandalonePolicyPKL(StandalonePolicySpec{
+		Label:      "ephemeral-1h",
+		PolicyType: "ttl",
+		TTLSeconds: 3600,
+	})
+	if !strings.Contains(got, `onDependents = "abort"`) {
+		t.Errorf("got:\n%s\nwant:\na snippet defaulting onDependents to \"abort\"", got)
+	}
+}
+
+func TestRenderStandalonePolicyPKLAutoReconcile(t *testing.T) {
+	got := renderStandalonePolicyPKL(StandalonePolicySpec{
+		Label:           "nightly-drift",
+		PolicyType:      "auto_reconcile",
+		IntervalSeconds: 300,
+	})
+	want := `new formae.AutoReconcilePolicy {
+  label = "nightly-drift"
+  interval = 5.min
+}`
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestRenderPolicyResolvablePKL(t *testing.T) {
+	got := renderPolicyResolvablePKL("ephemeral-1h")
+	want := `new formae.PolicyResolvable {
+  label = "ephemeral-1h"
+}`
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestFindFormaBlock(t *testing.T) {
+	// Line 1 = amends, 2 = import, 3 = blank, 4 = `forma {`,
+	// 5 = `new formae.Stack {`, 6 = label, 7 = `}` of the stack,
+	// 8 = `}` of the forma block.
+	source := `amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+forma {
+  new formae.Stack {
+    label = "lifeline"
+  }
+}
+`
+	start, end, ok := findFormaBlock(source)
+	if !ok {
+		t.Fatal("expected to find the forma block")
+	}
+	if start != 4 || end != 8 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", start, end, 4, 8)
+	}
+}
+
+func TestFindFormaBlockIgnoresFormaeQualifiedNames(t *testing.T) {
+	// `new formae.Stack {` must not be mistaken for the `forma {` block opener.
+	// Line 1 = import, 2 = `new formae.Stack {` at top level, 3 = label, 4 = `}`.
+	source := `import "@formae/formae.pkl"
+new formae.Stack {
+  label = "orphan"
+}
+`
+	if _, _, ok := findFormaBlock(source); ok {
+		t.Error("got:\nfound a forma block\nwant:\nnot found (only formae.Stack is present)")
+	}
+}
+
+func TestFindFormaBlockMissing(t *testing.T) {
+	source := `import "@formae/formae.pkl"
+// no forma block here
+`
+	if _, _, ok := findFormaBlock(source); ok {
+		t.Error("got:\nfound a forma block\nwant:\nnot found")
+	}
+}
+
+func TestFindStandalonePolicyDeclarationDirectForm(t *testing.T) {
+	// Line 1 = import, 2 = `forma {`, 3-7 = the standalone TTL declaration
+	// (3 = opener, 4 = label, 5 = ttl, 6 = onDependents, 7 = `}`), 8 = blank,
+	// 9 = `new formae.Stack {`, 10 = label, 11 = `policies = new Listing {`,
+	// 12-15 = an UNLABELLED inline TTL block, 16 = `}` listing, 17 = `}` stack.
+	source := `import "@formae/formae.pkl"
+forma {
+  new formae.TTLPolicy {
+    label = "ephemeral-1h"
+    ttl = 1.h
+    onDependents = "abort"
+  }
+
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.TTLPolicy {
+        ttl = 30.min
+        onDependents = "abort"
+      }
+    }
+  }
+}
+`
+	decl, ok := findStandalonePolicyDeclaration(source, "ephemeral-1h")
+	if !ok {
+		t.Fatal("expected to find the standalone declaration")
+	}
+	if decl.StartLine != 3 || decl.EndLine != 7 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", decl.StartLine, decl.EndLine, 3, 7)
+	}
+	if decl.LocalBinding != "" {
+		t.Errorf("got:\n%q\nwant:\nempty (direct form has no local binding)", decl.LocalBinding)
+	}
+}
+
+func TestFindStandalonePolicyDeclarationLocalBindingForm(t *testing.T) {
+	// Line 1 = import, 2-6 = `local ephemeral = new formae.TTLPolicy { ... }`,
+	// 7 = `forma {`, 8 = the bare `ephemeral` reference.
+	source := `import "@formae/formae.pkl"
+local ephemeral = new formae.TTLPolicy {
+  label = "ephemeral-1h"
+  ttl = 1.h
+  onDependents = "abort"
+}
+forma {
+  ephemeral
+  new formae.Stack {
+    label = "lifeline"
+  }
+}
+`
+	decl, ok := findStandalonePolicyDeclaration(source, "ephemeral-1h")
+	if !ok {
+		t.Fatal("expected to find the standalone declaration")
+	}
+	if decl.StartLine != 2 || decl.EndLine != 6 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", decl.StartLine, decl.EndLine, 2, 6)
+	}
+	if decl.LocalBinding != "ephemeral" {
+		t.Errorf("got:\n%q\nwant:\n%q", decl.LocalBinding, "ephemeral")
+	}
+}
+
+func TestFindStandalonePolicyDeclarationRejectsInlinePolicy(t *testing.T) {
+	// A labelled policy INSIDE a stack is inline, not standalone.
+	source := `forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.TTLPolicy {
+        label = "ephemeral-1h"
+        ttl = 1.h
+      }
+    }
+  }
+}
+`
+	if _, ok := findStandalonePolicyDeclaration(source, "ephemeral-1h"); ok {
+		t.Error("got:\nfound\nwant:\nnot found (the policy is inline on a stack)")
+	}
+}
+
+func TestFindStandalonePolicyDeclarationNotFound(t *testing.T) {
+	source := `forma {
+  new formae.TTLPolicy {
+    label = "other"
+    ttl = 1.h
+  }
+}
+`
+	if _, ok := findStandalonePolicyDeclaration(source, "ephemeral-1h"); ok {
+		t.Error("got:\nfound\nwant:\nnot found")
+	}
+}
+
+func TestFindStandalonePolicyDeclarationAutoReconcile(t *testing.T) {
+	// Line 1 = `forma {`, 2-5 = the standalone auto-reconcile declaration.
+	source := `forma {
+  new formae.AutoReconcilePolicy {
+    label = "nightly-drift"
+    interval = 5.min
+  }
+}
+`
+	decl, ok := findStandalonePolicyDeclaration(source, "nightly-drift")
+	if !ok {
+		t.Fatal("expected to find the standalone declaration")
+	}
+	if decl.StartLine != 2 || decl.EndLine != 5 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", decl.StartLine, decl.EndLine, 2, 5)
+	}
+}
+
+func TestFindResolvableInPoliciesBlockDirectForm(t *testing.T) {
+	// Line 1 = `forma {`, 2 = Stack opener, 3 = label,
+	// 4 = `policies = new Listing {`, 5 = the resolvable, 6 = `}` listing.
+	source := `forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "ephemeral-1h" }
+    }
+  }
+}
+`
+	start, end, ok := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h")
+	if !ok {
+		t.Fatal("expected to find the resolvable")
+	}
+	if start != 5 || end != 5 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", start, end, 5, 5)
+	}
+}
+
+func TestFindResolvableInPoliciesBlockMultilineDirectForm(t *testing.T) {
+	// Line 1 = `forma {`, 2 = Stack opener, 3 = label, 4 = policies opener,
+	// 5-7 = the multi-line resolvable, 8 = `}` listing.
+	source := `forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.PolicyResolvable {
+        label = "ephemeral-1h"
+      }
+    }
+  }
+}
+`
+	start, end, ok := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h")
+	if !ok {
+		t.Fatal("expected to find the resolvable")
+	}
+	if start != 5 || end != 7 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", start, end, 5, 7)
+	}
+}
+
+func TestFindResolvableInPoliciesBlockResBindingForm(t *testing.T) {
+	// Line 1 = import, 2-6 = the `local ephemeral` declaration, 7 = `forma {`,
+	// 8 = bare reference, 9 = Stack opener, 10 = label,
+	// 11 = `policies = new Listing {`, 12-14 = inline auto-reconcile,
+	// 15 = `ephemeral.res`, 16 = `}` listing.
+	source := `import "@formae/formae.pkl"
+local ephemeral = new formae.TTLPolicy {
+  label = "ephemeral-1h"
+  ttl = 1.h
+  onDependents = "abort"
+}
+forma {
+  ephemeral
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.AutoReconcilePolicy {
+        interval = 5.min
+      }
+      ephemeral.res
+    }
+  }
+}
+`
+	start, end, ok := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h")
+	if !ok {
+		t.Fatal("expected to find the .res binding entry")
+	}
+	if start != 15 || end != 15 {
+		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", start, end, 15, 15)
+	}
+}
+
+func TestFindResolvableInPoliciesBlockWrongLabel(t *testing.T) {
+	source := `forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "other-policy" }
+    }
+  }
+}
+`
+	if _, _, ok := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h"); ok {
+		t.Error("got:\nfound\nwant:\nnot found (a different policy is attached)")
+	}
+}
+
+func TestFindResolvableInPoliciesBlockNoPoliciesBlock(t *testing.T) {
+	source := `forma {
+  new formae.Stack {
+    label = "lifeline"
+    description = "no policies"
+  }
+}
+`
+	if _, _, ok := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h"); ok {
+		t.Error("got:\nfound\nwant:\nnot found (the stack has no policies block)")
+	}
+}
+
+func TestFindResolvableInPoliciesBlockUnresolvableBindingIsIgnored(t *testing.T) {
+	// The binding is declared in another file (imported), so the label cannot be
+	// resolved locally. Documented v2 limitation: fall back to no match rather
+	// than guessing.
+	source := `import "@formae/formae.pkl"
+import "policies.pkl" as shared
+
+forma {
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      shared.res
+    }
+  }
+}
+`
+	if _, _, ok := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h"); ok {
+		t.Error("got:\nfound\nwant:\nnot found (the binding is not declared in this file)")
+	}
+}
+
+func TestFindStandalonePolicyDeclarationReportsPolicyType(t *testing.T) {
+	source := `forma {
+  new formae.AutoReconcilePolicy {
+    label = "nightly-drift"
+    interval = 5.min
+  }
+}
+`
+	decl, ok := findStandalonePolicyDeclaration(source, "nightly-drift")
+	if !ok {
+		t.Fatal("expected to find the standalone declaration")
+	}
+	if decl.PolicyType != "auto_reconcile" {
+		t.Errorf("got:\n%s\nwant:\n%s", decl.PolicyType, "auto_reconcile")
+	}
+}
+
+func TestFindStandalonePolicyDeclarationReportsTTLType(t *testing.T) {
+	source := `forma {
+  new formae.TTLPolicy {
+    label = "ephemeral-1h"
+    ttl = 1.h
+  }
+}
+`
+	decl, ok := findStandalonePolicyDeclaration(source, "ephemeral-1h")
+	if !ok {
+		t.Fatal("expected to find the standalone declaration")
+	}
+	if decl.PolicyType != "ttl" {
+		t.Errorf("got:\n%s\nwant:\n%s", decl.PolicyType, "ttl")
+	}
+}
+
+func TestResolvableLabelsInPoliciesBlockDirectAndBinding(t *testing.T) {
+	// Line 1 = import, 2-6 = local ephemeral decl, 7 = forma, 8 = bare ref,
+	// 9 = Stack, 10 = label, 11 = policies listing,
+	// 12 = direct resolvable "ttl-a", 13 = ephemeral.res, 14 = `}` listing.
+	source := `import "@formae/formae.pkl"
+local ephemeral = new formae.TTLPolicy {
+  label = "ephemeral-1h"
+  ttl = 1.h
+  onDependents = "abort"
+}
+forma {
+  ephemeral
+  new formae.Stack {
+    label = "app"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "ttl-a" }
+      ephemeral.res
+    }
+  }
+}
+`
+	got := resolvableLabelsInPoliciesBlock(source, "app")
+	want := map[string]bool{"ttl-a": true, "ephemeral-1h": true}
+	if len(got) != 2 {
+		t.Fatalf("got:\n%v\nwant:\n2 labels (ttl-a, ephemeral-1h)", got)
+	}
+	for _, l := range got {
+		if !want[l] {
+			t.Errorf("got unexpected label %q; want one of %v", l, want)
+		}
+	}
+}
+
+func TestResolvableLabelsInPoliciesBlockNone(t *testing.T) {
+	source := `forma {
+  new formae.Stack {
+    label = "app"
+    description = "no policies"
+  }
+}
+`
+	if got := resolvableLabelsInPoliciesBlock(source, "app"); len(got) != 0 {
+		t.Errorf("got:\n%v\nwant:\nno labels (stack has no policies block)", got)
+	}
+}
+
+func TestResolvableLabelsInSourceAcrossStacks(t *testing.T) {
+	source := `import "@formae/formae.pkl"
+forma {
+  new formae.Stack {
+    label = "a"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "shared" }
+    }
+  }
+  new formae.Stack {
+    label = "b"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "other" }
+    }
+  }
+}
+`
+	got := resolvableLabelsInSource(source)
+	if len(got) != 2 {
+		t.Fatalf("got:\n%v\nwant:\n2 labels (shared, other) across both stacks", got)
+	}
+}
+
+// TestMultilineLocalBindingResolves pins that a `local` policy binding written
+// with a newline after `=` is still resolved — Go's \s matches newlines, so the
+// binding-resolution regex handles the multiline form. Guards against a future
+// regex tightening that would silently break `.res` matching on such source
+// (which would let attach add a duplicate and detach/delete miss the reference).
+func TestMultilineLocalBindingResolves(t *testing.T) {
+	source := `import "@formae/formae.pkl"
+local ttl =
+  new formae.TTLPolicy {
+    label = "ephemeral-1h"
+    ttl = 1.h
+    onDependents = "abort"
+  }
+forma {
+  ttl
+  new formae.Stack {
+    label = "lifeline"
+    policies = new Listing {
+      ttl.res
+    }
+  }
+}
+`
+	lbl, ok := policyLabelForBinding(source, "ttl")
+	if !ok || lbl != "ephemeral-1h" {
+		t.Fatalf("policyLabelForBinding got:\n%q, ok=%v\nwant:\nephemeral-1h, true", lbl, ok)
+	}
+	if _, _, found := findResolvableInPoliciesBlock(source, "lifeline", "ephemeral-1h"); !found {
+		t.Error("findResolvableInPoliciesBlock did not find the multiline-bound .res attachment")
+	}
+	// The whole-file reference scan (used by delete) must also see it.
+	refs := resolvableLabelsInSource(source)
+	seen := false
+	for _, r := range refs {
+		if r == "ephemeral-1h" {
+			seen = true
+		}
+	}
+	if !seen {
+		t.Errorf("resolvableLabelsInSource got:\n%v\nwant:\nto include ephemeral-1h", refs)
+	}
+}

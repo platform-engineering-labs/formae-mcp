@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +30,7 @@ func withFixtureWorkspace(t *testing.T, fixture string) {
 }
 
 func TestCreateInlinePolicySetTTL(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "lifeline_fixture")
 
 	prevEval := injectedEvalForTest
@@ -87,6 +90,7 @@ func TestCreateInlinePolicySetTTL(t *testing.T) {
 }
 
 func TestCreateInlinePolicyStackNotFound(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "lifeline_fixture")
 
 	prevEval := injectedEvalForTest
@@ -115,6 +119,7 @@ func TestCreateInlinePolicyStackNotFound(t *testing.T) {
 }
 
 func TestCreateInlinePolicyExplicitFormaFile(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	abs, err := filepath.Abs(filepath.Join("..", "..", "testdata", "policy", "lifeline_fixture", "main.pkl"))
 	if err != nil {
 		t.Fatalf("abs: %v", err)
@@ -143,5 +148,268 @@ func TestCreateInlinePolicyExplicitFormaFile(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyRejectsOldSchema(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
+	dir := t.TempDir()
+	pklProject := `amends "pkl:Project"
+
+dependencies {
+  ["formae"] {
+    uri = "package://hub.platform.engineering/plugins/pkl/schema/pkl/formae/formae@0.80.1"
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "PklProject"), []byte(pklProject), 0o644); err != nil {
+		t.Fatalf("write PklProject: %v", err)
+	}
+	forma := `amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+forma {
+  new formae.Stack {
+    label = "lifeline"
+  }
+}
+`
+	formaFile := filepath.Join(dir, "main.pkl")
+	if err := os.WriteFile(formaFile, []byte(forma), 0o644); err != nil {
+		t.Fatalf("write main.pkl: %v", err)
+	}
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+			"forma_file":  formaFile,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (schema pin 0.80.1 predates policies)")
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "0.82.0") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the minimum version 0.82.0", text)
+	}
+	if strings.Contains(text, "Cannot find type") {
+		t.Errorf("got:\n%s\nwant:\nan actionable message, not a raw PKL trace", text)
+	}
+}
+
+func TestCreateInlinePolicyRefusesWhenStandaloneAttached(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
+	withFixtureWorkspace(t, "lifeline_fixture")
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[{"Label":"ephemeral-1h","Type":"ttl",`+
+				`"Config":{"Type":"ttl","TTLSeconds":3600,"OnDependents":"abort"},`+
+				`"AttachedStacks":["lifeline"]}]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (a standalone TTL policy is attached to lifeline)")
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "ephemeral-1h") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the attached standalone", text)
+	}
+}
+
+func TestCreateInlinePolicyAllowsDifferentStandaloneType(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
+	withFixtureWorkspace(t, "lifeline_fixture")
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	// An auto-reconcile standalone is attached; setting an inline TTL is fine.
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[{"Label":"nightly-drift","Type":"auto-reconcile",`+
+				`"Config":{"Type":"auto-reconcile","IntervalSeconds":300},`+
+				`"AttachedStacks":["lifeline"]}]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (the standalone is a different policy type)", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyRemoveSkipsStandaloneCheck(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
+	withFixtureWorkspace(t, "lifeline_fixture")
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	// No agent handler registered: removing must not call list_policies at all.
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "lifeline",
+			"policy_type": "ttl",
+			"operation":   "remove",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (remove must not consult the agent)", textContent(t, result))
+	}
+}
+
+// TestCreateInlinePolicyRefusesSourceOnlyStandalone is the pass-3 regression:
+// a stack carries a same-type standalone resolvable in source (attached but not
+// yet applied, so the agent inventory is empty). Setting an inline policy of
+// that type must be refused.
+func TestCreateInlinePolicyRefusesSourceOnlyStandalone(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
+	withFixtureWorkspace(t, "source_conflict_fixture") // stack "app" attaches ttl-a in source
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"app"}],` +
+			`"Policies":[{"Label":"ttl-a","Type":"ttl"},{"Label":"ttl-b","Type":"ttl"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	// Agent knows nothing yet.
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "app",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (app has a source-only standalone TTL attached)")
+	}
+	if !strings.Contains(textContent(t, result), "ttl-a") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the source-only standalone ttl-a", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyAutoReconcileGatedBelow088(t *testing.T) {
+	withFixtureWorkspace(t, "lifeline_fixture")
+	withFakeVersion(t, "0.87.0") // below FeatureAutoReconcilePolicy floor (0.88.0)
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack": "lifeline", "policy_type": "auto_reconcile", "operation": "set", "interval_seconds": 300,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (inline auto-reconcile requires formae 0.88.0)")
+	}
+	if !strings.Contains(textContent(t, result), "0.88.0") {
+		t.Errorf("got:\n%s\nwant:\nan error naming 0.88.0", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyTTLNotGatedByAutoReconcile(t *testing.T) {
+	withFixtureWorkspace(t, "lifeline_fixture")
+	withFakeVersion(t, "0.87.0") // auto-reconcile floor not met, but this is TTL
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack": "lifeline", "policy_type": "ttl", "operation": "set", "ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (TTL inline is not gated at 0.88.0)", textContent(t, result))
 	}
 }

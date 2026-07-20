@@ -1,0 +1,28 @@
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+forma {
+  new formae.TTLPolicy {
+    label = "ttl-a"
+    ttl = 1.h
+    onDependents = "abort"
+  }
+
+  new formae.TTLPolicy {
+    label = "ttl-b"
+    ttl = 2.h
+    onDependents = "abort"
+  }
+
+  new formae.AutoReconcilePolicy {
+    label = "reconcile-x"
+    interval = 5.min
+  }
+
+  new formae.Stack {
+    label = "app"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "ttl-a" }
+    }
+  }
+}
