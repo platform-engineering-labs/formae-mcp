@@ -248,3 +248,30 @@ func standalonePolicyTypeFromWorkspace(root, label string, eval EvalFunc) (strin
 	}
 	return decl.PolicyType, true, nil
 }
+
+// standalonePolicyReferencesInSource returns the workspace PKL files that
+// reference the named standalone policy (via a PolicyResolvable or a
+// <binding>.res). A non-empty result means deleting the policy's declaration
+// would leave a dangling reference that fails or recreates inconsistent state
+// on the next apply — even when the agent reports the policy as unattached
+// because the attachment has not been applied yet.
+func standalonePolicyReferencesInSource(root, label string) ([]string, error) {
+	files, err := walkPKLFiles(root)
+	if err != nil {
+		return nil, fmt.Errorf("walk workspace: %w", err)
+	}
+	var referencing []string
+	for _, file := range files {
+		src, readErr := os.ReadFile(file)
+		if readErr != nil {
+			continue
+		}
+		for _, lbl := range resolvableLabelsInSource(string(src)) {
+			if lbl == label {
+				referencing = append(referencing, file)
+				break
+			}
+		}
+	}
+	return referencing, nil
+}

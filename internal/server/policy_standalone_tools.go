@@ -121,11 +121,32 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
 	}
 
-	// A label must be unique across the whole project, not just the target
-	// file — stacks reference standalone policies by label alone, so two
-	// declarations sharing one is an invalid project state. Check the whole
-	// workspace before planning, since the declaration may live in a file
-	// other than the one we are about to edit.
+	// A label must be unique across the whole project, and against deployed
+	// state. The agent inventory is authoritative for what already exists, so
+	// check it first: a policy the agent already knows must not be re-declared,
+	// even if the current workspace source does not (yet) contain it.
+	if agentItems, err := s.fetchPolicies(); err == nil {
+		if _, known := findPolicyByLabel(agentItems, input.Label); known {
+			out := tools.CreateStandalonePolicyOutput{
+				Operation: "noop",
+				Notes: []string{fmt.Sprintf(
+					"a standalone policy labelled %q already exists in the agent; labels must be unique. "+
+						"Updating a standalone in place is not supported — delete it and recreate it",
+					input.Label)},
+			}
+			body, err := json.Marshal(out)
+			if err != nil {
+				return errorResult(fmt.Errorf("marshal output: %w", err)), nil, nil
+			}
+			return jsonResult(body), nil, nil
+		}
+	}
+
+	// Also unique across the whole project source, not just the target file —
+	// stacks reference standalone policies by label alone, so two declarations
+	// sharing one is an invalid project state. Check the whole workspace before
+	// planning, since the declaration may live in a file other than the one we
+	// are about to edit.
 	if existing, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc()); err == nil {
 		out := tools.CreateStandalonePolicyOutput{
 			FilePath:  existing,
@@ -408,6 +429,24 @@ func (s *Server) handleDeleteStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if err != nil {
 		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
 	}
+
+	// The agent's AttachedStacks only reflects APPLIED attachments. A stack may
+	// have attached this policy in source without applying yet, in which case
+	// the agent reports it unattached. Deleting the declaration then leaves a
+	// dangling PolicyResolvable/.res that breaks the next apply. Scan the source
+	// for references and refuse if any remain.
+	refs, err := standalonePolicyReferencesInSource(cwd, input.Label)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	if len(refs) > 0 {
+		return errorResult(fmt.Errorf(
+			"standalone policy %q is still referenced in source by %d file(s): %v. "+
+				"These attachments may not be applied yet, so the agent reports the policy as unattached. "+
+				"Detach it everywhere (detach_standalone_policy) and apply before deleting it",
+			input.Label, len(refs), refs)), nil, nil
+	}
+
 	filePath, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc())
 	if err != nil {
 		return errorResult(err), nil, nil

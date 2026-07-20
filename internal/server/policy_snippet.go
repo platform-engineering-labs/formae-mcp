@@ -633,3 +633,29 @@ func resolvableLabelsInPoliciesBlock(source, stackLabel string) []string {
 	}
 	return labels
 }
+
+// resolvableLabelsInSource returns every standalone-policy label referenced
+// anywhere in the file — direct `new formae.PolicyResolvable { label = "X" }`
+// entries and `<binding>.res` references — regardless of which stack they sit
+// in. Used to detect attachments that only exist in source (not yet applied),
+// e.g. before deleting a policy whose references would otherwise dangle.
+func resolvableLabelsInSource(source string) []string {
+	var labels []string
+	for _, m := range policyResolvableEntryRE.FindAllStringIndex(source, -1) {
+		openIdx := strings.Index(source[m[0]:], "{") + m[0]
+		closeIdx, ok := matchBrace(source, openIdx)
+		if !ok {
+			continue
+		}
+		if lm := stackLabelRE.FindStringSubmatch(source[openIdx+1 : closeIdx]); lm != nil {
+			labels = append(labels, lm[1])
+		}
+	}
+	for _, m := range policyResBindingCaptureRE.FindAllStringSubmatchIndex(source, -1) {
+		binding := source[m[2]:m[3]]
+		if lbl, ok := policyLabelForBinding(source, binding); ok {
+			labels = append(labels, lbl)
+		}
+	}
+	return labels
+}

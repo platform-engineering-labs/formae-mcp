@@ -1017,3 +1017,26 @@ func TestResolvableLabelsInPoliciesBlockNone(t *testing.T) {
 		t.Errorf("got:\n%v\nwant:\nno labels (stack has no policies block)", got)
 	}
 }
+
+func TestResolvableLabelsInSourceAcrossStacks(t *testing.T) {
+	source := `import "@formae/formae.pkl"
+forma {
+  new formae.Stack {
+    label = "a"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "shared" }
+    }
+  }
+  new formae.Stack {
+    label = "b"
+    policies = new Listing {
+      new formae.PolicyResolvable { label = "other" }
+    }
+  }
+}
+`
+	got := resolvableLabelsInSource(source)
+	if len(got) != 2 {
+		t.Fatalf("got:\n%v\nwant:\n2 labels (shared, other) across both stacks", got)
+	}
+}

@@ -27,41 +27,42 @@ func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequ
 		return errorResult(err), nil, nil
 	}
 
-	// A stack may hold only one policy per type. If a standalone of this type is
-	// already attached, setting an inline one would conflict — refuse up front so
-	// the rule holds even if a skill author forgets it. Removal is exempt:
-	// deleting an inline policy can never create a conflict, and the check would
-	// make `remove` fail whenever the agent is unreachable.
-	//
-	// An unreachable agent is not fatal here either: this tool's real work is
+	cwd, err := os.Getwd()
+	if err != nil {
+		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
+	}
+
+	// A stack may hold only one policy per type. Setting an inline policy on a
+	// stack that already carries a standalone of the same type — whether applied
+	// (agent inventory) or only in source (attached but not yet applied) — is a
+	// conflict. Removal is exempt: deleting an inline policy can never create a
+	// conflict. An unreachable agent is not fatal; this tool's real work is
 	// local file planning, so a transport failure downgrades to "no standalone
-	// policies known" rather than blocking the edit.
+	// policies known from the agent" and the source check still runs.
+	var inventory []policyInventoryItem
 	if input.Operation == "set" {
-		if inventory, err := s.fetchPolicies(); err == nil {
-			for _, item := range inventory {
-				if mcpPolicyType(item.Type) != input.PolicyType {
+		if items, err := s.fetchPolicies(); err == nil {
+			inventory = items
+		}
+		for _, item := range inventory {
+			if mcpPolicyType(item.Type) != input.PolicyType {
+				continue
+			}
+			for _, attached := range item.AttachedStacks {
+				if attached != input.Stack {
 					continue
 				}
-				for _, attached := range item.AttachedStacks {
-					if attached != input.Stack {
-						continue
-					}
-					return errorResult(fmt.Errorf(
-						"stack %q already has standalone policy %q of type %s attached; a stack cannot hold "+
-							"both an inline and a standalone policy of the same type. Detach %q first "+
-							"(detach_standalone_policy), or update the standalone instead",
-						input.Stack, item.Label, input.PolicyType, item.Label)), nil, nil
-				}
+				return errorResult(fmt.Errorf(
+					"stack %q already has standalone policy %q of type %s attached; a stack cannot hold "+
+						"both an inline and a standalone policy of the same type. Detach %q first "+
+						"(detach_standalone_policy), or update the standalone instead",
+					input.Stack, item.Label, input.PolicyType, item.Label)), nil, nil
 			}
 		}
 	}
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
-		}
 		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc())
 		if err != nil {
 			return errorResult(err), nil, nil
@@ -76,6 +77,20 @@ func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequ
 	source, err := os.ReadFile(filePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("read %s: %w", filePath, err)), nil, nil
+	}
+
+	// Source-only mirror of the agent check above: a same-type standalone
+	// attached to this stack in source but not yet applied.
+	if input.Operation == "set" {
+		for _, lbl := range resolvableLabelsInPoliciesBlock(string(source), input.Stack) {
+			if t, ok := s.standaloneTypeOf(lbl, inventory, cwd); ok && t == input.PolicyType {
+				return errorResult(fmt.Errorf(
+					"stack %q already has standalone policy %q of type %s attached in source; a stack cannot "+
+						"hold both an inline and a standalone policy of the same type. Detach %q first "+
+						"(detach_standalone_policy)",
+					input.Stack, lbl, input.PolicyType, lbl)), nil, nil
+			}
+		}
 	}
 
 	plan, err := planPolicyEdit(string(source), policySpecFromInput(input))

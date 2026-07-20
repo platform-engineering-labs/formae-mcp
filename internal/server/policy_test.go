@@ -310,3 +310,45 @@ func TestCreateInlinePolicyRemoveSkipsStandaloneCheck(t *testing.T) {
 		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (remove must not consult the agent)", textContent(t, result))
 	}
 }
+
+// TestCreateInlinePolicyRefusesSourceOnlyStandalone is the pass-3 regression:
+// a stack carries a same-type standalone resolvable in source (attached but not
+// yet applied, so the agent inventory is empty). Setting an inline policy of
+// that type must be refused.
+func TestCreateInlinePolicyRefusesSourceOnlyStandalone(t *testing.T) {
+	withFixtureWorkspace(t, "source_conflict_fixture") // stack "app" attaches ttl-a in source
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"app"}],` +
+			`"Policies":[{"Label":"ttl-a","Type":"ttl"},{"Label":"ttl-b","Type":"ttl"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	// Agent knows nothing yet.
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `[]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack":       "app",
+			"policy_type": "ttl",
+			"operation":   "set",
+			"ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (app has a source-only standalone TTL attached)")
+	}
+	if !strings.Contains(textContent(t, result), "ttl-a") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the source-only standalone ttl-a", textContent(t, result))
+	}
+}

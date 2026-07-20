@@ -404,8 +404,15 @@ func TestDeleteStandalonePolicyRefusesWhileAttached(t *testing.T) {
 }
 
 func TestDeleteStandalonePolicyPlansDeletion(t *testing.T) {
-	withFixtureWorkspace(t, "standalone_fixture")
-	stubStandaloneFixtureEval(t)
+	// Uses a fixture where the policy is DECLARED but not referenced by any
+	// stack — a genuinely deletable state. (standalone_fixture attaches it to
+	// lifeline in source, which the source-reference guard correctly refuses.)
+	withFixtureWorkspace(t, "standalone_deletable_fixture")
+	prev := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[{"Label":"ephemeral-1h","Type":"ttl"}]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prev })
 
 	agent := mockAgent(t, policiesHandler(t,
 		`[{"Label":"ephemeral-1h","Type":"ttl","Config":{"Type":"ttl","Label":"ephemeral-1h","TTLSeconds":3600,"OnDependents":"abort"},"AttachedStacks":[]}]`))
@@ -658,5 +665,77 @@ func TestAttachStandalonePolicySourceOnlyDifferentTypeOK(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (app has a TTL in source, reconcile-x is a different type)",
 			textContent(t, result))
+	}
+}
+
+// TestCreateStandalonePolicyKnownToAgentIsNoop is the pass-3 regression: the
+// agent already has the label, but no workspace file declares it (drift, or a
+// partial checkout). Create must noop rather than plan a colliding declaration.
+func TestCreateStandalonePolicyKnownToAgentIsNoop(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+	prev := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		// Source declares NO policy named "deployed-ttl".
+		return []byte(`{"Stacks":[{"Label":"lifeline"},{"Label":"staging"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prev })
+
+	agent := mockAgent(t, policiesHandler(t,
+		`[{"Label":"deployed-ttl","Type":"ttl","Config":{"Type":"ttl","TTLSeconds":3600,"OnDependents":"abort"},"AttachedStacks":[]}]`))
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_standalone_policy",
+		Arguments: map[string]any{
+			"label":       "deployed-ttl",
+			"policy_type": "ttl",
+			"ttl_seconds": 3600,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success (noop), got error: %s", textContent(t, result))
+	}
+	var out struct {
+		Operation string `json:"operation"`
+	}
+	if err := json.Unmarshal([]byte(textContent(t, result)), &out); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if out.Operation != "noop" {
+		t.Errorf("got:\n%s\nwant:\n%s (the agent already knows this label)", out.Operation, "noop")
+	}
+}
+
+// TestDeleteStandalonePolicyRefusesSourceOnlyAttachment is the pass-3
+// regression: the policy is applied and the agent reports it unattached, but a
+// stack attaches it in source (not yet applied). Deleting would leave a
+// dangling reference, so the tool must refuse.
+func TestDeleteStandalonePolicyRefusesSourceOnlyAttachment(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture") // lifeline attaches ephemeral-1h in source
+	stubStandaloneFixtureEval(t)
+
+	// Agent knows the policy but reports it UNATTACHED (the attachment is not
+	// applied yet).
+	agent := mockAgent(t, policiesHandler(t,
+		`[{"Label":"ephemeral-1h","Type":"ttl","Config":{"Type":"ttl","Label":"ephemeral-1h","TTLSeconds":3600,"OnDependents":"abort"},"AttachedStacks":[]}]`))
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "delete_standalone_policy",
+		Arguments: map[string]any{"label": "ephemeral-1h"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (a stack still references the policy in source)")
+	}
+	if !strings.Contains(textContent(t, result), "referenced in source") {
+		t.Errorf("got:\n%s\nwant:\nan error about a source reference", textContent(t, result))
 	}
 }
