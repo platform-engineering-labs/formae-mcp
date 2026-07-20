@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// minPolicySchemaVersion is the project-side twin of
+// featuregate.FeatureStandalonePolicy (both 0.82.0): this gates the PklProject
+// *schema* pin, featuregate gates the local formae *binary*. Keep them in sync.
+//
 // minPolicySchemaVersion is the oldest @formae PKL schema that defines
 // TTLPolicy, AutoReconcilePolicy and PolicyResolvable. Confirmed against the
 // formae repo: the policy schema commit (60599e79) first ships in tag 0.82.0.

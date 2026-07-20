@@ -29,6 +29,7 @@ func stubStandaloneFixtureEval(t *testing.T) {
 }
 
 func TestCreateStandalonePolicyPlansInsertion(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -79,6 +80,7 @@ func TestCreateStandalonePolicyPlansInsertion(t *testing.T) {
 }
 
 func TestCreateStandalonePolicyDuplicateLabelIsNoop(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -114,6 +116,7 @@ func TestCreateStandalonePolicyDuplicateLabelIsNoop(t *testing.T) {
 }
 
 func TestCreateStandalonePolicyMissingTTLSeconds(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -148,6 +151,7 @@ const ttlPolicyInventory = `[{"Label":"ephemeral-1h","Type":"ttl",` +
 	`"AttachedStacks":["lifeline"]}]`
 
 func TestAttachStandalonePolicyPlansInsertion(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -192,6 +196,7 @@ func TestAttachStandalonePolicyPlansInsertion(t *testing.T) {
 }
 
 func TestAttachStandalonePolicyAlreadyAttachedIsNoop(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -224,6 +229,7 @@ func TestAttachStandalonePolicyAlreadyAttachedIsNoop(t *testing.T) {
 }
 
 func TestAttachStandalonePolicyUnknownPolicy(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -250,6 +256,7 @@ func TestAttachStandalonePolicyUnknownPolicy(t *testing.T) {
 }
 
 func TestAttachStandalonePolicyInlineConflict(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_conflict_fixture")
 	prev := injectedEvalForTest
 	injectedEvalForTest = func(path string) ([]byte, error) {
@@ -280,6 +287,7 @@ func TestAttachStandalonePolicyInlineConflict(t *testing.T) {
 }
 
 func TestAttachStandalonePolicySameTypeStandaloneConflict(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -309,6 +317,7 @@ func TestAttachStandalonePolicySameTypeStandaloneConflict(t *testing.T) {
 }
 
 func TestDetachStandalonePolicyPlansRemoval(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -352,6 +361,7 @@ func TestDetachStandalonePolicyPlansRemoval(t *testing.T) {
 }
 
 func TestDetachStandalonePolicyNotAttachedIsNoop(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -381,6 +391,7 @@ func TestDetachStandalonePolicyNotAttachedIsNoop(t *testing.T) {
 }
 
 func TestDeleteStandalonePolicyRefusesWhileAttached(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -404,6 +415,7 @@ func TestDeleteStandalonePolicyRefusesWhileAttached(t *testing.T) {
 }
 
 func TestDeleteStandalonePolicyPlansDeletion(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	// Uses a fixture where the policy is DECLARED but not referenced by any
 	// stack — a genuinely deletable state. (standalone_fixture attaches it to
 	// lifeline in source, which the source-reference guard correctly refuses.)
@@ -458,6 +470,7 @@ func TestDeleteStandalonePolicyPlansDeletion(t *testing.T) {
 }
 
 func TestDeleteStandalonePolicyUnknownPolicy(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -482,6 +495,7 @@ func TestDeleteStandalonePolicyUnknownPolicy(t *testing.T) {
 // file, and attaches BEFORE the first apply. At that moment the policy exists in
 // source but not in the agent inventory. Attaching must still work.
 func TestAttachStandalonePolicyDeclaredButNotYetApplied(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -530,6 +544,7 @@ func TestAttachStandalonePolicyDeclaredButNotYetApplied(t *testing.T) {
 // TestAttachStandalonePolicyUnknownEverywhere pins the genuine not-found case:
 // absent from BOTH the agent and the workspace source.
 func TestAttachStandalonePolicyUnknownEverywhere(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	stubStandaloneFixtureEval(t)
 
@@ -557,6 +572,7 @@ func TestAttachStandalonePolicyUnknownEverywhere(t *testing.T) {
 // DIFFERENT file than the one create would target. Emitting a second
 // declaration would produce two standalone policies sharing a label.
 func TestCreateStandalonePolicyDuplicateInAnotherFileIsNoop(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 
 	// main.pkl has the stacks (so it wins "main forma file"), but the policy is
@@ -606,6 +622,7 @@ func TestCreateStandalonePolicyDuplicateInAnotherFileIsNoop(t *testing.T) {
 // stack already carries one in SOURCE (created and attached before the first
 // apply, so the agent inventory is empty) must be refused, not planned.
 func TestAttachStandalonePolicySourceOnlySameTypeConflict(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "source_conflict_fixture")
 	prev := injectedEvalForTest
 	injectedEvalForTest = func(path string) ([]byte, error) {
@@ -640,6 +657,7 @@ func TestAttachStandalonePolicySourceOnlySameTypeConflict(t *testing.T) {
 // TestAttachStandalonePolicySourceOnlyDifferentTypeOK pins the mirror: a
 // different-type standalone attached in source is not a conflict.
 func TestAttachStandalonePolicySourceOnlyDifferentTypeOK(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "source_conflict_fixture")
 	prev := injectedEvalForTest
 	injectedEvalForTest = func(path string) ([]byte, error) {
@@ -672,6 +690,7 @@ func TestAttachStandalonePolicySourceOnlyDifferentTypeOK(t *testing.T) {
 // agent already has the label, but no workspace file declares it (drift, or a
 // partial checkout). Create must noop rather than plan a colliding declaration.
 func TestCreateStandalonePolicyKnownToAgentIsNoop(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture")
 	prev := injectedEvalForTest
 	injectedEvalForTest = func(path string) ([]byte, error) {
@@ -715,6 +734,7 @@ func TestCreateStandalonePolicyKnownToAgentIsNoop(t *testing.T) {
 // stack attaches it in source (not yet applied). Deleting would leave a
 // dangling reference, so the tool must refuse.
 func TestDeleteStandalonePolicyRefusesSourceOnlyAttachment(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "standalone_fixture") // lifeline attaches ephemeral-1h in source
 	stubStandaloneFixtureEval(t)
 
@@ -737,5 +757,91 @@ func TestDeleteStandalonePolicyRefusesSourceOnlyAttachment(t *testing.T) {
 	}
 	if !strings.Contains(textContent(t, result), "referenced in source") {
 		t.Errorf("got:\n%s\nwant:\nan error about a source reference", textContent(t, result))
+	}
+}
+
+// --- version gating (featuregate) ---
+
+func TestCreateStandalonePolicyGatedBelowFloor(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+	stubStandaloneFixtureEval(t)
+	withFakeVersion(t, "0.81.0") // below FeatureStandalonePolicy floor (0.82.0)
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_standalone_policy",
+		Arguments: map[string]any{
+			"label": "nightly-drift", "policy_type": "ttl", "ttl_seconds": 3600,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (formae 0.81.0 predates standalone policies)")
+	}
+	if !strings.Contains(textContent(t, result), "0.82.0") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the required version 0.82.0", textContent(t, result))
+	}
+}
+
+func TestCreateStandalonePolicyTTLAllowedAtFloor(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+	stubStandaloneFixtureEval(t)
+	withFakeVersion(t, "0.82.0") // meets standalone floor; TTL needs nothing more
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_standalone_policy",
+		Arguments: map[string]any{
+			"label": "nightly-drift", "policy_type": "ttl", "ttl_seconds": 3600,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (TTL standalone is fine on 0.82.0)", textContent(t, result))
+	}
+}
+
+func TestCreateStandalonePolicyAutoReconcileGatedBelow088(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+	stubStandaloneFixtureEval(t)
+	withFakeVersion(t, "0.87.0") // meets standalone floor but below auto-reconcile floor (0.88.0)
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_standalone_policy",
+		Arguments: map[string]any{
+			"label": "nightly-drift", "policy_type": "auto_reconcile", "interval_seconds": 300,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (auto-reconcile requires formae 0.88.0)")
+	}
+	if !strings.Contains(textContent(t, result), "0.88.0") {
+		t.Errorf("got:\n%s\nwant:\nan error naming the required version 0.88.0", textContent(t, result))
+	}
+}
+
+func TestAttachStandalonePolicyGatedBelowFloor(t *testing.T) {
+	withFixtureWorkspace(t, "standalone_fixture")
+	stubStandaloneFixtureEval(t)
+	withFakeVersion(t, "0.81.0")
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "attach_standalone_policy",
+		Arguments: map[string]any{"stack": "staging", "policy_label": "ephemeral-1h"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (formae 0.81.0 predates standalone policies)")
 	}
 }

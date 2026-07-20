@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
 
@@ -25,6 +26,15 @@ func currentEvalFunc() EvalFunc {
 func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.CreateInlinePolicyInput) (*mcp.CallToolResult, any, error) {
 	if err := validateCreateInlinePolicyInput(input); err != nil {
 		return errorResult(err), nil, nil
+	}
+
+	// Setting an inline auto-reconcile policy requires the agent-side fix that
+	// shipped in formae 0.88.0 (before it, the label was dropped and the policy
+	// churned a phantom update every apply). TTL and removals are unaffected.
+	if input.Operation == "set" && input.PolicyType == "auto_reconcile" {
+		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy); err != nil {
+			return errorResult(err), nil, nil
+		}
 	}
 
 	cwd, err := os.Getwd()

@@ -30,6 +30,7 @@ func withFixtureWorkspace(t *testing.T, fixture string) {
 }
 
 func TestCreateInlinePolicySetTTL(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "lifeline_fixture")
 
 	prevEval := injectedEvalForTest
@@ -89,6 +90,7 @@ func TestCreateInlinePolicySetTTL(t *testing.T) {
 }
 
 func TestCreateInlinePolicyStackNotFound(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "lifeline_fixture")
 
 	prevEval := injectedEvalForTest
@@ -117,6 +119,7 @@ func TestCreateInlinePolicyStackNotFound(t *testing.T) {
 }
 
 func TestCreateInlinePolicyExplicitFormaFile(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	abs, err := filepath.Abs(filepath.Join("..", "..", "testdata", "policy", "lifeline_fixture", "main.pkl"))
 	if err != nil {
 		t.Fatalf("abs: %v", err)
@@ -149,6 +152,7 @@ func TestCreateInlinePolicyExplicitFormaFile(t *testing.T) {
 }
 
 func TestCreateInlinePolicyRejectsOldSchema(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	dir := t.TempDir()
 	pklProject := `amends "pkl:Project"
 
@@ -208,6 +212,7 @@ forma {
 }
 
 func TestCreateInlinePolicyRefusesWhenStandaloneAttached(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "lifeline_fixture")
 
 	prevEval := injectedEvalForTest
@@ -248,6 +253,7 @@ func TestCreateInlinePolicyRefusesWhenStandaloneAttached(t *testing.T) {
 }
 
 func TestCreateInlinePolicyAllowsDifferentStandaloneType(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "lifeline_fixture")
 
 	prevEval := injectedEvalForTest
@@ -285,6 +291,7 @@ func TestCreateInlinePolicyAllowsDifferentStandaloneType(t *testing.T) {
 }
 
 func TestCreateInlinePolicyRemoveSkipsStandaloneCheck(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "lifeline_fixture")
 
 	prevEval := injectedEvalForTest
@@ -316,6 +323,7 @@ func TestCreateInlinePolicyRemoveSkipsStandaloneCheck(t *testing.T) {
 // yet applied, so the agent inventory is empty). Setting an inline policy of
 // that type must be refused.
 func TestCreateInlinePolicyRefusesSourceOnlyStandalone(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
 	withFixtureWorkspace(t, "source_conflict_fixture") // stack "app" attaches ttl-a in source
 	prevEval := injectedEvalForTest
 	injectedEvalForTest = func(path string) ([]byte, error) {
@@ -350,5 +358,58 @@ func TestCreateInlinePolicyRefusesSourceOnlyStandalone(t *testing.T) {
 	}
 	if !strings.Contains(textContent(t, result), "ttl-a") {
 		t.Errorf("got:\n%s\nwant:\nan error naming the source-only standalone ttl-a", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyAutoReconcileGatedBelow088(t *testing.T) {
+	withFixtureWorkspace(t, "lifeline_fixture")
+	withFakeVersion(t, "0.87.0") // below FeatureAutoReconcilePolicy floor (0.88.0)
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack": "lifeline", "policy_type": "auto_reconcile", "operation": "set", "interval_seconds": 300,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("got:\nsuccess\nwant:\nerror (inline auto-reconcile requires formae 0.88.0)")
+	}
+	if !strings.Contains(textContent(t, result), "0.88.0") {
+		t.Errorf("got:\n%s\nwant:\nan error naming 0.88.0", textContent(t, result))
+	}
+}
+
+func TestCreateInlinePolicyTTLNotGatedByAutoReconcile(t *testing.T) {
+	withFixtureWorkspace(t, "lifeline_fixture")
+	withFakeVersion(t, "0.87.0") // auto-reconcile floor not met, but this is TTL
+
+	prevEval := injectedEvalForTest
+	injectedEvalForTest = func(path string) ([]byte, error) {
+		return []byte(`{"Stacks":[{"Label":"lifeline"}],"Policies":[]}`), nil
+	}
+	t.Cleanup(func() { injectedEvalForTest = prevEval })
+
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_inline_policy",
+		Arguments: map[string]any{
+			"stack": "lifeline", "policy_type": "ttl", "operation": "set", "ttl_seconds": 1200,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("got:\nerror: %s\nwant:\nsuccess (TTL inline is not gated at 0.88.0)", textContent(t, result))
 	}
 }

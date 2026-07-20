@@ -9,8 +9,26 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
+
+// guardStandalonePolicy enforces the version floor for a standalone-policy
+// operation: the standalone feature (formae >= 0.82.0) always, plus the
+// auto-reconcile feature (formae >= 0.88.0) when the operation creates or
+// updates an auto-reconcile policy. policyType is the MCP wire form and may be
+// empty for operations (attach/detach/delete) that never write policy config.
+func guardStandalonePolicy(policyType string) error {
+	if err := featuregate.GuardFeature(featuregate.FeatureStandalonePolicy); err != nil {
+		return err
+	}
+	if policyType == "auto_reconcile" {
+		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // policyInventoryItem mirrors apimodel.PolicyInventoryItem from the formae
 // agent (GET /api/v1/policies). Config is the marshalled domain policy:
@@ -121,6 +139,9 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if err := validateStandalonePolicyFields(input.Label, input.PolicyType, input.TTLSeconds, input.OnDependents, input.IntervalSeconds); err != nil {
 		return errorResult(err), nil, nil
 	}
+	if err := guardStandalonePolicy(input.PolicyType); err != nil {
+		return errorResult(err), nil, nil
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -225,6 +246,9 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	}
 	if input.PolicyLabel == "" {
 		return errorResult(fmt.Errorf("policy_label is required")), nil, nil
+	}
+	if err := guardStandalonePolicy(""); err != nil {
+		return errorResult(err), nil, nil
 	}
 
 	cwd, err := os.Getwd()
@@ -343,6 +367,9 @@ func (s *Server) handleDetachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if input.PolicyLabel == "" {
 		return errorResult(fmt.Errorf("policy_label is required")), nil, nil
 	}
+	if err := guardStandalonePolicy(""); err != nil {
+		return errorResult(err), nil, nil
+	}
 
 	filePath := input.FormaFile
 	if filePath == "" {
@@ -404,6 +431,9 @@ func specFromInventoryItem(item policyInventoryItem) (StandalonePolicySpec, erro
 func (s *Server) handleDeleteStandalonePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.DeleteStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
 	if input.Label == "" {
 		return errorResult(fmt.Errorf("label is required")), nil, nil
+	}
+	if err := guardStandalonePolicy(""); err != nil {
+		return errorResult(err), nil, nil
 	}
 
 	inventory, err := s.fetchPolicies()

@@ -15,9 +15,25 @@ type Feature string
 // FeatureProfile gates all profile management and the per-invocation --profile.
 const FeatureProfile Feature = "profile"
 
+// FeatureStandalonePolicy gates the standalone (reusable) policy tools:
+// create/attach/detach/delete_standalone_policy. The policy system (schema +
+// agent attachment support) first shipped in formae 0.82.0. This gates the
+// local formae *binary*; its project-side twin is server.minPolicySchemaVersion
+// (the PklProject schema pin), also 0.82.0 — keep them in sync.
+const FeatureStandalonePolicy Feature = "standalone-policy"
+
+// FeatureAutoReconcilePolicy gates the auto-reconcile policy *type* in both the
+// inline and standalone policy tools. Before formae 0.88.0 the agent's policy
+// update generator mishandled auto-reconcile policies (a phantom update on
+// every apply, and an empty persisted label for inline ones); 0.88.0 fixes
+// both. TTL policies are unaffected and are not gated by this.
+const FeatureAutoReconcilePolicy Feature = "auto-reconcile-policy"
+
 // registry maps each feature to its minimum required formae version.
 var registry = map[Feature]string{
-	FeatureProfile: "0.87.0",
+	FeatureProfile:             "0.87.0",
+	FeatureStandalonePolicy:    "0.82.0",
+	FeatureAutoReconcilePolicy: "0.88.0",
 }
 
 // detectFn is the version source; overridable in tests.
