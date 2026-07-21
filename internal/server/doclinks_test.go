@@ -37,7 +37,7 @@ func TestDocsIndexResource(t *testing.T) {
 	}
 
 	// The entry point AI assistants land on must be present.
-	if !strings.Contains(text, docURL("integrations/ai-coding-assistants/")) {
+	if !strings.Contains(text, docURL("documentation/guides/ai-coding-assistants")) {
 		t.Error("index should list the ai-coding-assistants page")
 	}
 }
