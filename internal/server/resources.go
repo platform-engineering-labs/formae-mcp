@@ -221,7 +221,7 @@ A forma (plural: formae) is an infrastructure declaration. When you apply a
 forma, formae processes it to create, update, or delete resources. A forma can
 target an entire environment or a single resource change.
 
-Canonical reference: https://docs.formae.io/en/latest/core-concepts/forma/
+Canonical reference: https://docs.formae.io/documentation/concepts/forma
 
 ## Stack
 
@@ -230,7 +230,7 @@ one resource in a stack may cascade to dependent resources. The default stack is
 named "default". Unmanaged resources discovered by the agent live on a special
 unmanaged stack.
 
-Canonical reference: https://docs.formae.io/en/latest/core-concepts/stack/
+Canonical reference: https://docs.formae.io/documentation/concepts/stack
 
 ## Target
 
@@ -238,7 +238,7 @@ A target represents a cloud account or region where resources are deployed. Each
 target has a namespace (e.g., AWS, Azure) and configuration (e.g., region,
 credentials).
 
-Canonical reference: https://docs.formae.io/en/latest/core-concepts/target/
+Canonical reference: https://docs.formae.io/documentation/concepts/target
 
 ## Resource
 
@@ -246,7 +246,7 @@ A resource represents a cloud infrastructure object (e.g., an S3 bucket, an EC2
 instance). Resources can be managed (declared in a forma and actively managed)
 or unmanaged (discovered by the agent but not yet under management).
 
-Canonical reference: https://docs.formae.io/en/latest/core-concepts/properties/
+Canonical reference: https://docs.formae.io/documentation/concepts/properties
 
 ## Apply Modes
 
@@ -261,7 +261,7 @@ Only applies the changes explicitly specified in the forma. Other resources are
 untouched. Use for urgent targeted fixes. Patches create drift that should later
 be reconciled.
 
-Canonical reference: https://docs.formae.io/en/latest/core-concepts/apply-modes/
+Canonical reference: https://docs.formae.io/documentation/concepts/apply-modes
 
 ## Simulation
 Both apply and destroy support a simulate flag for dry-run previews. Always
@@ -279,7 +279,7 @@ Users can handle drift by either:
 - **Overwriting**: Force-reconciling to restore the declared state
 - **Absorbing**: Incorporating the drift into their IaC codebase
 
-Canonical reference: https://docs.formae.io/en/latest/core-concepts/synchronization/
+Canonical reference: https://docs.formae.io/documentation/concepts/synchronization
 
 ## Discovery
 
@@ -287,7 +287,7 @@ The agent periodically scans cloud accounts for resources not managed by formae.
 Discovered resources appear as unmanaged and can be queried, inspected, and
 optionally imported under management.
 
-Canonical reference: https://docs.formae.io/en/latest/core-concepts/discovery/
+Canonical reference: https://docs.formae.io/documentation/concepts/discovery
 
 ## Commands
 
@@ -297,9 +297,9 @@ command status queries to monitor progress.
 
 ## Going deeper
 
-- Core concepts index: https://docs.formae.io/en/latest/core-concepts/
-- Plugin concept: https://docs.formae.io/en/latest/core-concepts/plugin/
-- Values and properties: https://docs.formae.io/en/latest/core-concepts/values/
+- Core concepts index: https://docs.formae.io/documentation/concepts/forma
+- Plugin concept: https://docs.formae.io/documentation/concepts/plugin
+- Values and properties: https://docs.formae.io/documentation/concepts/values
 `
 
 const pklPrimerDoc = `# PKL Primer for Formae
@@ -371,7 +371,7 @@ new lambda.Function {
 ` + "```" + `
 
 The ` + "`.res`" + ` accessor and resolvable fields are defined by each resource's
-schema. See https://docs.formae.io/en/latest/core-concepts/res/.
+schema. See https://docs.formae.io/documentation/concepts/resources.
 
 ### Hidden vs public fields
 
@@ -387,7 +387,7 @@ The schema does the heavy lifting.
 
 ## Going deeper
 
-- Formae PKL cheatsheet: https://docs.formae.io/en/latest/pkl-cheatsheet/
+- Formae PKL cheatsheet: https://docs.formae.io/documentation/reference/pkl-cheatsheet
 - Official PKL site: https://pkl-lang.org/
 - PKL language reference: https://pkl-lang.org/main/current/language-reference/
 - Forma file structure: formae://docs/forma-anatomy
@@ -518,13 +518,13 @@ Rename can combine with a property change (one update carries both) and with a
 bring-under-management import (` + "`alias`" + ` = the discovery-assigned label,
 ` + "`label`" + ` = the desired name — adopted and renamed in a single apply).
 
-Reference: https://docs.formae.io/en/latest/core-concepts/label/#renaming-a-resource
+Reference: https://docs.formae.io/documentation/guides/rename-a-resource
 
 ## Going deeper
 
-- Forma overview (canonical): https://docs.formae.io/en/latest/core-concepts/forma/
-- Resource properties model: https://docs.formae.io/en/latest/core-concepts/properties/
-- ` + "`.res`" + ` cross-resource refs: https://docs.formae.io/en/latest/core-concepts/res/
+- Forma overview (canonical): https://docs.formae.io/documentation/concepts/forma
+- Resource properties model: https://docs.formae.io/documentation/concepts/properties
+- ` + "`.res`" + ` cross-resource refs: https://docs.formae.io/documentation/concepts/resources
 - Plugin-specific resource catalogs: https://hub.platform.engineering and per-plugin GitHub repos
 - Schema annotations (what each field means): formae://docs/annotations
 - PKL syntax fundamentals: formae://docs/pkl-primer
@@ -621,11 +621,11 @@ rules). Sub-resources don't have their own lifecycle independent of the parent.
 
 ## Going deeper
 
-- Schema reference (canonical PKL annotations): https://docs.formae.io/en/latest/plugin-sdk/reference/schema/
-- Plugin SDK tutorial — schema: https://docs.formae.io/en/latest/plugin-sdk/tutorial/02-schema/
-- Plugin SDK tutorial — target config: https://docs.formae.io/en/latest/plugin-sdk/tutorial/03-target/
-- Plugin interface reference: https://docs.formae.io/en/latest/plugin-sdk/reference/plugin-interface/
-- Plugin manifest format: https://docs.formae.io/en/latest/plugin-sdk/reference/manifest/
+- Schema reference (canonical PKL annotations): https://docs.formae.io/plugin-development/reference/schema
+- Plugin SDK tutorial — schema: https://docs.formae.io/plugin-development/tutorial/02-schema
+- Plugin SDK tutorial — target config: https://docs.formae.io/plugin-development/tutorial/03-target
+- Plugin interface reference: https://docs.formae.io/plugin-development/reference/plugin-interface
+- Plugin manifest format: https://docs.formae.io/plugin-development/reference/manifest
 `
 
 const troubleshootingDoc = `# Formae Troubleshooting
@@ -636,7 +636,7 @@ The agent doesn't have the named plugin installed. Run
 ` + "`formae plugin install <name>`" + ` to add it from the Hub, or check the
 agent's plugin directory (` + "`~/.pel/formae/plugins/`" + ` by default).
 
-Concept: https://docs.formae.io/en/latest/core-concepts/plugin/
+Concept: https://docs.formae.io/documentation/concepts/plugin
 
 ## "version conflict" during apply
 
@@ -651,7 +651,7 @@ sync. Options:
 - Force-reconcile (overwrite cloud with formae's view): rerun apply with explicit confirmation
 - Absorb drift (update IaC to match cloud): use the fix-code-drift workflow
 
-Concept: https://docs.formae.io/en/latest/core-concepts/synchronization/
+Concept: https://docs.formae.io/documentation/concepts/synchronization
 
 ## "createOnly field changed" → replacement triggered
 
@@ -660,7 +660,7 @@ A field marked with ` + "`@formae.FieldHint { createOnly = true }`" + ` or
 responds by destroying and recreating the resource. If unexpected, check
 whether ConfigFieldHint's default (true) is biting — see formae://docs/annotations.
 
-Schema reference: https://docs.formae.io/en/latest/plugin-sdk/reference/schema/
+Schema reference: https://docs.formae.io/plugin-development/reference/schema
 
 ## "namespace mismatch" / resource type unknown
 
@@ -677,7 +677,7 @@ the forma will be destroyed. Patch mode only touches what's specified. If a
 deploy unexpectedly removed resources, you likely used reconcile when patch was
 intended (or vice versa).
 
-Concept: https://docs.formae.io/en/latest/core-concepts/apply-modes/
+Concept: https://docs.formae.io/documentation/concepts/apply-modes
 
 ## Apply rejected for an ` + "`alias`" + ` (rename) error
 
@@ -693,7 +693,7 @@ The agent validates ` + "`alias`" + ` usage before touching the cloud and reject
 - **` + "`alias`" + ` equals ` + "`label`" + `** — the alias must reference a DIFFERENT prior
   label. Remove it (no rename is happening).
 
-Concept: https://docs.formae.io/en/latest/core-concepts/label/#renaming-a-resource
+Concept: https://docs.formae.io/documentation/guides/rename-a-resource
 
 ## Commands stuck in "in_progress"
 
@@ -714,12 +714,12 @@ resources into a subdir like ` + "`schema/pkl/core/<name>.pkl`" + `.
 - Check the agent's discovery rate-limiter (see get_agent_stats)
 - Inspect the agent's discovery filters in the plugin config
 
-Concept: https://docs.formae.io/en/latest/core-concepts/discovery/
+Concept: https://docs.formae.io/documentation/concepts/discovery
 
 ## Going deeper
 
-- Full docs site: https://docs.formae.io/en/latest/
-- Core concepts index: https://docs.formae.io/en/latest/core-concepts/
+- Full docs site: https://docs.formae.io/
+- Core concepts index: https://docs.formae.io/documentation/concepts/forma
 - Per-plugin GitHub repos for plugin-specific issues
 `
 
@@ -990,7 +990,7 @@ infrastructure in a ` + "`networking`" + ` stack.
 - Forma project structure (modules, vars, cross-stack refs): formae://docs/forma-structure
 - Plugin examples (nested-target canonical reference): formae://docs/examples
 - Authoring pitfalls (reconcile deletes surprise): formae://docs/authoring-pitfalls
-- Policies reference: https://docs.formae.io/en/latest/core-concepts/stack/
+- Policies reference: https://docs.formae.io/documentation/concepts/stack
 `
 
 const authoringPitfallsDoc = `# Authoring Pitfalls
