@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [0.7.0]
+
+### Added
+
+- Manage standalone (reusable) policies from your assistant: create a policy once
+  at the top of a forma and attach, detach, or delete it across any number of
+  stacks by reference, plus a read-only view of existing policies. Each tool plans
+  a file edit and returns a snippet with a line anchor rather than writing files.
+  The auto-reconcile policy type requires formae 0.88.0 or newer (both standalone
+  and inline, where earlier binaries dropped its label and churned a phantom
+  update); standalone policies otherwise require 0.82.0, and TTL is never gated by
+  the auto-reconcile floor, so a 0.82–0.87 formae keeps full TTL support. Tools
+  refuse cleanly with a version message rather than degrading silently.
+
 ## [0.6.0]
 
 ### Added
