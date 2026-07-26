@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [0.8.0]
+
+### Changed
+
+- Documentation links the assistant shares now follow the new Mintlify docs-site
+  URL scheme (served at the `docs.formae.io` site root) instead of the previous
+  Read the Docs paths (`/en/latest/…`), so the concept, PKL, setup, and plugin-SDK
+  links keep resolving after the docs-site migration.
+
 ## [0.7.0]
 
 ### Added
