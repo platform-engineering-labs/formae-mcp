@@ -455,7 +455,7 @@ import "@aws/aws.pkl"
 properties: Props
 
 class Props {
-  /// Deployment region (doc comment becomes CLI --help text)
+  /// Deployment region
   region: String = "us-west-2"
 
   /// Instance count; pkl type constraints validate CLI input
@@ -473,16 +473,16 @@ forma {
 }
 ` + "```" + `
 
-- **Member name = default = flag** — the declared default is the default,
-  the doc comment is the ` + "`--help`" + ` text, and the member name is the CLI flag
+- **Member name = default = flag** — the declared default is the default and
+  the member name is the CLI flag
   (` + "`--region`" + `, ` + "`--replicas`" + `). Override the flag with
   ` + "`@formae.Flag { name = \"...\" }`" + ` when you want a dashed flag
   (` + "`--cert-arn`" + `) but a typed camelCase member (` + "`properties.certArn`" + `).
 - **Typed access** — read a property as ` + "`properties.region`" + ` (no ` + "`.value`" + `).
   Editors resolve it statically instead of flagging an unresolved reference.
 - **Validation** — pkl type constraints reject bad CLI input
-  (` + "`-p replicas=-1`" + ` fails the ` + "`Int(this > 0)`" + ` constraint).
-- **Injection** — ` + "`formae apply -p region=eu-central-1 main.pkl`" + ` fills the
+  (` + "`--replicas -1`" + ` fails the ` + "`Int(this > 0)`" + ` constraint).
+- **Injection** — ` + "`formae apply --region eu-central-1 main.pkl`" + ` fills the
   property; late binding carries the value into every resource that reads it.
 
 The legacy ` + "`properties { x = new formae.Prop { flag = \"x\"; default = ... } }`" + `
