@@ -14,6 +14,12 @@ Install via the
 
 ### Changed
 
+- The authoring guidance now teaches `extends "@formae/forma.pkl"` with a typed
+  `properties: Props` class as the canonical forma shape, replacing the older
+  `amends` + `new formae.Prop {}` form (which still works and is still detected).
+  Covers member-name-as-flag, `@formae.Flag` overrides, typed reads without
+  `.value`, pkl constraint validation, and per-property `--<flag>` injection at
+  apply time. The self-contained destroy-forma the MCP emits also uses `extends`.
 - Documentation links the assistant shares now follow the new Mintlify docs-site
   URL scheme (served at the `docs.formae.io` site root) instead of the previous
   Read the Docs paths (`/en/latest/…`), so the concept, PKL, setup, and plugin-SDK

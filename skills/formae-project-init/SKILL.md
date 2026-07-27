@@ -12,7 +12,7 @@ Scaffold a brand-new formae project from zero: infer schema plugin dependencies,
 Before doing anything, check whether a formae project already exists in the current working directory or any stated target path:
 
 - Look for a `PklProject` file that declares a `@formae/` dependency.
-- Look for any `.pkl` file that starts with `amends "@formae/forma.pkl"`.
+- Look for any `.pkl` file that starts with `extends "@formae/forma.pkl"` (or the legacy `amends "@formae/forma.pkl"`).
 
 If either is found, **stop**. Tell the user a formae project already exists here and offer to continue editing it in place (formae-import, formae-patch, or formae-apply skills may apply). Do not proceed with init.
 

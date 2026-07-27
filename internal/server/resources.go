@@ -320,13 +320,13 @@ language, and excellent IDE support. Forma files are PKL modules.
 A PKL file is a module. The top of a forma file typically looks like:
 
 ` + "```pkl" + `
-amends "@formae/forma.pkl"
+extends "@formae/forma.pkl"
 
 import "@aws/aws.pkl" as aws
 import "@aws/s3/bucket.pkl"
 ` + "```" + `
 
-- ` + "`amends`" + ` means "extend this base module's schema." Forma files always amend the formae forma module.
+- ` + "`extends`" + ` means "subclass this base module's schema." Forma files extend the formae forma module, which lets them declare their own members (like a typed ` + "`properties`" + ` class — see below). ` + "`amends \"@formae/forma.pkl\"`" + ` is the older form and still works, but ` + "`extends`" + ` is the canonical shape.
 - ` + "`import \"@<plugin>/...\" as <alias>`" + ` brings a plugin's schema into scope.
 - Package URIs like ` + "`@aws/`" + ` are resolved via the project's PklProject file.
 
@@ -382,8 +382,8 @@ become part of the forma's serialized representation.
 ## What you don't need to know
 
 PKL has classes, methods, type aliases, generators, and a lot more. For forma
-files you mostly need: amends, imports, object literals, mappings, listings.
-The schema does the heavy lifting.
+files you mostly need: extends, imports, object literals, mappings, listings,
+and a small typed class for CLI properties. The schema does the heavy lifting.
 
 ## Going deeper
 
@@ -401,7 +401,7 @@ computes a changeset, and applies the changes.
 ## Minimal forma
 
 ` + "```pkl" + `
-amends "@formae/forma.pkl"
+extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 import "@aws/aws.pkl"
 import "@aws/s3/bucket.pkl"
@@ -440,6 +440,54 @@ must set ` + "`target = <targetVar>.res`" + ` to declare its home.
 
 See ` + "`formae://docs/forma-structure`" + ` for the full grammar and
 ` + "`formae://docs/stack-design`" + ` for multi-stack patterns.
+
+## CLI properties
+
+To make a forma configurable from the command line, declare a typed ` + "`Props`" + `
+class and assign it to ` + "`properties`" + `. This is why the module uses ` + "`extends`" + `
+(not ` + "`amends`" + `): extending lets the module add its own ` + "`properties`" + ` class.
+
+` + "```pkl" + `
+extends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+import "@aws/aws.pkl"
+
+properties: Props
+
+class Props {
+  /// Deployment region
+  region: String = "us-west-2"
+
+  /// Instance count; pkl type constraints validate CLI input
+  replicas: Int(this > 0) = 2
+
+  /// Member name is the flag by default. Use @formae.Flag to keep a
+  /// dashed CLI flag while exposing a typed camelCase member.
+  @formae.Flag { name = "cert-arn" }
+  certArn: String = ""
+}
+
+forma {
+  new formae.Stack { label = "default" }
+  new formae.Target { label = "aws"; config = new aws.Config { region = properties.region } }
+}
+` + "```" + `
+
+- **Member name = default = flag** — the declared default is the default and
+  the member name is the CLI flag
+  (` + "`--region`" + `, ` + "`--replicas`" + `). Override the flag with
+  ` + "`@formae.Flag { name = \"...\" }`" + ` when you want a dashed flag
+  (` + "`--cert-arn`" + `) but a typed camelCase member (` + "`properties.certArn`" + `).
+- **Typed access** — read a property as ` + "`properties.region`" + ` (no ` + "`.value`" + `).
+  Editors resolve it statically instead of flagging an unresolved reference.
+- **Validation** — pkl type constraints reject bad CLI input
+  (` + "`--replicas -1`" + ` fails the ` + "`Int(this > 0)`" + ` constraint).
+- **Injection** — ` + "`formae apply --region eu-central-1 main.pkl`" + ` fills the
+  property; late binding carries the value into every resource that reads it.
+
+The legacy ` + "`properties { x = new formae.Prop { flag = \"x\"; default = ... } }`" + `
+block (on an ` + "`amends`" + `-based forma) still works, but the typed ` + "`Props`" + ` class
+above is the canonical shape.
 
 ## Project layout
 
@@ -812,10 +860,10 @@ infra-repo/
   vars.pkl                # Shared scalars and Target instances
   stacks/
     network/
-      main.pkl            # Entry point — amends "@formae/forma.pkl"
+      main.pkl            # Entry point — extends "@formae/forma.pkl"
       network.pkl         # Network resource definitions
     app/
-      main.pkl            # Entry point — amends "@formae/forma.pkl"
+      main.pkl            # Entry point — extends "@formae/forma.pkl"
       app.pkl             # App resource definitions
   modules/                # PKL imported by 2 or more stacks
     common-tags.pkl
@@ -825,11 +873,11 @@ infra-repo/
 ## main.pkl — the entry point
 
 Every stack directory has a ` + "`main.pkl`" + ` that is the entry point for that stack.
-It ` + "`amends \"@formae/forma.pkl\"`" + ` and spreads sibling resource files into its
+It ` + "`extends \"@formae/forma.pkl\"`" + ` and spreads sibling resource files into its
 ` + "`forma {}`" + ` block:
 
 ` + "```pkl" + `
-amends "@formae/forma.pkl"
+extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 import "@aws/aws.pkl"
 
@@ -1004,7 +1052,7 @@ const authoringPitfallsDoc = `# Authoring Pitfalls
 
 **Wrong:**
 ` + "```pkl" + `
-amends "@formae/forma.pkl"
+extends "@formae/forma.pkl"
 
 stack = new formae.Stack { label = "default" }
 targets = new Listing { new formae.Target { ... } }
@@ -1013,7 +1061,7 @@ resources = new Listing { myBucket }
 
 **Right:** real forma files use a ` + "`forma {`" + ` block:
 ` + "```pkl" + `
-amends "@formae/forma.pkl"
+extends "@formae/forma.pkl"
 
 forma {
   new formae.Stack { label = "default" }

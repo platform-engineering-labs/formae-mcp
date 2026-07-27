@@ -171,7 +171,7 @@ func planDetachStandalonePolicy(source, stackLabel, policyLabel string) (Standal
 // destroy_forma — removing the declaration from source is not enough on its
 // own, because the agent only forgets a policy when it is destroyed.
 func renderDestroyFormaPKL(spec StandalonePolicySpec) string {
-	return fmt.Sprintf(`amends "@formae/forma.pkl"
+	return fmt.Sprintf(`extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {

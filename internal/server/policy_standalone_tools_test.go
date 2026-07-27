@@ -461,7 +461,7 @@ func TestDeleteStandalonePolicyPlansDeletion(t *testing.T) {
 		t.Errorf("got:\n%d-%d\nwant:\n%d-%d", out.SourceAnchorStart, out.SourceAnchorEnd, 5, 9)
 	}
 	// The destroy forma must be self-contained and carry the agent's config.
-	if !strings.Contains(out.DestroyFormaPKL, `amends "@formae/forma.pkl"`) {
+	if !strings.Contains(out.DestroyFormaPKL, `extends "@formae/forma.pkl"`) {
 		t.Errorf("got:\n%s\nwant:\na self-contained forma with an amends clause", out.DestroyFormaPKL)
 	}
 	if !strings.Contains(out.DestroyFormaPKL, "ttl = 1.h") {
