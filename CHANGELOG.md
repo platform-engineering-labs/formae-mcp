@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [0.8.0]
+
+### Changed
+
+- The authoring guidance now teaches `extends "@formae/forma.pkl"` with a typed
+  `properties: Props` class as the canonical forma shape, replacing the older
+  `amends` + `new formae.Prop {}` form (which still works and is still detected).
+  Covers member-name-as-flag, `@formae.Flag` overrides, typed reads without
+  `.value`, pkl constraint validation, and per-property `--<flag>` injection at
+  apply time. The self-contained destroy-forma the MCP emits also uses `extends`.
+
 ## [0.7.0]
 
 ### Added

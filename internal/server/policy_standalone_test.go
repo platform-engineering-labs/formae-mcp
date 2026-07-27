@@ -9,7 +9,7 @@ func TestPlanCreateStandalonePolicyAnchorsAtFormaClose(t *testing.T) {
 	// Line 1 = amends, 2 = import, 3 = blank, 4 = `forma {`,
 	// 5 = Stack opener, 6 = label, 7 = `}` stack, 8 = `}` forma.
 	// The snippet is inserted BEFORE line 8.
-	source := `amends "@formae/forma.pkl"
+	source := `extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {
@@ -393,7 +393,7 @@ func TestRenderDestroyFormaPKL(t *testing.T) {
 		TTLSeconds:   3600,
 		OnDependents: "abort",
 	})
-	want := `amends "@formae/forma.pkl"
+	want := `extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {

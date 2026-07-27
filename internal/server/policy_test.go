@@ -165,7 +165,7 @@ dependencies {
 	if err := os.WriteFile(filepath.Join(dir, "PklProject"), []byte(pklProject), 0o644); err != nil {
 		t.Fatalf("write PklProject: %v", err)
 	}
-	forma := `amends "@formae/forma.pkl"
+	forma := `extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {

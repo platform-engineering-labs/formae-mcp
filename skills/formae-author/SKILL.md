@@ -11,7 +11,7 @@ This skill is a thin dispatcher. It triages the user's authoring intent, locates
 
 Determine where the authoring will happen. Three branches:
 
-**(a) Already in a formae project** — if the current working directory or any ancestor contains a `PklProject` that declares a `@formae/` dependency, OR a `.pkl` file that starts with `amends "@formae/forma.pkl"`, work in place. Confirm the project root to the user and continue to Step 2.
+**(a) Already in a formae project** — if the current working directory or any ancestor contains a `PklProject` that declares a `@formae/` dependency, OR a `.pkl` file that starts with `extends "@formae/forma.pkl"` (or the legacy `amends "@formae/forma.pkl"`), work in place. Confirm the project root to the user and continue to Step 2.
 
 **(b) User knows a path** — if there is no formae project here, ask: *"Do you have an existing formae project elsewhere?"* If the user provides a path, verify it is a real formae project (same checks as above). If it is, `cd` there and continue to Step 2. If it is not a formae project, say so and ask whether to create a new project there instead (offer Step 1c).
 

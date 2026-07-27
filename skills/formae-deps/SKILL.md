@@ -57,7 +57,7 @@ When pulling examples for the plugin just added, pass the version pinned in `Pkl
 
 Read `PklProject`, find the dependency block for the named plugin, and delete it. Show the diff to the user.
 
-**Dangling import check.** Before confirming the removal, search all `.pkl` files in the project for `import "@<name>/` (and `amends "@<name>/`). If any match is found, warn the user that removing the dependency will leave dangling imports that will cause resolution errors. List the affected files and ask whether to proceed anyway. Do not automatically remove the imports — that is the user's decision.
+**Dangling import check.** Before confirming the removal, search all `.pkl` files in the project for `import "@<name>/` (and `extends "@<name>/` / `amends "@<name>/`). If any match is found, warn the user that removing the dependency will leave dangling imports that will cause resolution errors. List the affected files and ask whether to proceed anyway. Do not automatically remove the imports — that is the user's decision.
 
 After deleting from `PklProject`, run `pkl project resolve` (see Step 2c) to update the lockfile.
 
