@@ -166,7 +166,7 @@ IMPORTANT: After the patch is applied, remind me that this change will appear as
 					Role: "user",
 					Content: &mcp.TextContent{Text: "I want to build a new formae resource plugin for " + provider + `.
 
-Follow the plugin SDK tutorial at https://docs.formae.io/en/latest/plugin-sdk/tutorial/ from start to finish.
+Follow the plugin SDK tutorial at https://docs.formae.io/plugin-development/tutorial from start to finish.
 
 Steps:
 1. Research the provider's API to understand resources and their properties

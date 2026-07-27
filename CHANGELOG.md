@@ -20,6 +20,10 @@ Install via the
   Covers member-name-as-flag, `@formae.Flag` overrides, typed reads without
   `.value`, pkl constraint validation, and per-property `--<flag>` injection at
   apply time. The self-contained destroy-forma the MCP emits also uses `extends`.
+- Documentation links the assistant shares now follow the new Mintlify docs-site
+  URL scheme (served at the `docs.formae.io` site root) instead of the previous
+  Read the Docs paths (`/en/latest/…`), so the concept, PKL, setup, and plugin-SDK
+  links keep resolving after the docs-site migration.
 
 ## [0.7.0]
 

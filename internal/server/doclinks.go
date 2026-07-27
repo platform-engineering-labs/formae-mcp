@@ -5,13 +5,14 @@ import (
 	"strings"
 )
 
-// docsBaseURL is the SINGLE source of truth for the documentation site's base
-// and version structure. It is the only place the host + version segment is
-// written. When the docs move (e.g. to Mintlify, which drops the /en/latest/
-// version segment), change this constant and the relative Paths in docPages —
-// nothing else. TestDocURLsShareBase enforces that every emitted doc URL is
-// rooted here, so an incomplete migration fails the build.
-const docsBaseURL = "https://docs.formae.io/en/latest/"
+// docsBaseURL is the SINGLE source of truth for the documentation site's base.
+// It is the only place the host (and any version/path prefix) is written. The
+// docs now live on Mintlify at the site root; the old readthedocs tree used a
+// "/en/latest/" version segment here. If the docs move again, change this
+// constant and the relative Paths in docPages — nothing else.
+// TestDocURLsShareBase enforces that every emitted doc URL is rooted here, so
+// an incomplete migration fails the build.
+const docsBaseURL = "https://docs.formae.io/"
 
 // docURL builds a full documentation URL from a docsBaseURL-relative path.
 func docURL(path string) string { return docsBaseURL + path }
@@ -29,28 +30,28 @@ type docPage struct {
 // are kept relative so a docs-site migration is a single-constant change. Each
 // path is verified to resolve on the live site.
 var docPages = []docPage{
-	{"Core concepts", "core-concepts/", "Overview of stacks, targets, resources, formas, modes, drift, discovery."},
-	{"Labels and renaming", "core-concepts/label/", "Resource/stack labels, discovery-assigned labels, and renaming a resource via alias."},
-	{"Stacks", "core-concepts/stack/", "Logical grouping of resources with referential integrity."},
-	{"Targets", "core-concepts/target/", "Cloud accounts/regions where resources are deployed."},
-	{"Forma files", "core-concepts/forma/", "The infrastructure declaration unit."},
-	{"Properties", "core-concepts/properties/", "Resource properties and cross-resource references."},
-	{"Resources", "core-concepts/res/", "Managed and unmanaged cloud resources."},
-	{"Values", "core-concepts/values/", "Resolvables and late-bound values."},
-	{"Apply modes", "core-concepts/apply-modes/", "Reconcile vs patch semantics."},
-	{"Synchronization", "core-concepts/synchronization/", "How the agent keeps cloud state in sync."},
-	{"Discovery", "core-concepts/discovery/", "Finding unmanaged resources for import."},
-	{"Plugins (concept)", "core-concepts/plugin/", "How the plugin architecture works."},
-	{"PKL cheatsheet", "pkl-cheatsheet/", "Minimal PKL syntax for reading/writing forma files."},
-	{"AI coding assistants", "integrations/ai-coding-assistants/", "Setting up the formae MCP with AI coding assistants."},
-	{"Plugin SDK tutorial", "plugin-sdk/tutorial/", "Build a plugin from scratch, end to end."},
-	{"Plugin SDK tutorial — Scaffold", "plugin-sdk/tutorial/01-scaffold/", "Initialize the plugin project structure."},
-	{"Plugin SDK tutorial — Schema", "plugin-sdk/tutorial/02-schema/", "Define resource types in PKL."},
-	{"Plugin SDK tutorial — Target config", "plugin-sdk/tutorial/03-target/", "Define a plugin's target configuration."},
-	{"Plugin SDK tutorial — Create", "plugin-sdk/tutorial/05-create/", "Implement the Create operation."},
-	{"Plugin SDK reference — Schema annotations", "plugin-sdk/reference/schema/", "Canonical PKL annotations reference."},
-	{"Plugin SDK reference — Plugin interface", "plugin-sdk/reference/plugin-interface/", "The ResourcePlugin contract."},
-	{"Plugin SDK reference — Manifest", "plugin-sdk/reference/manifest/", "Plugin manifest (formae-plugin.pkl) format."},
+	{"Core concepts", "documentation/concepts/forma", "Overview of stacks, targets, resources, formas, modes, drift, discovery."},
+	{"Labels and renaming", "documentation/concepts/label", "Resource/stack labels, discovery-assigned labels, and renaming a resource via alias."},
+	{"Stacks", "documentation/concepts/stack", "Logical grouping of resources with referential integrity."},
+	{"Targets", "documentation/concepts/target", "Cloud accounts/regions where resources are deployed."},
+	{"Forma files", "documentation/concepts/forma", "The infrastructure declaration unit."},
+	{"Properties", "documentation/concepts/properties", "Resource properties and cross-resource references."},
+	{"Resources", "documentation/concepts/resources", "Managed and unmanaged cloud resources."},
+	{"Values", "documentation/concepts/values", "Resolvables and late-bound values."},
+	{"Apply modes", "documentation/concepts/apply-modes", "Reconcile vs patch semantics."},
+	{"Synchronization", "documentation/concepts/synchronization", "How the agent keeps cloud state in sync."},
+	{"Discovery", "documentation/concepts/discovery", "Finding unmanaged resources for import."},
+	{"Plugins (concept)", "documentation/concepts/plugin", "How the plugin architecture works."},
+	{"PKL cheatsheet", "documentation/reference/pkl-cheatsheet", "Minimal PKL syntax for reading/writing forma files."},
+	{"AI coding assistants", "documentation/guides/ai-coding-assistants", "Setting up the formae MCP with AI coding assistants."},
+	{"Plugin SDK tutorial", "plugin-development/tutorial", "Build a plugin from scratch, end to end."},
+	{"Plugin SDK tutorial — Scaffold", "plugin-development/tutorial/01-scaffold", "Initialize the plugin project structure."},
+	{"Plugin SDK tutorial — Schema", "plugin-development/tutorial/02-schema", "Define resource types in PKL."},
+	{"Plugin SDK tutorial — Target config", "plugin-development/tutorial/03-target", "Define a plugin's target configuration."},
+	{"Plugin SDK tutorial — Create", "plugin-development/tutorial/05-create", "Implement the Create operation."},
+	{"Plugin SDK reference — Schema annotations", "plugin-development/reference/schema", "Canonical PKL annotations reference."},
+	{"Plugin SDK reference — Plugin interface", "plugin-development/reference/plugin-interface", "The ResourcePlugin contract."},
+	{"Plugin SDK reference — Manifest", "plugin-development/reference/manifest", "Plugin manifest (formae-plugin.pkl) format."},
 }
 
 // mcpDocResources is the curated set of in-server MCP doc resources served

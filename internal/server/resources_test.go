@@ -46,11 +46,14 @@ func TestResources(t *testing.T) {
 	}
 }
 
-// TestResourceDocLinksAreWellFormed guards against the stale plugin-SDK doc
-// URLs that the MCP previously handed to AI assistants (causing 404s). On the
-// docs site every SDK page lives under plugin-sdk/tutorial/ or
-// plugin-sdk/reference/ — there is no top-level /reference/ path and tutorial
-// pages are never directly under /plugin-sdk/<NN>-...
+// TestResourceDocLinksAreWellFormed guards against stale doc URLs that the MCP
+// previously handed to AI assistants (causing 404s). After the Mintlify
+// cutover every doc page lives under the new tree: concepts under
+// documentation/concepts/, the plugin tutorial under
+// plugin-development/tutorial/<NN>-..., SDK reference under
+// plugin-development/reference/. No URL should carry the old /en/latest/
+// version segment, the old plugin-sdk/ or core-concepts/ prefixes, or a
+// tutorial page placed directly under /plugin-development/<NN>-...
 func TestResourceDocLinksAreWellFormed(t *testing.T) {
 	session := connectTestServer(t, "http://localhost:1")
 
@@ -63,10 +66,11 @@ func TestResourceDocLinksAreWellFormed(t *testing.T) {
 		"formae://docs/troubleshooting",
 	}
 
-	// Matches the two known-broken shapes:
-	//  - top-level reference: .../en/latest/reference/...   (must be plugin-sdk/reference/)
-	//  - tutorial page missing tutorial/: .../en/latest/plugin-sdk/02-schema/ (must be plugin-sdk/tutorial/...)
-	brokenLink := regexp.MustCompile(`https?://docs\.formae\.io/en/latest/(reference/|plugin-sdk/\d)`)
+	// Matches the known-broken shapes after the Mintlify cutover:
+	//  - the old readthedocs version segment:      .../en/latest/...
+	//  - an un-migrated old prefix:                 .../plugin-sdk/... or .../core-concepts/...
+	//  - tutorial page missing tutorial/:           .../plugin-development/02-schema (must be plugin-development/tutorial/...)
+	brokenLink := regexp.MustCompile(`https?://docs\.formae\.io/(en/latest/|plugin-sdk/|core-concepts/|plugin-development/\d)`)
 
 	for _, uri := range docURIs {
 		result, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri})
