@@ -55,7 +55,7 @@ func TestRenderAutoReconcilePolicyPKL(t *testing.T) {
 }
 
 func TestFindStackBlock(t *testing.T) {
-	source := `amends "@formae/forma.pkl"
+	source := `extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {
@@ -216,7 +216,7 @@ func TestFindExistingPolicyAutoReconcile(t *testing.T) {
 }
 
 func TestPlanPolicyEditCreateNoPoliciesBlock(t *testing.T) {
-	source := `amends "@formae/forma.pkl"
+	source := `extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {
@@ -658,7 +658,7 @@ func TestFindFormaBlock(t *testing.T) {
 	// Line 1 = amends, 2 = import, 3 = blank, 4 = `forma {`,
 	// 5 = `new formae.Stack {`, 6 = label, 7 = `}` of the stack,
 	// 8 = `}` of the forma block.
-	source := `amends "@formae/forma.pkl"
+	source := `extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {

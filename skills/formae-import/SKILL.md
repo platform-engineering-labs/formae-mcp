@@ -38,7 +38,7 @@ Call `extract_resources` with a query that matches the selected resources. This 
 ### 5. Read the existing IaC codebase
 
 Read the user's existing forma files to understand:
-- **Module composition**: which file is the main forma file (it `amends "@formae/forma.pkl"` and has the `forma {}` block), and how helper modules are imported and spread into it
+- **Module composition**: which file is the main forma file (it `extends "@formae/forma.pkl"`, or the legacy `amends "@formae/forma.pkl"`, and has the `forma {}` block), and how helper modules are imported and spread into it
 - **File organization**: how resources are grouped into files
 - **Naming conventions**: variable names, labels, prefixes
 - **Abstractions**: shared variables (e.g., `vars.pkl`), parametrized modules

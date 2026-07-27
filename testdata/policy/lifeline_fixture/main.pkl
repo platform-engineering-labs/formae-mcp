@@ -1,4 +1,4 @@
-amends "@formae/forma.pkl"
+extends "@formae/forma.pkl"
 import "@formae/formae.pkl"
 
 forma {
