@@ -141,7 +141,7 @@ func policiesHandler(t *testing.T, body string) map[string]http.HandlerFunc {
 	t.Helper()
 	return map[string]http.HandlerFunc{
 		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, body)
+			_, _ = fmt.Fprint(w, body)
 		},
 	}
 }

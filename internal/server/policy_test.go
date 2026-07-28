@@ -223,7 +223,7 @@ func TestCreateInlinePolicyRefusesWhenStandaloneAttached(t *testing.T) {
 
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `[{"Label":"ephemeral-1h","Type":"ttl",`+
+			_, _ = fmt.Fprint(w, `[{"Label":"ephemeral-1h","Type":"ttl",`+
 				`"Config":{"Type":"ttl","TTLSeconds":3600,"OnDependents":"abort"},`+
 				`"AttachedStacks":["lifeline"]}]`)
 		},
@@ -265,7 +265,7 @@ func TestCreateInlinePolicyAllowsDifferentStandaloneType(t *testing.T) {
 	// An auto-reconcile standalone is attached; setting an inline TTL is fine.
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `[{"Label":"nightly-drift","Type":"auto-reconcile",`+
+			_, _ = fmt.Fprint(w, `[{"Label":"nightly-drift","Type":"auto-reconcile",`+
 				`"Config":{"Type":"auto-reconcile","IntervalSeconds":300},`+
 				`"AttachedStacks":["lifeline"]}]`)
 		},
@@ -335,7 +335,7 @@ func TestCreateInlinePolicyRefusesSourceOnlyStandalone(t *testing.T) {
 	// Agent knows nothing yet.
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `[]`)
+			_, _ = fmt.Fprint(w, `[]`)
 		},
 	})
 	defer agent.Close()

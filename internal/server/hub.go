@@ -60,7 +60,7 @@ func (c *HubClient) SearchPlugins(query string) ([]HubPlugin, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hub request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("hub returned status %d", resp.StatusCode)
 	}
@@ -90,7 +90,7 @@ func (c *HubClient) GetPlugin(name string) (HubPluginDetail, error) {
 	if err != nil {
 		return d, fmt.Errorf("hub request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return d, fmt.Errorf("hub returned status %d for plugin %q", resp.StatusCode, name)
 	}
@@ -165,7 +165,7 @@ func (c *HubClient) tagExists(owner, repo, tag string) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -197,7 +197,7 @@ func (c *HubClient) listExamplesForRepo(repoURL, ref string) ([]Example, error) 
 	if err != nil {
 		return nil, fmt.Errorf("github request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("github returned status %d listing examples", resp.StatusCode)
 	}
@@ -322,7 +322,7 @@ func (c *HubClient) GetExample(pluginName, exampleName, version string) (GetExam
 	if err != nil {
 		return res, fmt.Errorf("github request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return res, fmt.Errorf("github returned status %d listing example dir", resp.StatusCode)
 	}
@@ -348,11 +348,11 @@ func (c *HubClient) GetExample(pluginName, exampleName, version string) (GetExam
 			return res, fmt.Errorf("download %s: %w", e.Name, err)
 		}
 		if fileResp.StatusCode != http.StatusOK {
-			fileResp.Body.Close()
+			_ = fileResp.Body.Close()
 			return res, fmt.Errorf("download %s returned status %d", e.Name, fileResp.StatusCode)
 		}
 		content, readErr := io.ReadAll(fileResp.Body)
-		fileResp.Body.Close()
+		_ = fileResp.Body.Close()
 		if readErr != nil {
 			return res, fmt.Errorf("read %s: %w", e.Name, readErr)
 		}

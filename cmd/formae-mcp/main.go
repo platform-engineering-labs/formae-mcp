@@ -31,7 +31,7 @@ Flags:
 func tryHelp(args []string, stdout io.Writer) bool {
 	for _, arg := range args {
 		if arg == "--help" || arg == "-help" || arg == "-h" {
-			fmt.Fprint(stdout, usage)
+			_, _ = fmt.Fprint(stdout, usage)
 			return true
 		}
 	}
@@ -44,7 +44,7 @@ func tryHelp(args []string, stdout io.Writer) bool {
 func tryVersion(args []string, version string, stdout io.Writer) bool {
 	for _, arg := range args {
 		if arg == "--version" || arg == "-version" || arg == "-V" {
-			fmt.Fprintln(stdout, version)
+			_, _ = fmt.Fprintln(stdout, version)
 			return true
 		}
 	}
