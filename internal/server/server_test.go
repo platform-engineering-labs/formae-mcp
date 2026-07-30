@@ -43,14 +43,14 @@ func connectTestServer(t *testing.T, agentURL string) *mcp.ClientSession {
 	if err != nil {
 		t.Fatalf("server.Connect failed: %v", err)
 	}
-	t.Cleanup(func() { serverSession.Close() })
+	t.Cleanup(func() { _ = serverSession.Close() })
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	clientSession, err := client.Connect(ctx, t2, nil)
 	if err != nil {
 		t.Fatalf("client.Connect failed: %v", err)
 	}
-	t.Cleanup(func() { clientSession.Close() })
+	t.Cleanup(func() { _ = clientSession.Close() })
 
 	return clientSession
 }
@@ -112,9 +112,9 @@ func TestListResources(t *testing.T) {
 		"GET /api/v1/resources": func(w http.ResponseWriter, r *http.Request) {
 			query := r.URL.Query().Get("query")
 			if query == "managed:false" {
-				fmt.Fprint(w, `[{"id":"r1","type":"AWS::S3::Bucket","label":"unmanaged-bucket","managed":false}]`)
+				_, _ = fmt.Fprint(w, `[{"id":"r1","type":"AWS::S3::Bucket","label":"unmanaged-bucket","managed":false}]`)
 			} else {
-				fmt.Fprint(w, `[{"id":"r1","type":"AWS::S3::Bucket","label":"my-bucket","managed":true}]`)
+				_, _ = fmt.Fprint(w, `[{"id":"r1","type":"AWS::S3::Bucket","label":"my-bucket","managed":true}]`)
 			}
 		},
 	})
@@ -159,7 +159,7 @@ func TestListResources(t *testing.T) {
 func TestListStacks(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/stacks": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `[{"label":"default","description":"Default stack","resource_count":5}]`)
+			_, _ = fmt.Fprint(w, `[{"label":"default","description":"Default stack","resource_count":5}]`)
 		},
 	})
 	defer agent.Close()
@@ -179,7 +179,7 @@ func TestListStacks(t *testing.T) {
 func TestListPolicies(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `[{"Label":"ephemeral-1h","Type":"ttl","Config":{"TTLSeconds":3600,"OnDependents":"abort"},"AttachedStacks":["dev-stack-1"]}]`)
+			_, _ = fmt.Fprint(w, `[{"Label":"ephemeral-1h","Type":"ttl","Config":{"TTLSeconds":3600,"OnDependents":"abort"},"AttachedStacks":["dev-stack-1"]}]`)
 		},
 	})
 	defer agent.Close()
@@ -227,7 +227,7 @@ func TestListPoliciesEmpty(t *testing.T) {
 func TestListTargets(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/targets": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `[{"label":"prod-us-east-1","namespace":"AWS"}]`)
+			_, _ = fmt.Fprint(w, `[{"label":"prod-us-east-1","namespace":"AWS"}]`)
 		},
 	})
 	defer agent.Close()
@@ -247,7 +247,7 @@ func TestListTargets(t *testing.T) {
 func TestGetAgentStats(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/stats": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"version":"0.1.0","managed_resources":42,"unmanaged_resources":7}`)
+			_, _ = fmt.Fprint(w, `{"version":"0.1.0","managed_resources":42,"unmanaged_resources":7}`)
 		},
 	})
 	defer agent.Close()
@@ -269,7 +269,7 @@ func TestGetCommandStatus(t *testing.T) {
 		"GET /api/v1/commands/status": func(w http.ResponseWriter, r *http.Request) {
 			id := r.URL.Query().Get("id")
 			if id == "cmd-123" {
-				fmt.Fprint(w, `{"id":"cmd-123","status":"completed"}`)
+				_, _ = fmt.Fprint(w, `{"id":"cmd-123","status":"completed"}`)
 			} else {
 				http.NotFound(w, r)
 			}
@@ -305,7 +305,7 @@ func TestGetCommandStatus(t *testing.T) {
 func TestListCommands(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/commands/status": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"Commands":[{"id":"cmd-1","status":"completed"}]}`)
+			_, _ = fmt.Fprint(w, `{"Commands":[{"id":"cmd-1","status":"completed"}]}`)
 		},
 	})
 	defer agent.Close()
@@ -328,7 +328,7 @@ func TestCancelCommands(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/commands/cancel": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusAccepted)
-			fmt.Fprint(w, `{"CommandIds":["cmd-1"]}`)
+			_, _ = fmt.Fprint(w, `{"CommandIds":["cmd-1"]}`)
 		},
 	})
 	defer agent.Close()
@@ -397,7 +397,7 @@ func TestForceCheckTTL(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/admin/check-ttl": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `{"ExpiredStacks":["dev-feature"],"DestroyedCommands":["cmd-42"]}`)
+			_, _ = fmt.Fprint(w, `{"ExpiredStacks":["dev-feature"],"DestroyedCommands":["cmd-42"]}`)
 		},
 	})
 	defer agent.Close()
@@ -422,7 +422,7 @@ func TestForceReconcileStack(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/stacks/lifeline/reconcile": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusAccepted)
-			fmt.Fprint(w, `{"CommandID":"cmd-99","Stack":"lifeline"}`)
+			_, _ = fmt.Fprint(w, `{"CommandID":"cmd-99","Stack":"lifeline"}`)
 		},
 	})
 	defer agent.Close()
@@ -448,7 +448,7 @@ func TestForceReconcileStackNoPolicy(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/stacks/lifeline/reconcile": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
-			fmt.Fprint(w, `{"error":"stack 'lifeline' does not have an auto-reconcile policy attached"}`)
+			_, _ = fmt.Fprint(w, `{"error":"stack 'lifeline' does not have an auto-reconcile policy attached"}`)
 		},
 	})
 	defer agent.Close()
@@ -520,7 +520,7 @@ func TestApplyForma_JSONFile(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/commands": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusAccepted)
-			fmt.Fprint(w, `{"id":"cmd-apply-1","status":"pending"}`)
+			_, _ = fmt.Fprint(w, `{"id":"cmd-apply-1","status":"pending"}`)
 		},
 	})
 	defer agent.Close()
@@ -582,7 +582,7 @@ func TestDestroyForma_ByQuery(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/commands": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusAccepted)
-			fmt.Fprint(w, `{"id":"cmd-destroy-1","status":"pending"}`)
+			_, _ = fmt.Fprint(w, `{"id":"cmd-destroy-1","status":"pending"}`)
 		},
 	})
 	defer agent.Close()
@@ -608,7 +608,7 @@ func TestDestroyForma_ByQuery(t *testing.T) {
 func TestListChangesSinceLastReconcile_SingleStack(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/stacks/production/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"my-bucket","Operation":"update"}]}`)
+			_, _ = fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"my-bucket","Operation":"update"}]}`)
 		},
 	})
 	defer agent.Close()
@@ -636,13 +636,13 @@ func TestListChangesSinceLastReconcile_SingleStack(t *testing.T) {
 func TestListChangesSinceLastReconcile_AllStacks(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/stacks": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `[{"Label":"production"},{"Label":"staging"}]`)
+			_, _ = fmt.Fprint(w, `[{"Label":"production"},{"Label":"staging"}]`)
 		},
 		"GET /api/v1/stacks/production/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"prod-bucket","Operation":"update"}]}`)
+			_, _ = fmt.Fprint(w, `{"ModifiedResources":[{"Stack":"production","Type":"AWS::S3::Bucket","Label":"prod-bucket","Operation":"update"}]}`)
 		},
 		"GET /api/v1/stacks/staging/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"ModifiedResources":[]}`)
+			_, _ = fmt.Fprint(w, `{"ModifiedResources":[]}`)
 		},
 	})
 	defer agent.Close()
@@ -666,7 +666,7 @@ func TestListChangesSinceLastReconcile_AllStacks(t *testing.T) {
 func TestListChangesSinceLastReconcile_NoChanges(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/stacks/production/changes-since-last-reconcile": func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"ModifiedResources":[]}`)
+			_, _ = fmt.Fprint(w, `{"ModifiedResources":[]}`)
 		},
 	})
 	defer agent.Close()
@@ -720,7 +720,7 @@ func TestListResources_AgentError(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/resources": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, `{"error":"internal server error"}`)
+			_, _ = fmt.Fprint(w, `{"error":"internal server error"}`)
 		},
 	})
 	defer agent.Close()
