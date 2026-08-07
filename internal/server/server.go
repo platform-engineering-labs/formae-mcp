@@ -383,7 +383,36 @@ func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, in
 	if err := c.CheckHealth(); err != nil {
 		return errorResult(err), nil, nil
 	}
-	return textResult("Formae agent is healthy and reachable."), nil, nil
+	msg := "Formae agent is healthy and reachable."
+	if notice := s.buildSkewNotice(input.Profile, c); notice != "" {
+		msg += "\n\n" + notice
+	}
+	return textResult(msg), nil, nil
+}
+
+// buildSkewNotice fetches the agent version and the local formae version and
+// returns a skew notice when they differ, or "" when skew cannot be determined.
+// It never returns an error — version-skew information is advisory only.
+func (s *Server) buildSkewNotice(profileName string, c *FormaeClient) string {
+	statsJSON, err := c.GetAgentStats()
+	if err != nil {
+		return ""
+	}
+	var stats struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(statsJSON, &stats); err != nil || stats.Version == "" {
+		return ""
+	}
+	ctx, err := s.resolveCtx(profileName)
+	if err != nil {
+		return ""
+	}
+	localVer, err := featuregate.Detect(ctx.FormaeBin)
+	if err != nil {
+		return ""
+	}
+	return skewNotice(stats.Version, localVer)
 }
 
 func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
@@ -497,6 +526,9 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		return errorResult(fmt.Errorf("failed to read extracted file: %w", err)), nil, nil
 	}
 
+	if notice := s.buildSkewNotice(input.Profile, newClientFromCtx(ctx)); notice != "" {
+		return textResult(notice + "\n\n" + string(content)), nil, nil
+	}
 	return textResult(string(content)), nil, nil
 }
 
@@ -594,6 +626,9 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	result, err := c.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, "formae-mcp")
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	if notice := s.buildSkewNotice(input.Profile, c); notice != "" {
+		return textResult(notice + "\n\n" + string(result)), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }

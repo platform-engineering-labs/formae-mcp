@@ -87,7 +87,7 @@ func GuardFeature(f Feature, bin string) error {
 	if err != nil {
 		return fmt.Errorf("could not determine formae version: %w", err)
 	}
-	if compareVersions(got, min) < 0 {
+	if CompareVersions(got, min) < 0 {
 		return fmt.Errorf("requires formae >= %s (connected: %s)", min, got)
 	}
 	return nil
@@ -111,8 +111,8 @@ func parseFormaeVersion(out string) (string, error) {
 	return m[1], nil
 }
 
-// compareVersions returns -1, 0, or 1 comparing two X.Y.Z strings numerically.
-func compareVersions(a, b string) int {
+// CompareVersions returns -1, 0, or 1 comparing two X.Y.Z strings numerically.
+func CompareVersions(a, b string) int {
 	pa, pb := parseParts(a), parseParts(b)
 	for i := 0; i < 3; i++ {
 		if pa[i] < pb[i] {
