@@ -133,17 +133,21 @@ func formaJSONHasStack(formaJSON []byte, label string) bool {
 	return false
 }
 
-// formaeEval is the production EvalFunc — invokes `formae eval` on the file.
-func formaeEval(path string) ([]byte, error) {
-	cmd := exec.Command("formae", "eval", path, "--output-schema", "json", "--output-consumer", "machine")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("formae eval failed for %s: %s", path, string(exitErr.Stderr))
+// makeFormaeEval returns the production EvalFunc — invokes `<bin> eval` on the
+// file. Pass the resolved binary from the execution context so all eval calls
+// go through the same mode-aware resolver as the rest of the server.
+func makeFormaeEval(bin string) EvalFunc {
+	return func(path string) ([]byte, error) {
+		cmd := exec.Command(bin, "eval", path, "--output-schema", "json", "--output-consumer", "machine")
+		out, err := cmd.Output()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return nil, fmt.Errorf("formae eval failed for %s: %s", path, string(exitErr.Stderr))
+			}
+			return nil, fmt.Errorf("formae eval failed for %s: %w", path, err)
 		}
-		return nil, fmt.Errorf("formae eval failed for %s: %w", path, err)
+		return out, nil
 	}
-	return out, nil
 }
 
 // policySourceNotFoundError indicates no PKL file in the workspace declares the

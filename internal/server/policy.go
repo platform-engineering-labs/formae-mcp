@@ -13,14 +13,14 @@ import (
 )
 
 // injectedEvalForTest allows tests to substitute a fake EvalFunc without
-// depending on the formae binary. Production code uses formaeEval.
+// depending on the formae binary. Production code uses makeFormaeEval.
 var injectedEvalForTest EvalFunc
 
-func currentEvalFunc() EvalFunc {
+func currentEvalFunc(bin string) EvalFunc {
 	if injectedEvalForTest != nil {
 		return injectedEvalForTest
 	}
-	return formaeEval
+	return makeFormaeEval(bin)
 }
 
 func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.CreateInlinePolicyInput) (*mcp.CallToolResult, any, error) {
@@ -73,7 +73,7 @@ func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequ
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc())
+		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc(s.formaeBin()))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
