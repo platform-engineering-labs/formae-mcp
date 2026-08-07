@@ -20,7 +20,7 @@ Register the marketplace:
 Install the plugin:
 
 ```
-/plugin install formae-mcp@formae-marketplace
+/plugin install formae@formae-marketplace
 ```
 
 Run `/reload-plugins` (Claude Code v2.1.116+) to apply the install without restarting your session. On older versions, restart Claude Code instead. The MCP server binary is built automatically on first use.
@@ -53,6 +53,22 @@ See [.codex/INSTALL.md](.codex/INSTALL.md) for Codex-specific installation instr
 
 See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installation instructions.
 
+## Migration from `formae-mcp`
+
+The plugin was previously distributed under the name `formae-mcp`. If you installed it under that name, re-add it under the new name `formae`:
+
+```
+/plugin install formae@formae-marketplace
+```
+
+Then remove the old entry:
+
+```
+/plugin remove formae-mcp
+```
+
+Run `/reload-plugins` to apply the change without restarting your session.
+
 ## Available Skills
 
 ### Authoring
@@ -82,6 +98,8 @@ See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installat
 | `formae-plugin-new` | Scaffold a new formae resource plugin |
 | `formae-plugin-add-resource` | Add a new resource type to an existing plugin |
 | `formae-config` | Switch, list, save, create, delete, compare, view, and edit named formae configuration profiles (drives `formae profile`; requires formae >= 0.87.0) |
+| `formae:setup` | Install or repair the formae MCP — ensures the prebuilt binary and bundled formae are present and the MCP is registered in the current harness |
+| `formae:upgrade` | Upgrade local formae when the connected agent is newer (classic mode) — always asks first and warns that it may move a pinned formae |
 
 ## Available MCP Tools
 

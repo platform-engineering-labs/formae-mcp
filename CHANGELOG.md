@@ -14,6 +14,7 @@ Install via the
 
 ### Changed
 
+- Plugin renamed from `formae-mcp` to `formae`; added `/formae:setup` and `/formae:upgrade`.
 - The plugin now runs a prebuilt binary instead of compiling on first launch; a bundled `formae` is used when none is installed.
 
 ## [0.8.0]
