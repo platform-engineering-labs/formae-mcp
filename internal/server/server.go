@@ -376,15 +376,16 @@ func (s *Server) handleGetAgentStats(_ context.Context, _ *mcp.CallToolRequest, 
 }
 
 func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+	ctx, err := s.resolveCtx(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
+	c := newClientFromCtx(ctx)
 	if err := c.CheckHealth(); err != nil {
 		return errorResult(err), nil, nil
 	}
 	msg := "Formae agent is healthy and reachable."
-	if notice := s.buildSkewNotice(input.Profile, c); notice != "" {
+	if notice := s.buildSkewNotice(ctx.FormaeBin, c); notice != "" {
 		msg += "\n\n" + notice
 	}
 	return textResult(msg), nil, nil
@@ -393,7 +394,8 @@ func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, in
 // buildSkewNotice fetches the agent version and the local formae version and
 // returns a skew notice when they differ, or "" when skew cannot be determined.
 // It never returns an error — version-skew information is advisory only.
-func (s *Server) buildSkewNotice(profileName string, c *FormaeClient) string {
+// The caller passes formaeBin (already resolved) to avoid a redundant resolveCtx call.
+func (s *Server) buildSkewNotice(formaeBin string, c *FormaeClient) string {
 	statsJSON, err := c.GetAgentStats()
 	if err != nil {
 		return ""
@@ -404,11 +406,7 @@ func (s *Server) buildSkewNotice(profileName string, c *FormaeClient) string {
 	if err := json.Unmarshal(statsJSON, &stats); err != nil || stats.Version == "" {
 		return ""
 	}
-	ctx, err := s.resolveCtx(profileName)
-	if err != nil {
-		return ""
-	}
-	localVer, err := featuregate.Detect(ctx.FormaeBin)
+	localVer, err := featuregate.Detect(formaeBin)
 	if err != nil {
 		return ""
 	}
@@ -526,10 +524,7 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		return errorResult(fmt.Errorf("failed to read extracted file: %w", err)), nil, nil
 	}
 
-	if notice := s.buildSkewNotice(input.Profile, newClientFromCtx(ctx)); notice != "" {
-		return textResult(notice + "\n\n" + string(content)), nil, nil
-	}
-	return textResult(string(content)), nil, nil
+	return withNotice(textResult(string(content)), s.buildSkewNotice(ctx.FormaeBin, newClientFromCtx(ctx))), nil, nil
 }
 
 func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
@@ -627,10 +622,7 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if notice := s.buildSkewNotice(input.Profile, c); notice != "" {
-		return textResult(notice + "\n\n" + string(result)), nil, nil
-	}
-	return jsonResult(result), nil, nil
+	return withNotice(jsonResult(result), s.buildSkewNotice(ctx.FormaeBin, c)), nil, nil
 }
 
 func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
@@ -756,6 +748,18 @@ func evalFormaFile(ctx execctx.Context, filePath string) ([]byte, error) {
 	}
 
 	return output, nil
+}
+
+// withNotice appends notice as a separate text content block to res when notice
+// is non-empty, leaving the primary content block pristine. When notice is ""
+// it returns res unchanged. This keeps structured output (JSON receipts, PKL
+// code) in the first block so callers can parse it without stripping a prefix.
+func withNotice(res *mcp.CallToolResult, notice string) *mcp.CallToolResult {
+	if notice == "" {
+		return res
+	}
+	res.Content = append(res.Content, &mcp.TextContent{Text: notice})
+	return res
 }
 
 func jsonResult(data json.RawMessage) *mcp.CallToolResult {

@@ -2,6 +2,7 @@ package featuregate
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -63,16 +64,31 @@ func SetDetectForTest(v string) {
 	cache = map[string]result{}
 }
 
-// Detect returns the version of the formae binary at bin, memoized per binary
-// path so a mid-process binary swap is not masked by a stale cache entry.
+// fileIdentityKey returns a cache key that includes the file's mtime and size
+// so an in-place binary upgrade (same path, new build) invalidates the entry.
+// If stat fails (path does not exist, permissions, etc.) it falls back to the
+// plain path so callers with synthetic/stub paths still work.
+func fileIdentityKey(bin string) string {
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return bin
+	}
+	return fmt.Sprintf("%s\x00%d\x00%d", bin, fi.ModTime().UnixNano(), fi.Size())
+}
+
+// Detect returns the version of the formae binary at bin, memoized by file
+// identity (path + mtime + size). An in-place binary upgrade (same path, new
+// build) causes re-detection on the next call. When stat is unavailable the
+// key falls back to the plain path.
 func Detect(bin string) (string, error) {
+	key := fileIdentityKey(bin)
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	if r, ok := cache[bin]; ok {
+	if r, ok := cache[key]; ok {
 		return r.ver, r.err
 	}
 	ver, err := detectFn(bin)
-	cache[bin] = result{ver, err}
+	cache[key] = result{ver, err}
 	return ver, err
 }
 

@@ -2,8 +2,10 @@ package featuregate
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseFormaeVersion(t *testing.T) {
@@ -87,5 +89,44 @@ func TestDetectIsKeyedByBinary(t *testing.T) {
 
 	if calls["/a/formae"] != 1 || calls["/b/formae"] != 1 {
 		t.Fatalf("expected per-binary memoization, got %v", calls)
+	}
+}
+
+func TestDetectRerunsOnBinaryChange(t *testing.T) {
+	t.Cleanup(resetCacheForTest)
+	resetCacheForTest()
+
+	// Write a temp file to stand in for the formae binary.
+	f, err := os.CreateTemp("", "formae-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
+	if _, err := f.WriteString("v1"); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+
+	calls := 0
+	detectFn = func(bin string) (string, error) { calls++; return "0.90.0", nil }
+
+	_, _ = Detect(f.Name())
+	if calls != 1 {
+		t.Fatalf("expected 1 call after first detect, got %d", calls)
+	}
+
+	// Simulate an in-place upgrade: overwrite with different content and bump mtime.
+	if err := os.WriteFile(f.Name(), []byte("v2-longer"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Ensure mtime changes even on fast filesystems.
+	future := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(f.Name(), future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = Detect(f.Name())
+	if calls != 2 {
+		t.Fatalf("expected detectFn re-run after binary change, got %d calls", calls)
 	}
 }
