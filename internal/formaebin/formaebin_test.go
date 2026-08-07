@@ -1,9 +1,12 @@
 package formaebin
 
-import "testing"
+import (
+	"os/exec"
+	"testing"
+)
 
 func TestResolve(t *testing.T) {
-	notFound := func(string) (string, error) { return "", exec_ErrNotFound }
+	notFound := func(string) (string, error) { return "", exec.ErrNotFound }
 	found := func(p string) func(string) (string, error) {
 		return func(string) (string, error) { return p, nil }
 	}

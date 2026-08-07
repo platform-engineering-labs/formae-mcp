@@ -7,9 +7,6 @@ import (
 	"path/filepath"
 )
 
-// exec_ErrNotFound mirrors exec.ErrNotFound for test injection.
-var exec_ErrNotFound = exec.ErrNotFound
-
 // Mode is the connection mode a call runs in. Classic talks to the user's own
 // agent; Hosted (not yet resolved in this phase) talks to the managed platform.
 type Mode int

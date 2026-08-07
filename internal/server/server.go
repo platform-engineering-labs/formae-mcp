@@ -94,7 +94,7 @@ func (s *Server) resolveCtx(profileName string) (execctx.Context, error) {
 		return execctx.Context{
 			Mode:      formaebin.Classic,
 			URL:       s.forcedEndpoint,
-			FormaeBin: formaebin.NewBinResolver().Resolve(formaebin.Classic),
+			FormaeBin: s.ctxResolver.BinFor(formaebin.Classic),
 		}, nil
 	}
 	return s.ctxResolver.Resolve(profileName)
