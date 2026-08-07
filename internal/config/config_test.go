@@ -315,6 +315,31 @@ cli {
 	}
 }
 
+func TestAgentEndpoint_BareAmendsProfileDefaultsLocalhost(t *testing.T) {
+	// A profile created by `formae profile create` is a schema-default-only stub
+	// that amends the config schema and declares no explicit cli.api; it must
+	// resolve to the localhost default rather than being rejected.
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	t.Setenv("FORMAE_AGENT_URL", "")
+	t.Setenv("FORMAE_AGENT_PORT", "")
+	writeProfile(t, dir, "local", `amends "formae:/Config.pkl"
+// cli {
+//     api {
+//         url  = "http://my-agent.example.com"
+//         port = 49684
+//     }
+// }
+`)
+	url, port, err := AgentEndpoint("local")
+	if err != nil {
+		t.Fatalf("expected no error for bare-amends profile, got %v", err)
+	}
+	if url != "http://localhost" || port != "49684" {
+		t.Errorf("expected localhost default, got %s:%s", url, port)
+	}
+}
+
 func TestAgentEndpoint_RequestedMissingProfileHardErrors(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("FORMAE_CONFIG_DIR", dir)

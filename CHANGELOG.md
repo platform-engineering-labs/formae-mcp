@@ -12,6 +12,14 @@ Install via the
 
 ## [0.8.0]
 
+### Fixed
+
+- A profile created by `formae profile create` (a schema-default-only stub that
+  `amends` the config schema and declares no explicit `cli.api`) is no longer
+  rejected with `profile "<name>" has no resolvable cli.api endpoint`. Such a
+  profile now correctly inherits the `http://localhost:49684` default. Missing,
+  unreadable, or stale-active profiles remain hard errors.
+
 ### Changed
 
 - The authoring guidance now teaches `extends "@formae/forma.pkl"` with a typed

@@ -67,7 +67,10 @@ func AgentEndpoint(profileName string) (url, port string, err error) {
 }
 
 // endpointFromProfile reads a profile's PKL and extracts its cli.api endpoint.
-// A profile that exists but yields neither url nor port is a hard error.
+// A profile that is missing or unreadable is a hard error; a profile that exists
+// and is readable but declares no explicit cli.api is valid (it inherits the
+// schema's localhost defaults, exactly like the stub `formae profile create`
+// writes), so it returns empty fields for AgentEndpoint to default-fill.
 func endpointFromProfile(name string) (url, port string, err error) {
 	path, err := profile.ProfilePath(name)
 	if err != nil {
@@ -78,9 +81,6 @@ func endpointFromProfile(name string) (url, port string, err error) {
 		return "", "", fmt.Errorf("profile %q not found: %w", name, rerr)
 	}
 	url, port = parseCliAPI(string(data))
-	if url == "" && port == "" {
-		return "", "", fmt.Errorf("profile %q has no resolvable cli.api endpoint", name)
-	}
 	return url, port, nil
 }
 
