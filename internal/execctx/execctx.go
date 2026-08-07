@@ -31,6 +31,13 @@ func NewResolver(bin formaebin.BinResolver) *Resolver {
 	return &Resolver{endpoint: config.AgentEndpoint, bin: bin}
 }
 
+// BinFor returns the resolved binary path for a mode without requiring a full
+// profile resolution. Use this to get a binary path for feature-gate checks in
+// handlers that do not otherwise need a full execution context.
+func (r *Resolver) BinFor(mode formaebin.Mode) string {
+	return r.bin.Resolve(mode)
+}
+
 // Resolve produces the context for an optional profile name. This phase always
 // resolves classic mode; a later phase adds hosted detection here (and only
 // here), which is why every consumer must read Mode from the returned Context

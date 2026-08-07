@@ -32,7 +32,7 @@ func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequ
 	// shipped in formae 0.88.0 (before it, the label was dropped and the policy
 	// churned a phantom update every apply). TTL and removals are unaffected.
 	if input.Operation == "set" && input.PolicyType == "auto_reconcile" {
-		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy, s.formaeBin()); err != nil {
 			return errorResult(err), nil, nil
 		}
 	}

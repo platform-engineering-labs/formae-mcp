@@ -18,12 +18,13 @@ import (
 // auto-reconcile feature (formae >= 0.88.0) when the operation creates or
 // updates an auto-reconcile policy. policyType is the MCP wire form and may be
 // empty for operations (attach/detach/delete) that never write policy config.
-func guardStandalonePolicy(policyType string) error {
-	if err := featuregate.GuardFeature(featuregate.FeatureStandalonePolicy); err != nil {
+// bin is the resolved formae binary path.
+func guardStandalonePolicy(policyType, bin string) error {
+	if err := featuregate.GuardFeature(featuregate.FeatureStandalonePolicy, bin); err != nil {
 		return err
 	}
 	if policyType == "auto_reconcile" {
-		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy, bin); err != nil {
 			return err
 		}
 	}
@@ -139,7 +140,7 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if err := validateStandalonePolicyFields(input.Label, input.PolicyType, input.TTLSeconds, input.OnDependents, input.IntervalSeconds); err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := guardStandalonePolicy(input.PolicyType); err != nil {
+	if err := guardStandalonePolicy(input.PolicyType, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 
@@ -247,7 +248,7 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if input.PolicyLabel == "" {
 		return errorResult(fmt.Errorf("policy_label is required")), nil, nil
 	}
-	if err := guardStandalonePolicy(""); err != nil {
+	if err := guardStandalonePolicy("", s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 
@@ -367,7 +368,7 @@ func (s *Server) handleDetachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if input.PolicyLabel == "" {
 		return errorResult(fmt.Errorf("policy_label is required")), nil, nil
 	}
-	if err := guardStandalonePolicy(""); err != nil {
+	if err := guardStandalonePolicy("", s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 
@@ -432,7 +433,7 @@ func (s *Server) handleDeleteStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if input.Label == "" {
 		return errorResult(fmt.Errorf("label is required")), nil, nil
 	}
-	if err := guardStandalonePolicy(""); err != nil {
+	if err := guardStandalonePolicy("", s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 

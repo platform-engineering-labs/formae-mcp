@@ -36,52 +36,54 @@ var registry = map[Feature]string{
 	FeatureAutoReconcilePolicy: "0.88.0",
 }
 
-// detectFn is the version source; overridable in tests.
-var detectFn = detectFromCLI
+type result struct {
+	ver string
+	err error
+}
 
 var (
-	cacheMu   sync.Mutex
-	cached    bool
-	cachedVer string
-	cachedErr error
+	cacheMu  sync.Mutex
+	cache    = map[string]result{}
+	detectFn = detectFromCLI // func(bin string) (string, error)
 )
 
-// resetCacheForTest clears the memoized version (tests only).
+// resetCacheForTest clears the per-binary version cache (tests only).
 func resetCacheForTest() {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	cached, cachedVer, cachedErr = false, "", nil
+	cache = map[string]result{}
 	detectFn = detectFromCLI
 }
 
-// SetDetectForTest overrides version detection for tests and clears the cache.
+// SetDetectForTest forces a version for any binary and clears the cache.
 func SetDetectForTest(v string) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	detectFn = func() (string, error) { return v, nil }
-	cached, cachedVer, cachedErr = false, "", nil
+	detectFn = func(string) (string, error) { return v, nil }
+	cache = map[string]result{}
 }
 
-// Detect returns the local formae version (e.g. "0.87.0"), memoized for the
-// process lifetime.
-func Detect() (string, error) {
+// Detect returns the version of the formae binary at bin, memoized per binary
+// path so a mid-process binary swap is not masked by a stale cache entry.
+func Detect(bin string) (string, error) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	if !cached {
-		cachedVer, cachedErr = detectFn()
-		cached = true
+	if r, ok := cache[bin]; ok {
+		return r.ver, r.err
 	}
-	return cachedVer, cachedErr
+	ver, err := detectFn(bin)
+	cache[bin] = result{ver, err}
+	return ver, err
 }
 
-// GuardFeature returns nil if the local formae satisfies the feature's minimum
-// version, else a "requires formae >= X.Y.Z (connected: A.B.C)" error.
-func GuardFeature(f Feature) error {
+// GuardFeature returns nil if the formae binary at bin satisfies the feature's
+// minimum version, else a "requires formae >= X.Y.Z (connected: A.B.C)" error.
+func GuardFeature(f Feature, bin string) error {
 	min, ok := registry[f]
 	if !ok {
 		return fmt.Errorf("unknown feature %q", f)
 	}
-	got, err := Detect()
+	got, err := Detect(bin)
 	if err != nil {
 		return fmt.Errorf("could not determine formae version: %w", err)
 	}
@@ -91,8 +93,8 @@ func GuardFeature(f Feature) error {
 	return nil
 }
 
-func detectFromCLI() (string, error) {
-	out, err := exec.Command("formae", "--version").CombinedOutput()
+func detectFromCLI(bin string) (string, error) {
+	out, err := exec.Command(bin, "--version").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("formae --version failed: %w (output: %s)", err, string(out))
 	}

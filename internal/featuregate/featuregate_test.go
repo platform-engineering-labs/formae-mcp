@@ -43,23 +43,23 @@ func TestGuardFeature(t *testing.T) {
 
 	// too old
 	resetCacheForTest()
-	detectFn = func() (string, error) { return "0.86.0", nil }
-	err := GuardFeature(FeatureProfile)
+	detectFn = func(string) (string, error) { return "0.86.0", nil }
+	err := GuardFeature(FeatureProfile, "/usr/local/bin/formae")
 	if err == nil || !strings.Contains(err.Error(), "requires formae >= 0.87.0") {
 		t.Fatalf("expected version-floor error, got %v", err)
 	}
 
 	// new enough
 	resetCacheForTest()
-	detectFn = func() (string, error) { return "0.87.0", nil }
-	if err := GuardFeature(FeatureProfile); err != nil {
+	detectFn = func(string) (string, error) { return "0.87.0", nil }
+	if err := GuardFeature(FeatureProfile, "/usr/local/bin/formae"); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 
 	// detection error
 	resetCacheForTest()
-	detectFn = func() (string, error) { return "", errors.New("boom") }
-	if err := GuardFeature(FeatureProfile); err == nil {
+	detectFn = func(string) (string, error) { return "", errors.New("boom") }
+	if err := GuardFeature(FeatureProfile, "/usr/local/bin/formae"); err == nil {
 		t.Fatal("expected error when detection fails")
 	}
 }
@@ -68,10 +68,24 @@ func TestDetectCaches(t *testing.T) {
 	t.Cleanup(resetCacheForTest)
 	resetCacheForTest()
 	calls := 0
-	detectFn = func() (string, error) { calls++; return "0.87.0", nil }
-	_, _ = Detect()
-	_, _ = Detect()
+	detectFn = func(string) (string, error) { calls++; return "0.87.0", nil }
+	_, _ = Detect("/a/formae")
+	_, _ = Detect("/a/formae")
 	if calls != 1 {
 		t.Errorf("expected detectFn called once, got %d", calls)
+	}
+}
+
+func TestDetectIsKeyedByBinary(t *testing.T) {
+	resetCacheForTest()
+	calls := map[string]int{}
+	detectFn = func(bin string) (string, error) { calls[bin]++; return "0.90.0", nil }
+
+	_, _ = Detect("/a/formae")
+	_, _ = Detect("/a/formae")
+	_, _ = Detect("/b/formae")
+
+	if calls["/a/formae"] != 1 || calls["/b/formae"] != 1 {
+		t.Fatalf("expected per-binary memoization, got %v", calls)
 	}
 }

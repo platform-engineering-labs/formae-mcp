@@ -69,7 +69,7 @@ func New(endpoint string) *Server {
 // newClientFromCtx directly; clientFor remains for handlers not yet migrated.
 func (s *Server) clientFor(profileName string) (*FormaeClient, error) {
 	if profileName != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 			return nil, err
 		}
 		if err := profile.ValidateName(profileName); err != nil {
@@ -98,6 +98,13 @@ func (s *Server) resolveCtx(profileName string) (execctx.Context, error) {
 		}, nil
 	}
 	return s.ctxResolver.Resolve(profileName)
+}
+
+// formaeBin returns the resolved classic formae binary path. Use this in
+// handlers that need a binary path for feature-gate checks but do not yet have
+// a full execution context.
+func (s *Server) formaeBin() string {
+	return s.ctxResolver.BinFor(formaebin.Classic)
 }
 
 // Run starts the MCP server with the given transport.
@@ -456,7 +463,7 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		return errorResult(fmt.Errorf("query is required")), nil, nil
 	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -567,7 +574,7 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 		return errorResult(fmt.Errorf("mode must be 'reconcile' or 'patch', got '%s'", input.Mode)), nil, nil
 	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -600,7 +607,7 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(fmt.Errorf("file_path and query are mutually exclusive")), nil, nil
 	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
