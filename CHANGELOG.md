@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [Unreleased]
+
+### Changed
+
+- The plugin now runs a prebuilt binary instead of compiling on first launch; a bundled `formae` is used when none is installed.
+
 ## [0.8.0]
 
 ### Changed
