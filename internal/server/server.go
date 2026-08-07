@@ -462,18 +462,17 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 	if input.Query == "" {
 		return errorResult(fmt.Errorf("query is required")), nil, nil
 	}
+	ctx, err := s.resolveCtx(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
 			return errorResult(err), nil, nil
 		}
-	}
-
-	ctx, err := s.resolveCtx(input.Profile)
-	if err != nil {
-		return errorResult(err), nil, nil
 	}
 
 	tmpDir, err := os.MkdirTemp("", "formae-extract-*")
@@ -573,8 +572,12 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	if input.Mode != "reconcile" && input.Mode != "patch" {
 		return errorResult(fmt.Errorf("mode must be 'reconcile' or 'patch', got '%s'", input.Mode)), nil, nil
 	}
+	ctx, err := s.resolveCtx(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -582,10 +585,6 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 		}
 	}
 
-	ctx, err := s.resolveCtx(input.Profile)
-	if err != nil {
-		return errorResult(err), nil, nil
-	}
 	formaJSON, err := evalFormaFile(ctx, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
@@ -606,8 +605,12 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 	if input.FilePath != "" && input.Query != "" {
 		return errorResult(fmt.Errorf("file_path and query are mutually exclusive")), nil, nil
 	}
+	ctx, err := s.resolveCtx(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -615,10 +618,6 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		}
 	}
 
-	ctx, err := s.resolveCtx(input.Profile)
-	if err != nil {
-		return errorResult(err), nil, nil
-	}
 	c := newClientFromCtx(ctx)
 
 	if input.Query != "" {
