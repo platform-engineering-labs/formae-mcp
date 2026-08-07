@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 )
 
 // FormaeClient is a lightweight HTTP client for the formae agent REST API.
@@ -24,6 +26,18 @@ func NewFormaeClient(endpoint string) *FormaeClient {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// newClientFromCtx builds a FormaeClient from a resolved execution context.
+// When ctx.Port is non-empty the endpoint is assembled as URL:Port; when Port
+// is empty ctx.URL is used as-is (e.g. a full URL supplied via forcedEndpoint
+// in tests or an explicit override).
+func newClientFromCtx(ctx execctx.Context) *FormaeClient {
+	endpoint := ctx.URL
+	if ctx.Port != "" {
+		endpoint = ctx.URL + ":" + ctx.Port
+	}
+	return NewFormaeClient(endpoint)
 }
 
 func (c *FormaeClient) get(path string, query url.Values) ([]byte, int, error) {
