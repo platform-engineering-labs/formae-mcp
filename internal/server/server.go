@@ -10,8 +10,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/platform-engineering-labs/formae-mcp/internal/config"
+	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
+	"github.com/platform-engineering-labs/formae-mcp/internal/formaebin"
 	"github.com/platform-engineering-labs/formae-mcp/internal/profile"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 	"github.com/platform-engineering-labs/formae-mcp/internal/version"
@@ -33,7 +34,8 @@ func implementation() *mcp.Implementation {
 type Server struct {
 	mcpServer      *mcp.Server
 	hub            *HubClient
-	forcedEndpoint string // when set, empty-profile calls use this (tests / explicit)
+	forcedEndpoint string            // when set, empty-profile calls use this (tests / explicit)
+	ctxResolver    *execctx.Resolver // resolves per-call execution context
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -49,6 +51,7 @@ func New(endpoint string) *Server {
 		mcpServer:      mcpServer,
 		hub:            NewHubClient(),
 		forcedEndpoint: endpoint,
+		ctxResolver:    execctx.NewResolver(formaebin.NewBinResolver()),
 	}
 
 	s.registerTools()
@@ -61,22 +64,47 @@ func New(endpoint string) *Server {
 // clientFor builds a FormaeClient for the given profile (empty = active/default).
 // A non-empty profile is version-gated and name-validated; endpoint resolution
 // hard-errors for an unresolvable requested/active profile.
+//
+// Handlers migrated to the execution-context pattern call resolveCtx +
+// newClientFromCtx directly; clientFor remains for handlers not yet migrated.
 func (s *Server) clientFor(profileName string) (*FormaeClient, error) {
 	if profileName != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 			return nil, err
 		}
 		if err := profile.ValidateName(profileName); err != nil {
 			return nil, err
 		}
-	} else if s.forcedEndpoint != "" {
-		return NewFormaeClient(s.forcedEndpoint), nil
 	}
-	url, port, err := config.AgentEndpoint(profileName)
+	ctx, err := s.resolveCtx(profileName)
 	if err != nil {
 		return nil, err
 	}
-	return NewFormaeClient(url + ":" + port), nil
+	return newClientFromCtx(ctx), nil
+}
+
+// resolveCtx returns the immutable execution context for an optional profile.
+// Resolve once at the top of a handler; thread the result through eval and client
+// construction so both steps agree on the binary and endpoint.
+//
+// When a forcedEndpoint is configured and no profile is requested, it is used
+// directly (this path is exercised by tests that inject a mock agent URL).
+func (s *Server) resolveCtx(profileName string) (execctx.Context, error) {
+	if profileName == "" && s.forcedEndpoint != "" {
+		return execctx.Context{
+			Mode:      formaebin.Classic,
+			URL:       s.forcedEndpoint,
+			FormaeBin: s.ctxResolver.BinFor(formaebin.Classic),
+		}, nil
+	}
+	return s.ctxResolver.Resolve(profileName)
+}
+
+// formaeBin returns the resolved classic formae binary path. Use this in
+// handlers that need a binary path for feature-gate checks but do not yet have
+// a full execution context.
+func (s *Server) formaeBin() string {
+	return s.ctxResolver.BinFor(formaebin.Classic)
 }
 
 // Run starts the MCP server with the given transport.
@@ -348,14 +376,41 @@ func (s *Server) handleGetAgentStats(_ context.Context, _ *mcp.CallToolRequest, 
 }
 
 func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+	ctx, err := s.resolveCtx(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
+	c := newClientFromCtx(ctx)
 	if err := c.CheckHealth(); err != nil {
 		return errorResult(err), nil, nil
 	}
-	return textResult("Formae agent is healthy and reachable."), nil, nil
+	msg := "Formae agent is healthy and reachable."
+	if notice := s.buildSkewNotice(ctx.FormaeBin, c); notice != "" {
+		msg += "\n\n" + notice
+	}
+	return textResult(msg), nil, nil
+}
+
+// buildSkewNotice fetches the agent version and the local formae version and
+// returns a skew notice when they differ, or "" when skew cannot be determined.
+// It never returns an error — version-skew information is advisory only.
+// The caller passes formaeBin (already resolved) to avoid a redundant resolveCtx call.
+func (s *Server) buildSkewNotice(formaeBin string, c *FormaeClient) string {
+	statsJSON, err := c.GetAgentStats()
+	if err != nil {
+		return ""
+	}
+	var stats struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(statsJSON, &stats); err != nil || stats.Version == "" {
+		return ""
+	}
+	localVer, err := featuregate.Detect(formaeBin)
+	if err != nil {
+		return ""
+	}
+	return skewNotice(stats.Version, localVer)
 }
 
 func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
@@ -434,8 +489,12 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 	if input.Query == "" {
 		return errorResult(fmt.Errorf("query is required")), nil, nil
 	}
+	ctx, err := s.resolveCtx(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -455,7 +514,7 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		args = append(args, "--profile", input.Profile)
 	}
 	args = append(args, outFile)
-	cmd := exec.Command("formae", args...)
+	cmd := exec.Command(ctx.FormaeBin, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output))), nil, nil
 	}
@@ -465,7 +524,7 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		return errorResult(fmt.Errorf("failed to read extracted file: %w", err)), nil, nil
 	}
 
-	return textResult(string(content)), nil, nil
+	return withNotice(textResult(string(content)), s.buildSkewNotice(ctx.FormaeBin, newClientFromCtx(ctx))), nil, nil
 }
 
 func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
@@ -540,8 +599,12 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	if input.Mode != "reconcile" && input.Mode != "patch" {
 		return errorResult(fmt.Errorf("mode must be 'reconcile' or 'patch', got '%s'", input.Mode)), nil, nil
 	}
+	ctx, err := s.resolveCtx(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -549,20 +612,17 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 		}
 	}
 
-	formaJSON, err := evalFormaFile(input.FilePath)
+	formaJSON, err := evalFormaFile(ctx, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	c, err := s.clientFor(input.Profile)
-	if err != nil {
-		return errorResult(err), nil, nil
-	}
+	c := newClientFromCtx(ctx)
 	result, err := c.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, "formae-mcp")
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return withNotice(jsonResult(result), s.buildSkewNotice(ctx.FormaeBin, c)), nil, nil
 }
 
 func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
@@ -572,8 +632,12 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 	if input.FilePath != "" && input.Query != "" {
 		return errorResult(fmt.Errorf("file_path and query are mutually exclusive")), nil, nil
 	}
+	ctx, err := s.resolveCtx(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -581,10 +645,7 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		}
 	}
 
-	c, err := s.clientFor(input.Profile)
-	if err != nil {
-		return errorResult(err), nil, nil
-	}
+	c := newClientFromCtx(ctx)
 
 	if input.Query != "" {
 		result, err := c.DestroyByQuery(input.Query, input.Simulate, "formae-mcp")
@@ -594,7 +655,7 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		return jsonResult(result), nil, nil
 	}
 
-	formaJSON, err := evalFormaFile(input.FilePath)
+	formaJSON, err := evalFormaFile(ctx, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
@@ -672,12 +733,12 @@ func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolReq
 
 // Helpers
 
-func evalFormaFile(filePath string) ([]byte, error) {
+func evalFormaFile(ctx execctx.Context, filePath string) ([]byte, error) {
 	if strings.HasSuffix(filePath, ".json") {
 		return os.ReadFile(filePath)
 	}
 
-	cmd := exec.Command("formae", "eval", filePath, "--output-schema", "json", "--output-consumer", "machine")
+	cmd := exec.Command(ctx.FormaeBin, "eval", filePath, "--output-schema", "json", "--output-consumer", "machine")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -687,6 +748,18 @@ func evalFormaFile(filePath string) ([]byte, error) {
 	}
 
 	return output, nil
+}
+
+// withNotice appends notice as a separate text content block to res when notice
+// is non-empty, leaving the primary content block pristine. When notice is ""
+// it returns res unchanged. This keeps structured output (JSON receipts, PKL
+// code) in the first block so callers can parse it without stripping a prefix.
+func withNotice(res *mcp.CallToolResult, notice string) *mcp.CallToolResult {
+	if notice == "" {
+		return res
+	}
+	res.Content = append(res.Content, &mcp.TextContent{Text: notice})
+	return res
 }
 
 func jsonResult(data json.RawMessage) *mcp.CallToolResult {

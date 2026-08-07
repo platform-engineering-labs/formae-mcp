@@ -1,33 +1,19 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BINARY="${PLUGIN_ROOT}/bin/formae-mcp"
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+BIN="$ROOT/bin/formae-mcp"
+BUNDLED="$ROOT/bin/formae"
 
-needs_rebuild() {
-  # Rebuild if the binary doesn't exist yet.
-  if [ ! -x "$BINARY" ]; then
-    return 0
-  fi
-  # Rebuild if any tracked source is newer than the binary (e.g., after a
-  # marketplace update fetches new files). Limit the search to inputs the
-  # build actually consumes.
-  if find \
-    "${PLUGIN_ROOT}/cmd" \
-    "${PLUGIN_ROOT}/internal" \
-    "${PLUGIN_ROOT}/go.mod" \
-    "${PLUGIN_ROOT}/go.sum" \
-    -newer "$BINARY" -print -quit 2>/dev/null | grep -q .; then
-    return 0
-  fi
-  return 1
-}
+# Expose the bundled formae to the MCP (classic fallback + zero-setup path).
+[ -x "$BUNDLED" ] && export FORMAE_BUNDLED_BIN="$BUNDLED"
 
-if needs_rebuild; then
-  echo "Building formae-mcp..." >&2
-  mkdir -p "${PLUGIN_ROOT}/bin"
-  (cd "$PLUGIN_ROOT" && go build -o "$BINARY" ./cmd/formae-mcp/)
-  echo "Build complete." >&2
+newest_src="$(find "$ROOT/cmd" "$ROOT/internal" "$ROOT/go.mod" "$ROOT/go.sum" -type f -newer "$BIN" 2>/dev/null | head -n1 || true)"
+
+# Dev fallback: rebuild only if a Go toolchain is present AND sources are newer
+# (or the binary is missing). Otherwise run the shipped prebuilt binary as-is.
+if { [ ! -x "$BIN" ] || [ -n "$newest_src" ]; } && command -v go >/dev/null 2>&1; then
+	( cd "$ROOT" && go build -o "$BIN" ./cmd/formae-mcp )
 fi
 
-exec "$BINARY" "$@"
+exec "$BIN" "$@"

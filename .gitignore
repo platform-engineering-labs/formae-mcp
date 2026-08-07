@@ -8,3 +8,7 @@
 # Development docs (plans, handoffs)
 docs/plans/
 CLAUDE.md
+
+# local scratch
+.worktrees/
+.superpowers/

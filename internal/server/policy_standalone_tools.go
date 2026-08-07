@@ -18,12 +18,13 @@ import (
 // auto-reconcile feature (formae >= 0.88.0) when the operation creates or
 // updates an auto-reconcile policy. policyType is the MCP wire form and may be
 // empty for operations (attach/detach/delete) that never write policy config.
-func guardStandalonePolicy(policyType string) error {
-	if err := featuregate.GuardFeature(featuregate.FeatureStandalonePolicy); err != nil {
+// bin is the resolved formae binary path.
+func guardStandalonePolicy(policyType, bin string) error {
+	if err := featuregate.GuardFeature(featuregate.FeatureStandalonePolicy, bin); err != nil {
 		return err
 	}
 	if policyType == "auto_reconcile" {
-		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureAutoReconcilePolicy, bin); err != nil {
 			return err
 		}
 	}
@@ -86,7 +87,7 @@ func (s *Server) standaloneTypeOf(label string, items []policyInventoryItem, cwd
 	if item, known := findPolicyByLabel(items, label); known {
 		return mcpPolicyType(item.Type), true
 	}
-	t, found, err := standalonePolicyTypeFromWorkspace(cwd, label, currentEvalFunc())
+	t, found, err := standalonePolicyTypeFromWorkspace(cwd, label, currentEvalFunc(s.formaeBin()))
 	if err != nil || !found {
 		return "", false
 	}
@@ -139,7 +140,7 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if err := validateStandalonePolicyFields(input.Label, input.PolicyType, input.TTLSeconds, input.OnDependents, input.IntervalSeconds); err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := guardStandalonePolicy(input.PolicyType); err != nil {
+	if err := guardStandalonePolicy(input.PolicyType, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 
@@ -174,7 +175,7 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	// sharing one is an invalid project state. Check the whole workspace before
 	// planning, since the declaration may live in a file other than the one we
 	// are about to edit.
-	if existing, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc()); err == nil {
+	if existing, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc(s.formaeBin())); err == nil {
 		out := tools.CreateStandalonePolicyOutput{
 			FilePath:  existing,
 			Operation: "noop",
@@ -197,7 +198,7 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		resolved, err := resolveMainFormaFile(cwd, currentEvalFunc())
+		resolved, err := resolveMainFormaFile(cwd, currentEvalFunc(s.formaeBin()))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -247,7 +248,7 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if input.PolicyLabel == "" {
 		return errorResult(fmt.Errorf("policy_label is required")), nil, nil
 	}
-	if err := guardStandalonePolicy(""); err != nil {
+	if err := guardStandalonePolicy("", s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 
@@ -270,7 +271,7 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if item, known := findPolicyByLabel(items, input.PolicyLabel); known {
 		policyType = mcpPolicyType(item.Type)
 	} else {
-		declType, found, err := standalonePolicyTypeFromWorkspace(cwd, input.PolicyLabel, currentEvalFunc())
+		declType, found, err := standalonePolicyTypeFromWorkspace(cwd, input.PolicyLabel, currentEvalFunc(s.formaeBin()))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -304,7 +305,7 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc())
+		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc(s.formaeBin()))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -367,7 +368,7 @@ func (s *Server) handleDetachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if input.PolicyLabel == "" {
 		return errorResult(fmt.Errorf("policy_label is required")), nil, nil
 	}
-	if err := guardStandalonePolicy(""); err != nil {
+	if err := guardStandalonePolicy("", s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 
@@ -377,7 +378,7 @@ func (s *Server) handleDetachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 		if err != nil {
 			return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
 		}
-		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc())
+		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc(s.formaeBin()))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -432,7 +433,7 @@ func (s *Server) handleDeleteStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	if input.Label == "" {
 		return errorResult(fmt.Errorf("label is required")), nil, nil
 	}
-	if err := guardStandalonePolicy(""); err != nil {
+	if err := guardStandalonePolicy("", s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 
@@ -483,7 +484,7 @@ func (s *Server) handleDeleteStandalonePolicy(_ context.Context, _ *mcp.CallTool
 			input.Label, len(refs), refs)), nil, nil
 	}
 
-	filePath, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc())
+	filePath, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc(s.formaeBin()))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}

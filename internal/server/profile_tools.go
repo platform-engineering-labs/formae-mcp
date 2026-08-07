@@ -20,10 +20,10 @@ import (
 // active-pointer switch within this process.
 var profileMu sync.Mutex
 
-// runFormaeProfile shells out to `formae profile <args...>` and returns combined
+// runFormaeProfile shells out to `<bin> profile <args...>` and returns combined
 // output. okExit lists non-zero exit codes that are NOT errors (e.g. diff's 1).
-func runFormaeProfile(args []string, okExit ...int) (string, error) {
-	cmd := exec.Command("formae", append([]string{"profile"}, args...)...)
+func runFormaeProfile(bin string, args []string, okExit ...int) (string, error) {
+	cmd := exec.Command(bin, append([]string{"profile"}, args...)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -33,16 +33,16 @@ func runFormaeProfile(args []string, okExit ...int) (string, error) {
 				}
 			}
 		}
-		return string(out), fmt.Errorf("formae profile %v failed: %w\noutput: %s", args, err, string(out))
+		return string(out), fmt.Errorf("%s profile %v failed: %w\noutput: %s", bin, args, err, string(out))
 	}
 	return string(out), nil
 }
 
 func (s *Server) handleListProfiles(_ context.Context, _ *mcp.CallToolRequest, _ tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
-	out, err := runFormaeProfile([]string{"list", "--output-consumer", "machine", "--output-schema", "json"})
+	out, err := runFormaeProfile(s.formaeBin(), []string{"list", "--output-consumer", "machine", "--output-schema", "json"})
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -50,10 +50,10 @@ func (s *Server) handleListProfiles(_ context.Context, _ *mcp.CallToolRequest, _
 }
 
 func (s *Server) handleCurrentProfile(_ context.Context, _ *mcp.CallToolRequest, _ tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
-	out, err := runFormaeProfile([]string{"current", "--output-consumer", "machine", "--output-schema", "json"})
+	out, err := runFormaeProfile(s.formaeBin(), []string{"current", "--output-consumer", "machine", "--output-schema", "json"})
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -61,7 +61,7 @@ func (s *Server) handleCurrentProfile(_ context.Context, _ *mcp.CallToolRequest,
 }
 
 func (s *Server) handleReadProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.ReadProfileInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 	path, err := profile.ProfilePath(input.Name)
@@ -76,7 +76,7 @@ func (s *Server) handleReadProfile(_ context.Context, _ *mcp.CallToolRequest, in
 }
 
 func (s *Server) handleUseProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.UseProfileInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 	if err := profile.ValidateName(input.Name); err != nil {
@@ -84,7 +84,7 @@ func (s *Server) handleUseProfile(_ context.Context, _ *mcp.CallToolRequest, inp
 	}
 	profileMu.Lock()
 	defer profileMu.Unlock()
-	out, err := runFormaeProfile([]string{"use", input.Name})
+	out, err := runFormaeProfile(s.formaeBin(), []string{"use", input.Name})
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -92,7 +92,7 @@ func (s *Server) handleUseProfile(_ context.Context, _ *mcp.CallToolRequest, inp
 }
 
 func (s *Server) handleSaveProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.SaveProfileInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 	if err := profile.ValidateName(input.Name); err != nil {
@@ -102,7 +102,7 @@ func (s *Server) handleSaveProfile(_ context.Context, _ *mcp.CallToolRequest, in
 	if input.Force {
 		args = append(args, "--force")
 	}
-	out, err := runFormaeProfile(args)
+	out, err := runFormaeProfile(s.formaeBin(), args)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -110,7 +110,7 @@ func (s *Server) handleSaveProfile(_ context.Context, _ *mcp.CallToolRequest, in
 }
 
 func (s *Server) handleCreateProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.CreateProfileInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 	if err := profile.ValidateName(input.Name); err != nil {
@@ -120,7 +120,7 @@ func (s *Server) handleCreateProfile(_ context.Context, _ *mcp.CallToolRequest, 
 	if input.Force {
 		args = append(args, "--force")
 	}
-	out, err := runFormaeProfile(args)
+	out, err := runFormaeProfile(s.formaeBin(), args)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -128,13 +128,13 @@ func (s *Server) handleCreateProfile(_ context.Context, _ *mcp.CallToolRequest, 
 }
 
 func (s *Server) handleDeleteProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.DeleteProfileInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 	if err := profile.ValidateName(input.Name); err != nil {
 		return errorResult(err), nil, nil
 	}
-	out, err := runFormaeProfile([]string{"delete", input.Name})
+	out, err := runFormaeProfile(s.formaeBin(), []string{"delete", input.Name})
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -142,7 +142,7 @@ func (s *Server) handleDeleteProfile(_ context.Context, _ *mcp.CallToolRequest, 
 }
 
 func (s *Server) handleDiffProfiles(_ context.Context, _ *mcp.CallToolRequest, input tools.DiffProfilesInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 	if err := profile.ValidateName(input.A); err != nil {
@@ -156,7 +156,7 @@ func (s *Server) handleDiffProfiles(_ context.Context, _ *mcp.CallToolRequest, i
 		args = append(args, input.B)
 	}
 	// exit code 1 means "files differ", which is success for diff.
-	out, err := runFormaeProfile(args, 1)
+	out, err := runFormaeProfile(s.formaeBin(), args, 1)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -164,7 +164,7 @@ func (s *Server) handleDiffProfiles(_ context.Context, _ *mcp.CallToolRequest, i
 }
 
 func (s *Server) handleWriteProfile(_ context.Context, _ *mcp.CallToolRequest, input tools.WriteProfileInput) (*mcp.CallToolResult, any, error) {
-	if err := featuregate.GuardFeature(featuregate.FeatureProfile); err != nil {
+	if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
 		return errorResult(err), nil, nil
 	}
 	path, err := profile.ProfilePath(input.Name)
