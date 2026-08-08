@@ -16,7 +16,6 @@ Install via the
 
 - Plugin renamed from `formae-mcp` to `formae`; added `/formae:setup` and `/formae:upgrade`.
 - The plugin now downloads its prebuilt `formae-mcp` and a matched `formae` into `~/.formae-ai/opt` on first run (no build-from-source; set `FORMAE_MCP_DEV=1` for local dev builds).
-- The plugin now runs a prebuilt binary instead of compiling on first launch; a bundled `formae` is used when none is installed.
 
 ## [0.8.0]
 
