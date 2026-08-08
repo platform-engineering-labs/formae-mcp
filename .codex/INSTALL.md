@@ -27,22 +27,27 @@ machine.
 
 3. Register the MCP server. Point Codex at the launcher script, which downloads
    the prebuilt `formae-mcp` (and a matched `formae`) into `~/.formae-ai/opt` on
-   first run and starts the server. Either use the CLI:
-
-   ```bash
-   codex mcp add formae -- ~/.codex/formae/scripts/start-mcp.sh
-   ```
-
-   or merge this block into `~/.codex/config.toml` (add to the existing file —
-   don't replace it):
+   first run and starts the server. Merge this block into `~/.codex/config.toml`
+   (add to the existing file — don't replace it):
 
    ```toml
    [mcp_servers.formae]
    command = "/home/you/.codex/formae/scripts/start-mcp.sh"
+   required = true            # wait for the server at session start
+   startup_timeout_sec = 120  # headroom for the one-time binary download
    ```
 
    Use an **absolute** path to `start-mcp.sh` (expand `~`), and make sure it is
    executable (`chmod +x`). No binary needs to be on your `PATH`.
+
+   Both extra settings matter: Codex starts sessions without waiting for MCP
+   servers, so without `required = true` the first session (while the binaries
+   download) silently has no formae tools. `startup_timeout_sec` gives that
+   one-time download room; later launches start in milliseconds. If you prefer
+   registering via the CLI, run
+   `codex mcp add formae -- ~/.codex/formae/scripts/start-mcp.sh`, then add the
+   `required` and `startup_timeout_sec` lines to the generated
+   `[mcp_servers.formae]` block by hand (the CLI cannot set them).
 
 ## Verify
 
