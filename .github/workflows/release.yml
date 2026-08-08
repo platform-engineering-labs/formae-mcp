@@ -1,0 +1,17 @@
+name: formae-mcp-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - '[0-9]*'
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
+jobs:
+  pkg_opkg:
+    uses: "./.github/workflows/package.yml"
+    secrets: inherit
