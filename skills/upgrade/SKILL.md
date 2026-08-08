@@ -23,12 +23,13 @@ Before doing anything:
 
 ## Step 2 — Determine where formae lives
 
-Run `which formae` (or `command -v formae`) to identify the active binary path.
+Check the managed path directly first, then fall back to PATH:
 
-- **Managed tree** — path starts with `$HOME/.formae-ai/opt/bin/` (the plugin-provisioned tree, no sudo required):
-  → use the channel-aware forced pull described in Step 3a.
-- **Classic user install** — path is anywhere else (e.g. `/opt/pel/bin/`, `/usr/local/bin/`, a custom prefix):
-  → this is the user's own install; it requires sudo and is their responsibility. Follow Step 3b instead.
+1. Check whether `~/.formae-ai/opt/bin/formae` exists (run `test -x ~/.formae-ai/opt/bin/formae && echo managed || echo not-managed`).
+   - **If it exists** → this is the managed install. The binary is exposed via `FORMAE_BUNDLED_BIN` and is NOT on `PATH`, so `which formae` will not find it. Use Step 3a.
+2. Only if the managed binary is absent, run `which formae` (or `command -v formae`) to find the active binary.
+   - **Classic user install** — path is anywhere other than the managed tree (e.g. `/opt/pel/bin/`, `/usr/local/bin/`, a custom prefix):
+     → this is the user's own install; it requires sudo and is their responsibility. Follow Step 3b instead.
 
 ## Step 3a — Upgrade a managed-tree install (sudo-free)
 
