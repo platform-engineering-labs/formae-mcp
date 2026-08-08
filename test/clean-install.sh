@@ -41,7 +41,7 @@ cat > "$MKT/.claude-plugin/marketplace.json" <<JSON
   "plugins": [
     {
       "name": "formae",
-      "source": { "source": "github", "repo": "$REPO", "ref": "$REF" },
+      "source": { "source": "url", "url": "https://github.com/$REPO.git", "ref": "$REF" },
       "description": "formae MCP + skills (dev build; pulls binaries from the chosen channel)"
     }
   ]
