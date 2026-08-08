@@ -69,7 +69,14 @@ exec docker run -it --rm --network host \
   -v "$MKT:/mkt:ro" \
   "$IMAGE" bash -lc '
     set -e
-    apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq curl ca-certificates git >/dev/null 2>&1
+    apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq curl ca-certificates git openssh-client >/dev/null 2>&1
+    # Claude Code clones github plugin sources over SSH (git@github.com:...). A
+    # fresh container has no known_hosts, so strict host-key checking aborts.
+    # This repo is public, so force github clones over HTTPS (no auth, no SSH),
+    # and seed known_hosts as a fallback for any SSH path that remains.
+    git config --global url."https://github.com/".insteadOf "git@github.com:"
+    git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+    mkdir -p ~/.ssh && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
     echo "installing Claude Code..."
     npm i -g @anthropic-ai/claude-code >/dev/null 2>&1
     echo "ready — marketplace at /mkt, channel='"$CHANNEL"'"
