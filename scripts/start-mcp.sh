@@ -17,7 +17,26 @@ channel="${FORMAE_MCP_CHANNEL:-stable}"
 
 . "$ROOT/scripts/provision.sh"
 
-provision_pkg formae-mcp "$channel"
+# Plugin-version marker: if the plugin version has changed since the last
+# launch, force a refresh of the MCP binary so an updated plugin release is
+# not blocked by the existence fast-path in provision_pkg.
+# The marker is intentionally NOT used for formae itself — that binary is only
+# upgraded via an explicit /formae:upgrade invocation (pinned-CLI policy).
+_plugin_version="$(grep -m1 '"version"' "$ROOT/.claude-plugin/plugin.json" \
+    | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+_marker="$HOME/.formae-ai/opt/.formae-mcp.plugin-version"
+_stored_version="$(cat "$_marker" 2>/dev/null || true)"
+
+if [ -z "$_stored_version" ] || [ "$_stored_version" != "$_plugin_version" ]; then
+    echo "start-mcp: plugin version changed ($( [ -z "$_stored_version" ] && echo "first run" || echo "$_stored_version -> $_plugin_version")), refreshing formae-mcp" >&2
+    FORMAE_FORCE_PROVISION=1 provision_pkg formae-mcp "$channel"
+    # Write marker; guard so a write failure does not abort the launch.
+    mkdir -p "$(dirname "$_marker")" 2>/dev/null || true
+    printf '%s' "$_plugin_version" > "$_marker" 2>/dev/null || true
+else
+    provision_pkg formae-mcp "$channel"
+fi
+
 provision_pkg formae "$channel"
 
 FORMAE_MCP_BIN="$HOME/.formae-ai/opt/bin/formae-mcp"
