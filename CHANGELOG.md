@@ -12,6 +12,10 @@ Install via the
 
 ## [Unreleased]
 
+### Added
+
+- The MCP now warns when the connected formae agent is newer than your local `formae`, so you can tell when authoring may not reflect the agent's latest capabilities. The notice points at `/formae:upgrade`, which fetches the newer `formae` after you confirm (never silently in classic mode).
+
 ### Changed
 
 - Plugin renamed from `formae-mcp` to `formae`; added `/formae:setup` and `/formae:upgrade`.

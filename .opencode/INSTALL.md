@@ -1,35 +1,34 @@
-# Installing formae-mcp for OpenCode
+# Installing the formae MCP for OpenCode
 
 ## Prerequisites
 
-- Go 1.25+
 - Git
+- `curl`
 - OpenCode
-- A running formae agent (`formae agent start`)
+- A running formae agent (`formae agent start`) and a formae profile pointing at it
+
+You do **not** need a Go toolchain. The MCP server and a matched `formae` binary
+are downloaded as prebuilt artifacts on first launch — nothing is compiled on your
+machine.
 
 ## Installation
 
-1. Install the MCP server binary:
+1. Clone the repo (it carries the skills and the launcher):
 
    ```bash
-   go install github.com/platform-engineering-labs/formae-mcp/cmd/formae-mcp@latest
+   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.config/opencode/formae
    ```
 
-2. Clone the repo:
-
-   ```bash
-   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.config/opencode/formae-mcp
-   ```
-
-3. Symlink skills into OpenCode:
+2. Symlink the skills into OpenCode:
 
    ```bash
    mkdir -p ~/.config/opencode/skills
-   ln -s ~/.config/opencode/formae-mcp/skills ~/.config/opencode/skills/formae-mcp
+   ln -s ~/.config/opencode/formae/skills ~/.config/opencode/skills/formae
    ```
 
-4. Register the MCP server. The skills drive the `formae-mcp` tools, so OpenCode
-   must know how to start the server. Merge this into
+3. Register the MCP server. Point OpenCode at the launcher script, which
+   downloads the prebuilt `formae-mcp` (and a matched `formae`) into
+   `~/.formae-ai/opt` on first run and starts the server. Merge this into
    `~/.config/opencode/opencode.json` (add to your existing config — don't
    overwrite other keys):
 
@@ -37,17 +36,19 @@
    {
      "$schema": "https://opencode.ai/config.json",
      "mcp": {
-       "formae": { "type": "local", "command": ["formae-mcp"], "enabled": true }
+       "formae": {
+         "type": "local",
+         "command": ["/home/you/.config/opencode/formae/scripts/start-mcp.sh"],
+         "enabled": true
+       }
      }
    }
    ```
 
-   `formae-mcp` must be resolvable on your `PATH` (`go install` puts it in
-   `$(go env GOPATH)/bin`). If OpenCode can't find it — GUI/IDE launches often
-   have a narrower `PATH` — use the absolute path as the command element instead
-   of the bare name (run `go env GOPATH`, then use `["<gopath>/bin/formae-mcp"]`).
+   Use an **absolute** path to `start-mcp.sh` (expand `~`), and make sure it is
+   executable (`chmod +x`). No binary needs to be on your `PATH`.
 
-5. Restart OpenCode.
+4. Restart OpenCode.
 
 ## Verify
 
@@ -69,9 +70,15 @@ actually works end-to-end.
 
 ## Updating
 
+Pull the latest skills and launcher:
+
 ```bash
-cd ~/.config/opencode/formae-mcp && git pull && go install ./cmd/formae-mcp/
+cd ~/.config/opencode/formae && git pull
 ```
+
+On the next launch, if the plugin version changed, the launcher automatically
+downloads the matching `formae-mcp` binary. To update the `formae` binary when the
+connected agent is newer, run the `/formae:upgrade` skill (it asks first).
 
 ## Uninstalling
 
@@ -79,12 +86,12 @@ Delete the `mcp.formae` block from `~/.config/opencode/opencode.json`, then
 remove the skills symlink and clone:
 
 ```bash
-rm ~/.config/opencode/skills/formae-mcp
-rm -rf ~/.config/opencode/formae-mcp
+rm ~/.config/opencode/skills/formae
+rm -rf ~/.config/opencode/formae
 ```
 
-Optionally remove the binary:
+Optionally remove the downloaded binaries:
 
 ```bash
-rm "$(go env GOPATH)/bin/formae-mcp"
+rm -rf ~/.formae-ai/opt
 ```

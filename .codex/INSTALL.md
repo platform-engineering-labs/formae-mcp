@@ -1,37 +1,36 @@
-# Installing formae-mcp for Codex
+# Installing the formae MCP for Codex
 
 ## Prerequisites
 
-- Go 1.25+
 - Git
-- A running formae agent (`formae agent start`)
+- `curl`
+- A running formae agent (`formae agent start`) and a formae profile pointing at it
+
+You do **not** need a Go toolchain. The MCP server and a matched `formae` binary
+are downloaded as prebuilt artifacts on first launch — nothing is compiled on your
+machine.
 
 ## Installation
 
-1. Install the MCP server binary:
+1. Clone the repo (it carries the skills and the launcher):
 
    ```bash
-   go install github.com/platform-engineering-labs/formae-mcp/cmd/formae-mcp@latest
+   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.codex/formae
    ```
 
-2. Clone the repo:
-
-   ```bash
-   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.codex/formae-mcp
-   ```
-
-3. Symlink skills into Codex:
+2. Symlink the skills into Codex:
 
    ```bash
    mkdir -p ~/.agents/skills
-   ln -s ~/.codex/formae-mcp/skills ~/.agents/skills/formae-mcp
+   ln -s ~/.codex/formae/skills ~/.agents/skills/formae
    ```
 
-4. Register the MCP server. The skills drive the `formae-mcp` tools, so Codex
-   must know how to start the server. Either use the CLI:
+3. Register the MCP server. Point Codex at the launcher script, which downloads
+   the prebuilt `formae-mcp` (and a matched `formae`) into `~/.formae-ai/opt` on
+   first run and starts the server. Either use the CLI:
 
    ```bash
-   codex mcp add formae -- formae-mcp
+   codex mcp add formae -- ~/.codex/formae/scripts/start-mcp.sh
    ```
 
    or merge this block into `~/.codex/config.toml` (add to the existing file —
@@ -39,15 +38,11 @@
 
    ```toml
    [mcp_servers.formae]
-   command = "formae-mcp"
+   command = "/home/you/.codex/formae/scripts/start-mcp.sh"
    ```
 
-   `formae-mcp` must be resolvable on your `PATH` (`go install` puts it in
-   `$(go env GOPATH)/bin`). If Codex can't find it — GUI/IDE launches often have
-   a narrower `PATH` — use the absolute path instead of the bare name (run
-   `go env GOPATH` to find it, then point at `<gopath>/bin/formae-mcp`).
-
-5. Restart Codex.
+   Use an **absolute** path to `start-mcp.sh` (expand `~`), and make sure it is
+   executable (`chmod +x`). No binary needs to be on your `PATH`.
 
 ## Verify
 
@@ -69,23 +64,29 @@ actually works end-to-end.
 
 ## Updating
 
+Pull the latest skills and launcher:
+
 ```bash
-cd ~/.codex/formae-mcp && git pull && go install ./cmd/formae-mcp/
+cd ~/.codex/formae && git pull
 ```
+
+On the next launch, if the plugin version changed, the launcher automatically
+downloads the matching `formae-mcp` binary. To update the `formae` binary when the
+connected agent is newer, run the `/formae:upgrade` skill (it asks first).
 
 ## Uninstalling
 
 ```bash
 codex mcp remove formae
-rm ~/.agents/skills/formae-mcp
-rm -rf ~/.codex/formae-mcp
+rm ~/.agents/skills/formae
+rm -rf ~/.codex/formae
 ```
 
 If you registered the server by editing `~/.codex/config.toml`, delete the
 `[mcp_servers.formae]` block instead of running `codex mcp remove`.
 
-Optionally remove the binary:
+Optionally remove the downloaded binaries:
 
 ```bash
-rm "$(go env GOPATH)/bin/formae-mcp"
+rm -rf ~/.formae-ai/opt
 ```
