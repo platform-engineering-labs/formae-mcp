@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Fallback is sent when no CLI client ID can be resolved. It matches the
@@ -30,6 +31,9 @@ type Resolver struct {
 	Home      func() (string, error)
 	ReadFile  func(string) ([]byte, error)
 	EnsureRun func(bin string) error
+
+	mu     sync.Mutex // guards cached; see internal/featuregate for the same pattern
+	cached string
 }
 
 // NewResolver wires a Resolver to the real filesystem and a real formae run.
@@ -47,13 +51,22 @@ func NewResolver() *Resolver {
 
 // Resolve returns the CLI client ID, running formaeBin once to let formae
 // create the ID file when it is missing. It never fails: an unresolvable ID
-// degrades to Fallback.
+// degrades to Fallback. A successfully read ID is cached for the process
+// lifetime (the file never changes once written); a fallback is not, so a
+// later call picks up the real file once it exists.
 func (r *Resolver) Resolve(formaeBin string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cached != "" {
+		return r.cached
+	}
 	if id, ok := r.read(); ok {
+		r.cached = id
 		return id
 	}
 	_ = r.EnsureRun(formaeBin)
 	if id, ok := r.read(); ok {
+		r.cached = id
 		return id
 	}
 	return Fallback

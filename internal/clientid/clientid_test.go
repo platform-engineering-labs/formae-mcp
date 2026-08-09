@@ -105,3 +105,55 @@ func TestResolveFallsBackWhenHomeUnavailable(t *testing.T) {
 		t.Fatalf("got %q, want fallback", got)
 	}
 }
+
+func TestResolveCachesSuccessfulRead(t *testing.T) {
+	dir := t.TempDir()
+	writeIDFile(t, dir, "2N3x8aQdLmVp0rGhTzYwBcKfJe1")
+	reads := 0
+	r := newTestResolver(dir, nil)
+	realRead := r.ReadFile
+	r.ReadFile = func(p string) ([]byte, error) {
+		reads++
+		return realRead(p)
+	}
+	first := r.Resolve("formae")
+	second := r.Resolve("formae")
+	if first != second || first != "2N3x8aQdLmVp0rGhTzYwBcKfJe1" {
+		t.Fatalf("got %q then %q", first, second)
+	}
+	if reads != 1 {
+		t.Fatalf("file read %d times, want 1", reads)
+	}
+}
+
+func TestResolveDoesNotCacheFallback(t *testing.T) {
+	dir := t.TempDir()
+	calls := 0
+	r := newTestResolver(dir, &calls)
+	if got := r.Resolve("formae"); got != Fallback {
+		t.Fatalf("got %q, want fallback", got)
+	}
+	// the file appearing later must win over a previous fallback
+	writeIDFile(t, dir, "2N3x8aQdLmVp0rGhTzYwBcKfJe1")
+	if got := r.Resolve("formae"); got != "2N3x8aQdLmVp0rGhTzYwBcKfJe1" {
+		t.Fatalf("got %q, want file content", got)
+	}
+	if calls != 1 {
+		t.Fatalf("ensure-run called %d times, want 1", calls)
+	}
+}
+
+func TestResolveConcurrentUse(t *testing.T) {
+	dir := t.TempDir()
+	writeIDFile(t, dir, "2N3x8aQdLmVp0rGhTzYwBcKfJe1")
+	r := newTestResolver(dir, nil)
+	done := make(chan string, 8)
+	for i := 0; i < 8; i++ {
+		go func() { done <- r.Resolve("formae") }()
+	}
+	for i := 0; i < 8; i++ {
+		if got := <-done; got != "2N3x8aQdLmVp0rGhTzYwBcKfJe1" {
+			t.Fatalf("got %q", got)
+		}
+	}
+}
