@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -519,11 +520,14 @@ func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequ
 
 	outFile := tmpDir + "/extracted.pkl"
 	args := []string{"extract", "--query", input.Query, "--yes"}
-	if input.Profile != "" {
-		args = append(args, "--profile", input.Profile)
+	// Pin the profile the context resolved, not the global active pointer: that
+	// pointer is shared with the user's CLI and other sessions and can move
+	// between the two invocations this call makes.
+	if ec.ProfileName != "" {
+		args = append(args, "--profile", ec.ProfileName)
 	}
 	args = append(args, outFile)
-	cmd := exec.Command(ec.FormaeBin, args...)
+	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output))), nil, nil
 	}
@@ -616,7 +620,7 @@ func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	formaJSON, err := evalFormaFile(ec, input.FilePath)
+	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
@@ -656,7 +660,7 @@ func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest,
 		return jsonResult(result), nil, nil
 	}
 
-	formaJSON, err := evalFormaFile(ec, input.FilePath)
+	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
@@ -738,12 +742,18 @@ func (s *Server) handleForceReconcileStack(ctx context.Context, _ *mcp.CallToolR
 
 // Helpers
 
-func evalFormaFile(ec execctx.Context, filePath string) ([]byte, error) {
+func evalFormaFile(ctx context.Context, ec execctx.Context, filePath string) ([]byte, error) {
 	if strings.HasSuffix(filePath, ".json") {
 		return os.ReadFile(filePath)
 	}
 
-	cmd := exec.Command(ec.FormaeBin, "eval", filePath, "--output-schema", "json", "--output-consumer", "machine")
+	args := []string{"eval", filePath, "--output-schema", "json", "--output-consumer", "machine"}
+	// Same reason as extract: the active pointer can move between the two
+	// invocations one call makes, so name the profile the context resolved.
+	if ec.ProfileName != "" {
+		args = append(args, "--profile", ec.ProfileName)
+	}
+	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -753,6 +763,22 @@ func evalFormaFile(ec execctx.Context, filePath string) ([]byte, error) {
 	}
 
 	return output, nil
+}
+
+// commandWithContext builds a subprocess bound to ctx, in its own process
+// group. Cancelling exec.CommandContext stops only the immediate child, and
+// formae spawns plugin children that hold the output pipe open, so the call
+// would go on waiting for them.
+func commandWithContext(ctx context.Context, bin string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return nil
+	}
+	return cmd
 }
 
 // withNotice appends notice as a separate text content block to res when notice
