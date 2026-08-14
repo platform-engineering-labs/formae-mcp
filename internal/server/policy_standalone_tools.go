@@ -64,7 +64,7 @@ func mcpPolicyType(agentType string) string {
 // active/default profile's agent (empty profile = active/default, matching the
 // server's per-call client resolution).
 func (s *Server) fetchPolicies(ctx context.Context) ([]policyInventoryItem, error) {
-	c, err := s.clientFor("")
+	c, err := s.clientFor(ctx, "")
 	if err != nil {
 		return nil, err
 	}

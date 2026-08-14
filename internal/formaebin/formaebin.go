@@ -7,23 +7,14 @@ import (
 	"path/filepath"
 )
 
-// Mode is the connection mode a call runs in. Classic talks to the user's own
-// agent; Hosted (not yet resolved in this phase) talks to the managed platform.
-type Mode int
-
-const (
-	Classic Mode = iota
-	Hosted
-)
-
 // knownClassicLocations are probed, in order, when formae is not on PATH.
 var knownClassicLocations = []string{
 	"/opt/pel/bin/formae",
 	"/usr/local/bin/formae",
 }
 
-// BinResolver picks the formae binary path for a mode. Filesystem access is
-// injected so the logic is unit-testable.
+// BinResolver picks the formae binary path. Filesystem access is injected so
+// the logic is unit-testable.
 type BinResolver struct {
 	BundledPath string
 	LookPath    func(string) (string, error)
@@ -39,13 +30,10 @@ func NewBinResolver() BinResolver {
 	}
 }
 
-// Resolve returns the formae path for the mode. Hosted always uses the bundled,
-// fleet-matched binary. Classic prefers the user's own formae (PATH, then known
-// locations) and falls back to the bundle only when none is installed.
-func (b BinResolver) Resolve(mode Mode) string {
-	if mode == Hosted {
-		return b.BundledPath
-	}
+// Resolve returns the formae binary path. There is one formae per machine: the
+// user's own when installed (PATH, then known locations), and the bundled copy
+// only when none is. Selection is not per call and not mode-dependent.
+func (b BinResolver) Resolve() string {
 	if p, err := b.LookPath("formae"); err == nil && p != "" {
 		return p
 	}
