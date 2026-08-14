@@ -46,13 +46,14 @@ func resolveVia(ctx context.Context, bin, profileName string) (Resolved, error) 
 		defer cancel()
 	}
 
-	// --profile is a global flag and precedes the subcommand.
-	args := []string{}
+	// `profile show [<name>]` takes the name positionally. There is no
+	// --profile flag on it, and none on the root command either, so a flag form
+	// would not parse.
+	args := []string{"profile", "show"}
 	if profileName != "" {
-		args = append(args, "--profile", profileName)
+		args = append(args, profileName)
 	}
-	args = append(args, "profile", "show",
-		"--output-consumer", "machine", "--output-schema", "json")
+	args = append(args, "--output-consumer", "machine", "--output-schema", "json")
 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	// Own process group, so a deadline kills the CLI and anything it spawned.
