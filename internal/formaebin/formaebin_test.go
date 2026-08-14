@@ -5,31 +5,68 @@ import (
 	"testing"
 )
 
+func resolverWith(env map[string]string, lookPath func(string) (string, error)) BinResolver {
+	return BinResolver{
+		Getenv:   func(k string) string { return env[k] },
+		LookPath: lookPath,
+	}
+}
+
 func TestResolve(t *testing.T) {
 	notFound := func(string) (string, error) { return "", exec.ErrNotFound }
-	found := func(p string) func(string) (string, error) {
-		return func(string) (string, error) { return p, nil }
-	}
-	none := func(string) bool { return false }
-	only := func(match string) func(string) bool {
-		return func(p string) bool { return p == match }
-	}
+	onPath := func(string) (string, error) { return "/usr/bin/formae", nil }
 
 	cases := []struct {
 		name     string
+		env      map[string]string
 		lookPath func(string) (string, error)
-		exists   func(string) bool
 		want     string
 	}{
-		{"prefers the user's own formae on PATH", found("/usr/bin/formae"), none, "/usr/bin/formae"},
-		{"falls back to a known install location", notFound, only("/opt/pel/bin/formae"), "/opt/pel/bin/formae"},
-		{"falls back to the bundle when none is installed", notFound, none, "/bundle/formae"},
+		{
+			"the launcher's choice wins",
+			map[string]string{EnvBin: "/opt/pel/bin/formae"},
+			onPath,
+			"/opt/pel/bin/formae",
+		},
+		{
+			"falls back to PATH when launched without the launcher",
+			nil,
+			onPath,
+			"/usr/bin/formae",
+		},
+		{
+			"falls back to the bare name so exec reports it is missing",
+			nil,
+			notFound,
+			"formae",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r := BinResolver{BundledPath: "/bundle/formae", LookPath: c.lookPath, Exists: c.exists}
-			if got := r.Resolve(); got != c.want {
+			if got := resolverWith(c.env, c.lookPath).Resolve(); got != c.want {
 				t.Fatalf("Resolve() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// Managed decides whether an upgrade needs sudo, so anything other than the
+// launcher's explicit "1" must read as the user's own install.
+func TestManaged(t *testing.T) {
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{"1", true},
+		{"0", false},
+		{"", false},
+		{"true", false},
+	}
+	for _, c := range cases {
+		t.Run("value="+c.value, func(t *testing.T) {
+			r := resolverWith(map[string]string{EnvManaged: c.value}, nil)
+			if got := r.Managed(); got != c.want {
+				t.Fatalf("Managed() with %q = %v, want %v", c.value, got, c.want)
 			}
 		})
 	}

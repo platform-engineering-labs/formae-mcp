@@ -1,58 +1,54 @@
-// Package formaebin selects which formae binary the MCP shells out to.
+// Package formaebin reports which formae binary the MCP shells out to.
+//
+// There is exactly one formae per machine. The launcher
+// (scripts/start-mcp.sh) finds the user's own install and provisions one only
+// when the machine has none, then exports the answer. Detection lives there and
+// only there: two detectors in two languages can disagree, and that
+// disagreement is how a machine ends up with two installs.
 package formaebin
 
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 )
 
-// knownClassicLocations are probed, in order, when formae is not on PATH.
-var knownClassicLocations = []string{
-	"/opt/pel/bin/formae",
-	"/usr/local/bin/formae",
-}
+const (
+	// EnvBin names the formae binary the launcher selected.
+	EnvBin = "FORMAE_BIN"
+	// EnvManaged is "1" when that binary is the copy we provisioned into the
+	// user's own tree, which can therefore be upgraded without sudo.
+	EnvManaged = "FORMAE_BIN_MANAGED"
+)
 
-// BinResolver picks the formae binary path. Filesystem access is injected so
-// the logic is unit-testable.
+// BinResolver reads the launcher's decision. The environment and PATH lookup
+// are injected so the logic is unit-testable.
 type BinResolver struct {
-	BundledPath string
-	LookPath    func(string) (string, error)
-	Exists      func(string) bool
+	Getenv   func(string) string
+	LookPath func(string) (string, error)
 }
 
-// NewBinResolver wires a BinResolver to the real filesystem.
+// NewBinResolver wires a BinResolver to the real process environment.
 func NewBinResolver() BinResolver {
-	return BinResolver{
-		BundledPath: bundledFormaePath(),
-		LookPath:    exec.LookPath,
-		Exists:      func(p string) bool { _, err := os.Stat(p); return err == nil },
-	}
+	return BinResolver{Getenv: os.Getenv, LookPath: exec.LookPath}
 }
 
-// Resolve returns the formae binary path. There is one formae per machine: the
-// user's own when installed (PATH, then known locations), and the bundled copy
-// only when none is. Selection is not per call and not mode-dependent.
+// Resolve returns the formae binary to run. The PATH fallback covers running
+// this binary directly, without the launcher; the bare name after it leaves
+// exec to report a missing formae in its own words rather than failing on an
+// empty path.
 func (b BinResolver) Resolve() string {
+	if p := b.Getenv(EnvBin); p != "" {
+		return p
+	}
 	if p, err := b.LookPath("formae"); err == nil && p != "" {
 		return p
 	}
-	for _, loc := range knownClassicLocations {
-		if b.Exists(loc) {
-			return loc
-		}
-	}
-	return b.BundledPath
+	return "formae"
 }
 
-// bundledFormaePath is FORMAE_BUNDLED_BIN if set, else a formae next to the MCP
-// executable, else the bare name (last-ditch PATH lookup at exec time).
-func bundledFormaePath() string {
-	if p := os.Getenv("FORMAE_BUNDLED_BIN"); p != "" {
-		return p
-	}
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(exe), "formae")
-	}
-	return "formae"
+// Managed reports whether the resolved binary is ours to upgrade. Only the
+// launcher's explicit "1" counts: everything else is the user's own install,
+// where an upgrade needs sudo and their consent.
+func (b BinResolver) Managed() bool {
+	return b.Getenv(EnvManaged) == "1"
 }

@@ -792,6 +792,7 @@ func withFakeVersion(t *testing.T, v string) {
 type stubResolver struct {
 	ec         execctx.Context
 	err        error
+	managed    bool
 	sawProfile string
 }
 
@@ -801,6 +802,8 @@ func (r *stubResolver) Resolve(_ context.Context, profileName string) (execctx.C
 }
 
 func (r *stubResolver) Bin() string { return r.ec.FormaeBin }
+
+func (r *stubResolver) Managed() bool { return r.managed }
 
 // An explicit profile argument must reach the resolver. Without this the other
 // cases would pass even if every call resolved the active profile.

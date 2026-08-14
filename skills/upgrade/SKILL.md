@@ -23,13 +23,14 @@ Before doing anything:
 
 ## Step 2 — Determine where formae lives
 
-Check the managed path directly first, then fall back to PATH:
+**Do not probe the filesystem for this.** There is exactly one formae per machine and the launcher already decided which one; a machine can have a leftover copy in the managed tree that is *not* the binary in use, so `test -x ~/.formae-ai/opt/bin/formae` answers the wrong question and would send you at a binary the MCP never runs.
 
-1. Check whether `~/.formae-ai/opt/bin/formae` exists (run `test -x ~/.formae-ai/opt/bin/formae && echo managed || echo not-managed`).
-   - **If it exists** → this is the managed install. The binary is exposed via `FORMAE_BUNDLED_BIN` and is NOT on `PATH`, so `which formae` will not find it. Use Step 3a.
-2. Only if the managed binary is absent, run `which formae` (or `command -v formae`) to find the active binary.
-   - **Classic user install** — path is anywhere other than the managed tree (e.g. `/opt/pel/bin/`, `/usr/local/bin/`, a custom prefix):
-     → this is the user's own install; it requires sudo and is their responsibility. Follow Step 3b instead.
+Read the answer out of the `check_health` output from Step 1:
+
+- The skew notice says **"Run /formae:upgrade to update formae"** → this is the managed install, ours to move, sudo-free. Use Step 3a.
+- The skew notice **names a path and says upgrading needs sudo** (e.g. `/opt/pel/bin/formae`) → this is the user's own install and their responsibility. Use Step 3b, and use the path the notice named.
+
+If there is no skew notice at all, there is nothing to upgrade — say so and stop.
 
 ## Step 3a — Upgrade a managed-tree install (sudo-free)
 
@@ -74,6 +75,6 @@ Once they confirm the upgrade is done, move to Step 4.
 After the upgrade (either path):
 
 1. Re-run `check_health` to confirm the version-skew notice is gone.
-2. If the skew notice is still present for `formae`, report the updated local version and check whether the path `which formae` sees is the freshly installed binary. If the managed-tree binary was upgraded but another `formae` earlier on `PATH` is shadowing it, point that out and suggest the user adjust their `PATH`.
+2. If the skew notice is still present for `formae`, report the updated local version. The notice names the binary actually in use, so compare that against what you upgraded.
 3. If the MCP binary (`formae-mcp`) was also upgraded, note that the new MCP binary only takes effect on the **next launch** of the harness — the running instance cannot hot-swap itself. The local `formae` version is picked up immediately on the next tool call (the version cache is keyed on path + mtime + size, so the new binary is seen without restarting).
 4. Report the final state clearly.

@@ -18,7 +18,7 @@ func TestSkewNotice(t *testing.T) {
 		{"0.88.0", "0.92.0", "formae is newer"},
 	}
 	for _, c := range cases {
-		got := skewNotice(c.agent, c.formae)
+		got := skewNotice(c.agent, c.formae, "/opt/pel/bin/formae", true)
 		if c.wantSub == "" {
 			if got != "" {
 				t.Errorf("skewNotice(%s,%s) = %q, want empty", c.agent, c.formae, got)
@@ -28,6 +28,27 @@ func TestSkewNotice(t *testing.T) {
 		if !strings.Contains(got, c.wantSub) {
 			t.Errorf("skewNotice(%s,%s) = %q, want substring %q", c.agent, c.formae, got, c.wantSub)
 		}
+	}
+}
+
+// An upgrade instruction is only actionable if it matches where formae lives.
+// The managed copy is ours and upgrades without sudo; the user's own install
+// does not, and telling them otherwise sends them at a command that fails.
+func TestSkewNoticeTellsThemWhichUpgradeTheyNeed(t *testing.T) {
+	managed := skewNotice("0.92.0", "0.88.0", "/home/u/.formae-ai/opt/bin/formae", true)
+	if !strings.Contains(managed, "/formae:upgrade") {
+		t.Errorf("managed notice should point at the sudo-free upgrade: %q", managed)
+	}
+	if strings.Contains(managed, "sudo") {
+		t.Errorf("managed notice should not mention sudo: %q", managed)
+	}
+
+	own := skewNotice("0.92.0", "0.88.0", "/opt/pel/bin/formae", false)
+	if !strings.Contains(own, "/opt/pel/bin/formae") {
+		t.Errorf("notice for the user's own install should name its path: %q", own)
+	}
+	if !strings.Contains(own, "sudo") {
+		t.Errorf("notice for the user's own install should say it needs sudo: %q", own)
 	}
 }
 
