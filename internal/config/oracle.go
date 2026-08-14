@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+
+	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 )
 
 // schemaVersion is the machine-view major version this build understands. It is
@@ -180,4 +182,14 @@ func decodeProfileShow(data []byte) (Resolved, error) {
 	default:
 		return Resolved{}, fmt.Errorf("formae reported an unknown connection mode %q", v.Cli.Connection.Mode)
 	}
+}
+
+// Resolve reads a profile's resolved configuration from the CLI. An empty
+// profileName lets the CLI resolve the active profile and report which one it
+// used, so this package never reasons about what "active" meant.
+func Resolve(ctx context.Context, bin, profileName string) (Resolved, error) {
+	if err := featuregate.GuardFeatureContext(ctx, featuregate.FeatureConnectionOracle, bin); err != nil {
+		return Resolved{}, err
+	}
+	return resolveVia(ctx, bin, profileName)
 }

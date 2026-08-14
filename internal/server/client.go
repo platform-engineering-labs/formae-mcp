@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 )
 
@@ -28,16 +29,28 @@ func NewFormaeClient(endpoint string) *FormaeClient {
 	}
 }
 
-// newClientFromCtx builds a FormaeClient from a resolved execution context.
-// When ctx.Port is non-empty the endpoint is assembled as URL:Port; when Port
-// is empty ctx.URL is used as-is (e.g. a full URL supplied via forcedEndpoint
-// in tests or an explicit override).
-func newClientFromCtx(ctx execctx.Context) *FormaeClient {
-	endpoint := ctx.URL
-	if ctx.Port != "" {
-		endpoint = ctx.URL + ":" + ctx.Port
+// newClientFromCtx builds a client for a resolved connection. Hosted is
+// recognised and refused: this build cannot authenticate, and shipping a
+// routing header without a credential would turn an understandable
+// "unsupported" into a remote 401.
+//
+// A classic connection with no port of its own carries one in its URL (a forced
+// endpoint), so it is used as-is.
+func newClientFromCtx(ec execctx.Context) (*FormaeClient, error) {
+	switch conn := ec.Conn.(type) {
+	case config.Classic:
+		endpoint := conn.URL
+		if conn.Port != 0 {
+			endpoint = fmt.Sprintf("%s:%d", conn.URL, conn.Port)
+		}
+		return NewFormaeClient(endpoint), nil
+	case config.Hosted:
+		return nil, fmt.Errorf(
+			"profile %q targets hosted formae, which this build does not support yet",
+			ec.ProfileName)
+	default:
+		return nil, fmt.Errorf("profile %q resolved no usable connection", ec.ProfileName)
 	}
-	return NewFormaeClient(endpoint)
 }
 
 func (c *FormaeClient) get(ctx context.Context, path string, query url.Values) ([]byte, int, error) {
