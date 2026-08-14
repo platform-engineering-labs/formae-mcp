@@ -118,12 +118,33 @@ func TestResolveVia_ReadsStdoutIgnoringStderr(t *testing.T) {
 
 // TestResolveVia_PassesExactArgv pins the whole command line, so an
 // implementation that invents a flag or drops the machine consumer fails here.
+// `profile show` takes the name positionally; there is no --profile flag on it
+// and none on the root command either, so a flag form would not even parse.
 func TestResolveVia_PassesExactArgv(t *testing.T) {
-	const want = "--profile prod profile show --output-consumer machine --output-schema json"
-	bin := stubFormae(t, "if [ \"$*\" != '"+want+"' ]; then echo \"unexpected argv: $*\" >&2; exit 9; fi\ncat <<'EOF'\n"+classicView+"\nEOF\n")
+	cases := []struct {
+		name    string
+		profile string
+		want    string
+	}{
+		{
+			"named profile",
+			"prod",
+			"profile show prod --output-consumer machine --output-schema json",
+		},
+		{
+			"active profile",
+			"",
+			"profile show --output-consumer machine --output-schema json",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bin := stubFormae(t, "if [ \"$*\" != '"+tc.want+"' ]; then echo \"unexpected argv: $*\" >&2; exit 9; fi\ncat <<'EOF'\n"+classicView+"\nEOF\n")
 
-	if _, err := resolveVia(context.Background(), bin, "prod"); err != nil {
-		t.Fatalf("resolveVia: unexpected error: %v", err)
+			if _, err := resolveVia(context.Background(), bin, tc.profile); err != nil {
+				t.Fatalf("resolveVia: unexpected error: %v", err)
+			}
+		})
 	}
 }
 
