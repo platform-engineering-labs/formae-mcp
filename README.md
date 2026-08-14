@@ -6,9 +6,10 @@ MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [f
 
 - A running formae agent (`formae agent start`) and a formae profile pointing at it
 
-On first use the plugin downloads a prebuilt MCP server and a matched `formae`
-binary into `~/.formae-ai/opt` — no Go toolchain required. (A Go toolchain is only
-needed for local development builds, via `FORMAE_MCP_DEV=1`.)
+On first use the plugin downloads a prebuilt MCP server into `~/.formae-ai/opt` —
+no Go toolchain required. If you have no `formae` installed it downloads one there
+too; if you already have one, that is the one it uses and nothing is downloaded.
+(A Go toolchain is only needed for local development builds, via `FORMAE_MCP_DEV=1`.)
 
 ## Installation
 
@@ -26,7 +27,7 @@ Install the plugin:
 /plugin install formae@formae-marketplace
 ```
 
-Run `/reload-plugins` (Claude Code v2.1.116+) to apply the install without restarting your session. On older versions, restart Claude Code instead. On first use the plugin downloads a prebuilt MCP server and a matched `formae` binary into `~/.formae-ai/opt` — nothing is compiled on your machine.
+Run `/reload-plugins` (Claude Code v2.1.116+) to apply the install without restarting your session. On older versions, restart Claude Code instead. On first use the plugin downloads a prebuilt MCP server into `~/.formae-ai/opt`, plus a `formae` if you do not already have one — nothing is compiled on your machine.
 
 Verify by asking Claude to run `/formae:formae-status`.
 
@@ -46,7 +47,7 @@ If you prefer not to use the marketplace:
    claude --plugin-dir ~/.claude/plugins/formae-mcp
    ```
 
-On first use the plugin downloads a prebuilt MCP server and a matched `formae` binary into `~/.formae-ai/opt`; set `FORMAE_MCP_DEV=1` to build from source instead.
+On first use the plugin downloads a prebuilt MCP server into `~/.formae-ai/opt`, plus a `formae` if you do not already have one; set `FORMAE_MCP_DEV=1` to build from source instead.
 
 ### Codex
 
@@ -101,7 +102,7 @@ Run `/reload-plugins` to apply the change without restarting your session.
 | `/formae:formae-plugin-new` | Scaffold a new formae resource plugin |
 | `/formae:formae-plugin-add-resource` | Add a new resource type to an existing plugin |
 | `/formae:formae-config` | Switch, list, save, create, delete, compare, view, and edit named formae configuration profiles (drives `formae profile`; requires formae >= 0.87.0) |
-| `/formae:setup` | Install or repair the formae MCP — ensures the prebuilt binary and bundled formae are present and the MCP is registered in the current harness |
+| `/formae:setup` | Install or repair the formae MCP — ensures the prebuilt binary and a `formae` are present and the MCP is registered in the current harness |
 | `/formae:upgrade` | Upgrade local formae when the connected agent is newer (classic mode) — always asks first and warns that it may move a pinned formae |
 
 ## Available MCP Tools
@@ -185,6 +186,19 @@ pointer is global and shared with your CLI and any other session.
 
 The `FORMAE_AGENT_URL` and `FORMAE_AGENT_PORT` environment variables are no
 longer read. Configure a profile instead.
+
+### Which formae the plugin runs
+
+There is exactly one `formae` per machine. On launch the plugin looks for yours
+(on `PATH`, then `/opt/pel/bin`, then `/usr/local/bin`) and uses it; only when it
+finds none does it download one into `~/.formae-ai/opt`. It never installs a
+second copy alongside yours, and it never upgrades an install it did not create —
+`/formae:upgrade` tells you which case you are in and, for your own install, gives
+you the command to run.
+
+To point the plugin at a specific build, set `FORMAE_BIN` to its path; it is used
+verbatim and treated as your own install. `FORMAE_MCP_CHANNEL` (`stable` by
+default) selects the channel used when the plugin does have to download.
 
 ## License
 

@@ -39,6 +39,11 @@ func NewResolver(bin formaebin.BinResolver) *Resolver {
 // a full profile resolution (local planning that never reaches the agent).
 func (r *Resolver) Bin() string { return r.bin.Resolve() }
 
+// Managed reports whether the resolved formae is the copy the launcher
+// provisioned into the user's own tree, and can therefore be upgraded without
+// sudo.
+func (r *Resolver) Managed() bool { return r.bin.Managed() }
+
 // Resolve produces the context for an optional profile name. The CLI is the
 // configuration authority: it reports which profile it actually used, so this
 // package never reasons about what "active" meant at the time of the call.

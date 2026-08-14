@@ -38,6 +38,9 @@ func implementation() *mcp.Implementation {
 type contextResolver interface {
 	Resolve(ctx context.Context, profileName string) (execctx.Context, error)
 	Bin() string
+	// Managed reports whether the resolved formae is the copy we provisioned,
+	// which decides whether an upgrade needs sudo.
+	Managed() bool
 }
 
 // Server wraps the MCP server and the formae API client.
@@ -429,7 +432,7 @@ func (s *Server) buildSkewNotice(ctx context.Context, formaeBin string, c *Forma
 	if err != nil {
 		return ""
 	}
-	return skewNotice(stats.Version, localVer)
+	return skewNotice(stats.Version, localVer, formaeBin, s.ctxResolver.Managed())
 }
 
 func (s *Server) handleListPolicies(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {

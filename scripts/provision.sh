@@ -52,3 +52,49 @@ provision_pkg() {
             "$_ppkg"
     fi
 }
+
+# resolve_formae <channel>
+#   Decides which formae this machine runs, provisioning one only when it has
+#   none. Sets FORMAE_BIN (absolute path) and FORMAE_BIN_MANAGED (1 when that
+#   binary is ours to upgrade without sudo, else 0).
+#
+#   There is exactly one formae per machine. Detection lives here and only here:
+#   the MCP reads FORMAE_BIN rather than repeating the search in Go, because two
+#   detectors in two languages can disagree, and that disagreement is how a
+#   machine ends up with two installs shadowing each other.
+#
+#   A pre-set FORMAE_BIN wins outright. That is the escape hatch for testing
+#   against a specific build (pair it with FORMAE_MCP_CHANNEL=dev), and it counts
+#   as the user's own install so nothing upgrades it behind their back.
+resolve_formae() {
+    _rchan="$1"
+    _rmanaged="$HOME/.formae-ai/opt/bin/formae"
+    # Test seam: the fixed locations probed after PATH. Overridden only by
+    # test/resolve-formae.sh, so a machine that really has formae installed
+    # cannot reach into the clean-machine cases.
+    _rlocations="${FORMAE_TEST_LOCATIONS:-/opt/pel/bin/formae /usr/local/bin/formae}"
+
+    if [ -n "${FORMAE_BIN:-}" ]; then
+        FORMAE_BIN_MANAGED="${FORMAE_BIN_MANAGED:-0}"
+        return 0
+    fi
+
+    # The user's own install wins, wherever it is. The known locations are
+    # probed after PATH because a harness launched from a desktop session can
+    # have a minimal PATH that omits them.
+    # shellcheck disable=SC2086 # _rlocations is a space-separated candidate list.
+    for _rcand in "$(command -v formae 2>/dev/null || true)" $_rlocations; do
+        if [ -n "$_rcand" ] && [ -x "$_rcand" ] && [ "$_rcand" != "$_rmanaged" ]; then
+            FORMAE_BIN="$_rcand"
+            FORMAE_BIN_MANAGED=0
+            echo "resolve_formae: using your formae at $FORMAE_BIN" >&2
+            return 0
+        fi
+    done
+
+    # Nothing installed: lay one down in the user's own tree, sudo-free.
+    provision_pkg formae "$_rchan" || return 1
+    FORMAE_BIN="$_rmanaged"
+    FORMAE_BIN_MANAGED=1
+    return 0
+}
