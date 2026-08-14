@@ -1,8 +1,10 @@
 package featuregate
 
 import (
+	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +47,7 @@ func TestGuardFeature(t *testing.T) {
 
 	// too old
 	resetCacheForTest()
-	detectFn = func(string) (string, error) { return "0.86.0", nil }
+	detectFn = func(context.Context, string) (string, error) { return "0.86.0", nil }
 	err := GuardFeature(FeatureProfile, "/usr/local/bin/formae")
 	if err == nil || !strings.Contains(err.Error(), "requires formae >= 0.87.0") {
 		t.Fatalf("expected version-floor error, got %v", err)
@@ -53,14 +55,14 @@ func TestGuardFeature(t *testing.T) {
 
 	// new enough
 	resetCacheForTest()
-	detectFn = func(string) (string, error) { return "0.87.0", nil }
+	detectFn = func(context.Context, string) (string, error) { return "0.87.0", nil }
 	if err := GuardFeature(FeatureProfile, "/usr/local/bin/formae"); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 
 	// detection error
 	resetCacheForTest()
-	detectFn = func(string) (string, error) { return "", errors.New("boom") }
+	detectFn = func(context.Context, string) (string, error) { return "", errors.New("boom") }
 	if err := GuardFeature(FeatureProfile, "/usr/local/bin/formae"); err == nil {
 		t.Fatal("expected error when detection fails")
 	}
@@ -70,7 +72,7 @@ func TestDetectCaches(t *testing.T) {
 	t.Cleanup(resetCacheForTest)
 	resetCacheForTest()
 	calls := 0
-	detectFn = func(string) (string, error) { calls++; return "0.87.0", nil }
+	detectFn = func(context.Context, string) (string, error) { calls++; return "0.87.0", nil }
 	_, _ = Detect("/a/formae")
 	_, _ = Detect("/a/formae")
 	if calls != 1 {
@@ -81,7 +83,7 @@ func TestDetectCaches(t *testing.T) {
 func TestDetectIsKeyedByBinary(t *testing.T) {
 	resetCacheForTest()
 	calls := map[string]int{}
-	detectFn = func(bin string) (string, error) { calls[bin]++; return "0.90.0", nil }
+	detectFn = func(_ context.Context, bin string) (string, error) { calls[bin]++; return "0.90.0", nil }
 
 	_, _ = Detect("/a/formae")
 	_, _ = Detect("/a/formae")
@@ -108,7 +110,7 @@ func TestDetectRerunsOnBinaryChange(t *testing.T) {
 	_ = f.Close()
 
 	calls := 0
-	detectFn = func(bin string) (string, error) { calls++; return "0.90.0", nil }
+	detectFn = func(_ context.Context, bin string) (string, error) { calls++; return "0.90.0", nil }
 
 	_, _ = Detect(f.Name())
 	if calls != 1 {
@@ -128,5 +130,69 @@ func TestDetectRerunsOnBinaryChange(t *testing.T) {
 	_, _ = Detect(f.Name())
 	if calls != 2 {
 		t.Fatalf("expected detectFn re-run after binary change, got %d calls", calls)
+	}
+}
+
+func TestRegistry_ConnectionOracleFloor(t *testing.T) {
+	if got := registry[FeatureConnectionOracle]; got != "0.89.0" {
+		t.Fatalf("connection oracle floor: want %q, got %q", "0.89.0", got)
+	}
+}
+
+// stubFormae writes an executable stand-in for the formae CLI running script.
+func stubFormae(t *testing.T, script string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "formae")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+		t.Fatalf("writing stub: %v", err)
+	}
+	return path
+}
+
+// TestGuardFeatureContext_HonoursCancellation pins that a hung formae cannot
+// hold a tool call open. exec.CommandContext alone would not do it: detection
+// reads until EOF, and a grandchild holding the pipe keeps it open.
+func TestGuardFeatureContext_HonoursCancellation(t *testing.T) {
+	t.Cleanup(resetCacheForTest)
+	resetCacheForTest()
+
+	bin := stubFormae(t, "sleep 30\n")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- GuardFeatureContext(ctx, FeatureConnectionOracle, bin) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("GuardFeatureContext with a cancelled context: expected an error, got nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("GuardFeatureContext did not return on a cancelled context")
+	}
+}
+
+// TestDetectContext_DoesNotCacheACancelledDetection pins that a cancelled call
+// says nothing about the binary. Caching its error would make one cancelled
+// tool call fail every gated call for the rest of the process lifetime.
+func TestDetectContext_DoesNotCacheACancelledDetection(t *testing.T) {
+	t.Cleanup(resetCacheForTest)
+	resetCacheForTest()
+
+	bin := stubFormae(t, "echo 'formae version: 0.89.0'\n")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := DetectContext(ctx, bin); err == nil {
+		t.Fatal("DetectContext with a cancelled context: expected an error, got nil")
+	}
+
+	got, err := DetectContext(context.Background(), bin)
+	if err != nil {
+		t.Fatalf("DetectContext after a cancelled call: unexpected error: %v", err)
+	}
+	if got != "0.89.0" {
+		t.Fatalf("version: want %q, got %q", "0.89.0", got)
 	}
 }
