@@ -21,6 +21,12 @@ Install via the
 - Plugin renamed from `formae-mcp` to `formae`; added `/formae:setup` and `/formae:upgrade`.
 - The plugin now downloads its prebuilt `formae-mcp` and a matched `formae` into `~/.formae-ai/opt` on first run (no build-from-source; set `FORMAE_MCP_DEV=1` for local dev builds).
 - Commands issued through the MCP (apply, destroy, cancel, status, list) now identify with your CLI's client ID (`~/.pel/formae/cli_client_id`) instead of a fixed `formae-mcp` identity, so the agent attributes them to the same client as your own `formae` runs. When the ID file does not exist yet, the MCP runs `formae --version` once so formae creates it, and falls back to the old `formae-mcp` identity if it still cannot be read.
+- Configuration now comes from the formae CLI (`formae profile show`) instead of a text scan of the profile file, so the MCP and your own `formae` runs always agree on where a profile points. Requires formae 0.89.0 or newer.
+- Every agent request is built by one internal executor, so cancellation and timeouts apply uniformly across every tool.
+
+### Removed
+
+- `FORMAE_AGENT_URL` and `FORMAE_AGENT_PORT`. Configure a profile instead.
 
 ## [0.8.0]
 
