@@ -79,11 +79,11 @@ func (s *Server) clientFor(profileName string) (*FormaeClient, error) {
 			return nil, err
 		}
 	}
-	ctx, err := s.resolveCtx(profileName)
+	ec, err := s.resolveCtx(profileName)
 	if err != nil {
 		return nil, err
 	}
-	return newClientFromCtx(ctx), nil
+	return newClientFromCtx(ec), nil
 }
 
 // resolveCtx returns the immutable execution context for an optional profile.
@@ -299,43 +299,43 @@ func (s *Server) registerTools() {
 
 // Tool handlers — read-only
 
-func (s *Server) handleListResources(_ context.Context, _ *mcp.CallToolRequest, input tools.ListResourcesInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListResources(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListResourcesInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListResources(input.Query)
+	result, err := c.ListResources(ctx, input.Query)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListStacks(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListStacks(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListStacks()
+	result, err := c.ListStacks(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListTargets(_ context.Context, _ *mcp.CallToolRequest, input tools.ListTargetsInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListTargets(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListTargetsInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListTargets(input.Query)
+	result, err := c.ListTargets(ctx, input.Query)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleGetCommandStatus(_ context.Context, _ *mcp.CallToolRequest, input tools.GetCommandStatusInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleGetCommandStatus(ctx context.Context, _ *mcp.CallToolRequest, input tools.GetCommandStatusInput) (*mcp.CallToolResult, any, error) {
 	if input.CommandID == "" {
 		return errorResult(fmt.Errorf("command_id is required")), nil, nil
 	}
@@ -343,14 +343,14 @@ func (s *Server) handleGetCommandStatus(_ context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.GetCommandStatus(input.CommandID, s.clientID.Resolve(s.formaeBin()))
+	result, err := c.GetCommandStatus(ctx, input.CommandID, s.clientID.Resolve(s.formaeBin()))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListCommands(_ context.Context, _ *mcp.CallToolRequest, input tools.ListCommandsInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListCommands(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListCommandsInput) (*mcp.CallToolResult, any, error) {
 	maxResults := input.MaxResults
 	if maxResults == "" {
 		maxResults = "10"
@@ -359,36 +359,36 @@ func (s *Server) handleListCommands(_ context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListCommands(input.Query, maxResults, s.clientID.Resolve(s.formaeBin()))
+	result, err := c.ListCommands(ctx, input.Query, maxResults, s.clientID.Resolve(s.formaeBin()))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleGetAgentStats(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleGetAgentStats(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.GetAgentStats()
+	result, err := c.GetAgentStats(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	ctx, err := s.resolveCtx(input.Profile)
+func (s *Server) handleCheckHealth(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	ec, err := s.resolveCtx(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c := newClientFromCtx(ctx)
-	if err := c.CheckHealth(); err != nil {
+	c := newClientFromCtx(ec)
+	if err := c.CheckHealth(ctx); err != nil {
 		return errorResult(err), nil, nil
 	}
 	msg := "Formae agent is healthy and reachable."
-	if notice := s.buildSkewNotice(ctx.FormaeBin, c); notice != "" {
+	if notice := s.buildSkewNotice(ctx, ec.FormaeBin, c); notice != "" {
 		msg += "\n\n" + notice
 	}
 	return textResult(msg), nil, nil
@@ -398,8 +398,8 @@ func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, in
 // returns a skew notice when they differ, or "" when skew cannot be determined.
 // It never returns an error — version-skew information is advisory only.
 // The caller passes formaeBin (already resolved) to avoid a redundant resolveCtx call.
-func (s *Server) buildSkewNotice(formaeBin string, c *FormaeClient) string {
-	statsJSON, err := c.GetAgentStats()
+func (s *Server) buildSkewNotice(ctx context.Context, formaeBin string, c *FormaeClient) string {
+	statsJSON, err := c.GetAgentStats(ctx)
 	if err != nil {
 		return ""
 	}
@@ -416,26 +416,26 @@ func (s *Server) buildSkewNotice(formaeBin string, c *FormaeClient) string {
 	return skewNotice(stats.Version, localVer)
 }
 
-func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListPolicies(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListPolicies()
+	result, err := c.ListPolicies(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListChangesSinceLastReconcile(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 
 	if input.Stack != "" {
-		result, err := c.ListChangesSinceLastReconcile(input.Stack)
+		result, err := c.ListChangesSinceLastReconcile(ctx, input.Stack)
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -443,7 +443,7 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	}
 
 	// No stack specified: fetch all stacks, then get drift for each
-	stacksJSON, err := c.ListStacks()
+	stacksJSON, err := c.ListStacks(ctx)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to list stacks: %w", err)), nil, nil
 	}
@@ -462,7 +462,7 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	var results []stackDrift
 
 	for _, stack := range stacks {
-		driftJSON, err := c.ListChangesSinceLastReconcile(stack.Label)
+		driftJSON, err := c.ListChangesSinceLastReconcile(ctx, stack.Label)
 		if err != nil {
 			return errorResult(fmt.Errorf("failed to get drift for stack %s: %w", stack.Label, err)), nil, nil
 		}
@@ -488,16 +488,16 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	return jsonResult(aggregated), nil, nil
 }
 
-func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolRequest, input tools.ExtractResourcesInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequest, input tools.ExtractResourcesInput) (*mcp.CallToolResult, any, error) {
 	if input.Query == "" {
 		return errorResult(fmt.Errorf("query is required")), nil, nil
 	}
-	ctx, err := s.resolveCtx(input.Profile)
+	ec, err := s.resolveCtx(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ec.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -517,7 +517,7 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		args = append(args, "--profile", input.Profile)
 	}
 	args = append(args, outFile)
-	cmd := exec.Command(ctx.FormaeBin, args...)
+	cmd := exec.Command(ec.FormaeBin, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output))), nil, nil
 	}
@@ -527,7 +527,7 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		return errorResult(fmt.Errorf("failed to read extracted file: %w", err)), nil, nil
 	}
 
-	return withNotice(textResult(string(content)), s.buildSkewNotice(ctx.FormaeBin, newClientFromCtx(ctx))), nil, nil
+	return withNotice(textResult(string(content)), s.buildSkewNotice(ctx, ec.FormaeBin, newClientFromCtx(ec))), nil, nil
 }
 
 func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
@@ -592,7 +592,7 @@ func (s *Server) handleGetPluginExample(_ context.Context, _ *mcp.CallToolReques
 
 // Tool handlers — mutations
 
-func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, input tools.ApplyFormaInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, input tools.ApplyFormaInput) (*mcp.CallToolResult, any, error) {
 	if input.FilePath == "" {
 		return errorResult(fmt.Errorf("file_path is required")), nil, nil
 	}
@@ -602,12 +602,12 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	if input.Mode != "reconcile" && input.Mode != "patch" {
 		return errorResult(fmt.Errorf("mode must be 'reconcile' or 'patch', got '%s'", input.Mode)), nil, nil
 	}
-	ctx, err := s.resolveCtx(input.Profile)
+	ec, err := s.resolveCtx(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ec.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -615,32 +615,32 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 		}
 	}
 
-	formaJSON, err := evalFormaFile(ctx, input.FilePath)
+	formaJSON, err := evalFormaFile(ec, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	c := newClientFromCtx(ctx)
-	result, err := c.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, s.clientID.Resolve(ctx.FormaeBin))
+	c := newClientFromCtx(ec)
+	result, err := c.SubmitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	return withNotice(jsonResult(result), s.buildSkewNotice(ctx.FormaeBin, c)), nil, nil
+	return withNotice(jsonResult(result), s.buildSkewNotice(ctx, ec.FormaeBin, c)), nil, nil
 }
 
-func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
 	if input.FilePath == "" && input.Query == "" {
 		return errorResult(fmt.Errorf("either file_path or query is required")), nil, nil
 	}
 	if input.FilePath != "" && input.Query != "" {
 		return errorResult(fmt.Errorf("file_path and query are mutually exclusive")), nil, nil
 	}
-	ctx, err := s.resolveCtx(input.Profile)
+	ec, err := s.resolveCtx(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
+		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ec.FormaeBin); err != nil {
 			return errorResult(err), nil, nil
 		}
 		if err := profile.ValidateName(input.Profile); err != nil {
@@ -648,75 +648,75 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		}
 	}
 
-	c := newClientFromCtx(ctx)
+	c := newClientFromCtx(ec)
 
 	if input.Query != "" {
-		result, err := c.DestroyByQuery(input.Query, input.Simulate, s.clientID.Resolve(ctx.FormaeBin))
+		result, err := c.DestroyByQuery(ctx, input.Query, input.Simulate, s.clientID.Resolve(ec.FormaeBin))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
 		return jsonResult(result), nil, nil
 	}
 
-	formaJSON, err := evalFormaFile(ctx, input.FilePath)
+	formaJSON, err := evalFormaFile(ec, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	result, err := c.SubmitCommand("destroy", "", input.Simulate, false, formaJSON, s.clientID.Resolve(ctx.FormaeBin))
+	result, err := c.SubmitCommand(ctx, "destroy", "", input.Simulate, false, formaJSON, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleCancelCommands(_ context.Context, _ *mcp.CallToolRequest, input tools.CancelCommandsInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleCancelCommands(ctx context.Context, _ *mcp.CallToolRequest, input tools.CancelCommandsInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.CancelCommands(input.Query, s.clientID.Resolve(s.formaeBin()))
+	result, err := c.CancelCommands(ctx, input.Query, s.clientID.Resolve(s.formaeBin()))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleForceSync(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleForceSync(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := c.ForceSync(); err != nil {
+	if err := c.ForceSync(ctx); err != nil {
 		return errorResult(err), nil, nil
 	}
 	return textResult("Resource synchronization triggered successfully."), nil, nil
 }
 
-func (s *Server) handleForceDiscover(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleForceDiscover(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := c.ForceDiscover(); err != nil {
+	if err := c.ForceDiscover(ctx); err != nil {
 		return errorResult(err), nil, nil
 	}
 	return textResult("Resource discovery triggered successfully."), nil, nil
 }
 
-func (s *Server) handleForceCheckTTL(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleForceCheckTTL(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
 	c, err := s.clientFor(input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ForceCheckTTL()
+	result, err := c.ForceCheckTTL(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolRequest, input tools.ForceReconcileStackInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleForceReconcileStack(ctx context.Context, _ *mcp.CallToolRequest, input tools.ForceReconcileStackInput) (*mcp.CallToolResult, any, error) {
 	if input.Stack == "" {
 		return errorResult(fmt.Errorf("stack is required")), nil, nil
 	}
@@ -724,7 +724,7 @@ func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolReq
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	body, _, err := c.ForceReconcileStack(input.Stack)
+	body, _, err := c.ForceReconcileStack(ctx, input.Stack)
 	if err != nil {
 		if body != nil {
 			return errorResult(fmt.Errorf("%s: %s", err.Error(), string(body))), nil, nil
@@ -736,12 +736,12 @@ func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolReq
 
 // Helpers
 
-func evalFormaFile(ctx execctx.Context, filePath string) ([]byte, error) {
+func evalFormaFile(ec execctx.Context, filePath string) ([]byte, error) {
 	if strings.HasSuffix(filePath, ".json") {
 		return os.ReadFile(filePath)
 	}
 
-	cmd := exec.Command(ctx.FormaeBin, "eval", filePath, "--output-schema", "json", "--output-consumer", "machine")
+	cmd := exec.Command(ec.FormaeBin, "eval", filePath, "--output-schema", "json", "--output-consumer", "machine")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

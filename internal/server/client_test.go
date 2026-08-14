@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -43,7 +44,7 @@ func TestSubmitCommandAccepts202(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	body, err := c.SubmitCommand("apply", "reconcile", false, false, nil, "client-1")
+	body, err := c.SubmitCommand(context.Background(), "apply", "reconcile", false, false, nil, "client-1")
 	if err != nil {
 		t.Fatalf("SubmitCommand: unexpected error: %v", err)
 	}
@@ -70,7 +71,7 @@ func TestSubmitCommandAccepts200Simulate(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	body, err := c.SubmitCommand("apply", "reconcile", true, false, nil, "client-1")
+	body, err := c.SubmitCommand(context.Background(), "apply", "reconcile", true, false, nil, "client-1")
 	if err != nil {
 		t.Fatalf("SubmitCommand with simulate=true and 200: unexpected error: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestSubmitCommandRejects200NonSimulate(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	_, err := c.SubmitCommand("apply", "reconcile", false, false, nil, "client-1")
+	_, err := c.SubmitCommand(context.Background(), "apply", "reconcile", false, false, nil, "client-1")
 	if err == nil {
 		t.Fatal("SubmitCommand: expected error for 200 without simulate=true, got nil")
 	}
@@ -105,7 +106,7 @@ func TestSubmitCommandRejectsOtherStatus(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	_, err := c.SubmitCommand("apply", "reconcile", false, false, nil, "client-1")
+	_, err := c.SubmitCommand(context.Background(), "apply", "reconcile", false, false, nil, "client-1")
 	if err == nil {
 		t.Fatal("SubmitCommand: expected error for 500, got nil")
 	}
@@ -125,7 +126,7 @@ func TestDestroyByQueryAccepts202(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	body, err := c.DestroyByQuery("stack=default", false, "client-1")
+	body, err := c.DestroyByQuery(context.Background(), "stack=default", false, "client-1")
 	if err != nil {
 		t.Fatalf("DestroyByQuery: unexpected error: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestDestroyByQueryAccepts200Simulate(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	body, err := c.DestroyByQuery("stack=default", true, "client-1")
+	body, err := c.DestroyByQuery(context.Background(), "stack=default", true, "client-1")
 	if err != nil {
 		t.Fatalf("DestroyByQuery with simulate=true and 200: unexpected error: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestDestroyByQueryRejects200NonSimulate(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	_, err := c.DestroyByQuery("stack=default", false, "client-1")
+	_, err := c.DestroyByQuery(context.Background(), "stack=default", false, "client-1")
 	if err == nil {
 		t.Fatal("DestroyByQuery: expected error for 200 without simulate=true, got nil")
 	}
@@ -187,7 +188,7 @@ func TestDestroyByQueryRejectsOtherStatus(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
-	_, err := c.DestroyByQuery("stack=default", false, "client-1")
+	_, err := c.DestroyByQuery(context.Background(), "stack=default", false, "client-1")
 	if err == nil {
 		t.Fatal("DestroyByQuery: expected error for 500, got nil")
 	}
