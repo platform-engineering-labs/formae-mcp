@@ -23,6 +23,10 @@ Install via the
 - Commands issued through the MCP (apply, destroy, cancel, status, list) now identify with your CLI's client ID (`~/.pel/formae/cli_client_id`) instead of a fixed `formae-mcp` identity, so the agent attributes them to the same client as your own `formae` runs. When the ID file does not exist yet, the MCP runs `formae --version` once so formae creates it, and falls back to the old `formae-mcp` identity if it still cannot be read.
 - Configuration now comes from the formae CLI (`formae profile show`) instead of a text scan of the profile file, so the MCP and your own `formae` runs always agree on where a profile points. Requires formae 0.89.0 or newer.
 - Every agent request is built by one internal executor, so cancellation and timeouts apply uniformly across every tool.
+- The plugin no longer installs a second `formae` alongside one you already have. On launch it looks for yours (`PATH`, then `/opt/pel/bin`, `/usr/local/bin`, `~/.local/bin`, `~/bin`) and uses it; it downloads one into `~/.formae-ai/opt` only when the machine has none. Previously it downloaded a copy on every launch and then ran whichever `formae` came first on `PATH`, so the downloaded one was usually dead weight — and `/formae:upgrade` could upgrade a copy the plugin was not running.
+- The version-skew notice now says which upgrade applies: `/formae:upgrade` for the copy the plugin installed, or the path of your own install, which the plugin will not change.
+- When your `formae` is older than the MCP requires, the error names which binary is too old and whether the plugin installed it, so `/formae:upgrade` can act instead of reporting that there is nothing to do.
+- Set `FORMAE_BIN` to run a specific `formae` build; it is used verbatim and treated as your own install, so nothing upgrades it behind your back.
 
 ### Removed
 
