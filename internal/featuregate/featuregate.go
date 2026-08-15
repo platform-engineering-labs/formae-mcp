@@ -2,6 +2,7 @@ package featuregate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,12 @@ import (
 	"syscall"
 	"time"
 )
+
+// ErrTooOld marks a gate refusing an install below its floor. Callers match on
+// it to tell "your formae is too old" apart from every other resolution
+// failure, which is the difference between an actionable upgrade prompt and an
+// opaque error.
+var ErrTooOld = errors.New("formae is too old")
 
 // Feature names a version-gated MCP capability.
 type Feature string
@@ -144,7 +151,7 @@ func GuardFeatureContext(ctx context.Context, f Feature, bin string) error {
 		return fmt.Errorf("could not determine formae version: %w", err)
 	}
 	if CompareVersions(got, min) < 0 {
-		return fmt.Errorf("requires formae >= %s (connected: %s)", min, got)
+		return fmt.Errorf("%w: requires formae >= %s (connected: %s)", ErrTooOld, min, got)
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -108,7 +109,27 @@ func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Co
 			FormaeBin: s.ctxResolver.Bin(),
 		}, nil
 	}
-	return s.ctxResolver.Resolve(ctx, profileName)
+	ec, err := s.ctxResolver.Resolve(ctx, profileName)
+	if err != nil {
+		return execctx.Context{}, s.explainIfTooOld(err)
+	}
+	return ec, nil
+}
+
+// explainIfTooOld turns a version-floor refusal into something the reader can
+// act on: which binary is too old, and whose it is. Resolution fails before any
+// skew notice can be produced, so without this the upgrade path has no signal
+// at all and reports that there is nothing to do.
+func (s *Server) explainIfTooOld(err error) error {
+	if !errors.Is(err, featuregate.ErrTooOld) {
+		return err
+	}
+	if s.ctxResolver.Managed() {
+		return fmt.Errorf("%w. formae at %s is the copy this plugin installed, so run /formae:upgrade to update it",
+			err, s.ctxResolver.Bin())
+	}
+	return fmt.Errorf("%w. formae at %s is your own install, so this plugin will not change it; run /formae:upgrade for the command",
+		err, s.ctxResolver.Bin())
 }
 
 // formaeBin returns the resolved formae binary path. Use this only in handlers

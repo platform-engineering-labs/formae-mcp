@@ -23,8 +23,8 @@ func skewNotice(agentVer, formaeVer, formaePath string, managed bool) string {
 			return notice + "Run /formae:upgrade to update formae " +
 				"(this may move a pinned formae version to match your agent)."
 		}
-		return notice + "formae is your own install at " + formaePath +
-			", so upgrading it needs sudo and your own hand. Run /formae:upgrade for the exact command."
+		return notice + "formae at " + formaePath +
+			" is your own install, so this plugin will not change it. Run /formae:upgrade for the command."
 	case -1:
 		return "Version skew: your local formae is newer (" + formaeVer + ") than the connected agent (" + agentVer +
 			"). The agent may reject forma output that uses newer schema."
