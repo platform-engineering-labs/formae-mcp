@@ -25,12 +25,14 @@ Before doing anything:
 
 **Do not probe the filesystem for this.** There is exactly one formae per machine and the launcher already decided which one; a machine can have a leftover copy in the managed tree that is *not* the binary in use, so `test -x ~/.formae-ai/opt/bin/formae` answers the wrong question and would send you at a binary the MCP never runs.
 
-Read the answer out of the `check_health` output from Step 1:
+Read the answer out of the `check_health` output from Step 1. There are two shapes it can take, because a formae below the MCP's floor fails before any skew notice can be produced:
 
-- The skew notice says **"Run /formae:upgrade to update formae"** → this is the managed install, ours to move, sudo-free. Use Step 3a.
-- The skew notice **names a path and says upgrading needs sudo** (e.g. `/opt/pel/bin/formae`) → this is the user's own install and their responsibility. Use Step 3b, and use the path the notice named.
+- **`check_health` errored with "formae is too old"** — the message names the binary and whose it is. That is the strongest signal: the MCP cannot work at all until it is upgraded. Follow the route the message gives.
+- **`check_health` succeeded with a skew notice** — the agent is merely newer than formae. If the notice says "Run /formae:upgrade to update formae" it is the managed install (Step 3a); if it names a path and says the plugin will not change it, it is the user's own (Step 3b, using that path).
 
-If there is no skew notice at all, there is nothing to upgrade — say so and stop.
+If `check_health` succeeded and there is no skew notice, there is nothing to upgrade — say so and stop.
+
+For the user's own install, do **not** assume sudo. Ask where it came from, or look at the path: a binary under `$HOME` is theirs to replace without privilege, while one under `/opt` or `/usr/local` will need it.
 
 ## Step 3a — Upgrade a managed-tree install (sudo-free)
 

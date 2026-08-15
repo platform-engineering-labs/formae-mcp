@@ -50,7 +50,7 @@ run_case() {
         PATH="$fakepath:/usr/bin:/bin"
         export PATH
         # Probe nothing real: the fixed locations are redirected under HOME.
-        FORMAE_TEST_LOCATIONS="$HOME/opt/pel/bin/formae $HOME/usr/local/bin/formae"
+        FORMAE_TEST_LOCATIONS="$HOME/opt/pel/bin/formae $HOME/usr/local/bin/formae $HOME/.local/bin/formae"
         export FORMAE_TEST_LOCATIONS
         managed="$HOME/.formae-ai/opt/bin/formae"
         provisioned=0
@@ -108,6 +108,29 @@ run_case "managed copy on PATH is still managed" \
 run_case "preset FORMAE_BIN wins outright" \
     'stub_bin "$HOME/custom/formae"; FORMAE_BIN="$HOME/custom/formae"' \
     0 0 '$HOME/custom/formae'
+
+# Ownership is derived, never inherited. A stale FORMAE_BIN_MANAGED=1 in the
+# environment must not make us treat someone else's binary as ours to upgrade:
+# /formae:upgrade would then move the managed copy while the MCP kept running
+# this one, and report success.
+run_case "a stale FORMAE_BIN_MANAGED does not survive" \
+    'stub_bin "$HOME/custom/formae"; FORMAE_BIN="$HOME/custom/formae"; FORMAE_BIN_MANAGED=1' \
+    0 0 '$HOME/custom/formae'
+
+# A user-local install is found even when the harness PATH omits it, which is
+# what a desktop-launched session looks like. Missing it provisions a second
+# formae alongside one that is already there.
+run_case "user-local install off PATH is found" \
+    'stub_bin "$HOME/.local/bin/formae"' \
+    0 0 '$HOME/.local/bin/formae'
+
+# The cases above inject their own probe list, so nothing there pins the list
+# that actually ships. Check the defaults directly: dropping a location here is
+# how a machine ends up with a second formae beside one it already had.
+for loc in /opt/pel/bin/formae /usr/local/bin/formae '$HOME/.local/bin/formae' '$HOME/bin/formae'; do
+    grep -q -- "$loc" "$ROOT/scripts/provision.sh" \
+        || fail "the default probe list no longer includes $loc"
+done
 
 if [ "$failures" -ne 0 ]; then
     echo "resolve-formae: $failures check(s) failed" >&2

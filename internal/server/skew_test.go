@@ -43,12 +43,15 @@ func TestSkewNoticeTellsThemWhichUpgradeTheyNeed(t *testing.T) {
 		t.Errorf("managed notice should not mention sudo: %q", managed)
 	}
 
+	// "not ours" is not the same as "needs sudo": FORMAE_BIN can point at a
+	// user-owned build under $HOME. Name the path and say we will not touch it;
+	// let the upgrade flow pick the method that suits the install.
 	own := skewNotice("0.92.0", "0.88.0", "/opt/pel/bin/formae", false)
 	if !strings.Contains(own, "/opt/pel/bin/formae") {
 		t.Errorf("notice for the user's own install should name its path: %q", own)
 	}
-	if !strings.Contains(own, "sudo") {
-		t.Errorf("notice for the user's own install should say it needs sudo: %q", own)
+	if strings.Contains(own, "sudo") {
+		t.Errorf("notice must not assert sudo, which it cannot know: %q", own)
 	}
 }
 

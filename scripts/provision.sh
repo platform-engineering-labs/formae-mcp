@@ -72,10 +72,14 @@ resolve_formae() {
     # Test seam: the fixed locations probed after PATH. Overridden only by
     # test/resolve-formae.sh, so a machine that really has formae installed
     # cannot reach into the clean-machine cases.
-    _rlocations="${FORMAE_TEST_LOCATIONS:-/opt/pel/bin/formae /usr/local/bin/formae}"
+    _rlocations="${FORMAE_TEST_LOCATIONS:-/opt/pel/bin/formae /usr/local/bin/formae $HOME/.local/bin/formae $HOME/bin/formae}"
 
     if [ -n "${FORMAE_BIN:-}" ]; then
-        FORMAE_BIN_MANAGED="${FORMAE_BIN_MANAGED:-0}"
+        # Always the user's own: we did not install it, so we never move it.
+        # Ownership is derived here rather than trusted from the environment,
+        # so a stale FORMAE_BIN_MANAGED cannot make us upgrade someone else's
+        # binary — or, worse, upgrade ours while running theirs.
+        FORMAE_BIN_MANAGED=0
         return 0
     fi
 
