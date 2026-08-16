@@ -106,7 +106,7 @@ func (c *FormaeClient) ListResources(ctx context.Context, query string) (json.Ra
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -122,7 +122,7 @@ func (c *FormaeClient) ListStacks(ctx context.Context) (json.RawMessage, error) 
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -138,7 +138,7 @@ func (c *FormaeClient) ListPolicies(ctx context.Context) (json.RawMessage, error
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -159,7 +159,7 @@ func (c *FormaeClient) ListTargets(ctx context.Context, query string) (json.RawM
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -212,7 +212,7 @@ func (c *FormaeClient) ListCommands(ctx context.Context, query string, maxResult
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage(`{"Commands":[]}`), nil
+		return c.route.collectionMiss(json.RawMessage(`{"Commands":[]}`))
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -322,7 +322,7 @@ func (c *FormaeClient) CancelCommands(ctx context.Context, query string, clientI
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage(`{"CommandIds":[]}`), nil
+		return c.route.collectionMiss(json.RawMessage(`{"CommandIds":[]}`))
 	}
 	if status != http.StatusAccepted {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
