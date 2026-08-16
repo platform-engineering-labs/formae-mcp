@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
+	"github.com/platform-engineering-labs/formae-mcp/internal/secret"
 )
 
 // schemaVersion is the machine-view major version this build understands. It is
@@ -28,32 +29,34 @@ const oracleTimeout = 10 * time.Second
 
 var errOutputTooLarge = errors.New("formae produced more output than expected")
 
-// Resolved is one profile evaluation: the effective profile name the CLI
-// reported, and the connection it resolved.
-type Resolved struct {
-	Profile string
-	Conn    Connection
-}
-
 // resolveVia runs the CLI as the configuration oracle and decodes its machine
 // view. Stdout and stderr are captured separately and drained concurrently:
 // combined capture would put subprocess output into errors, and reading two
 // pipes serially can deadlock when the child fills the one not being read.
-func resolveVia(ctx context.Context, bin, profileName string) (Resolved, error) {
+//
+// One command produces both the connection and the credential. Two
+// independently timed reads could not: between them the active pointer can
+// move, the profile can be rewritten, or the auth block can change, and the
+// request would carry an endpoint from one revision with a credential from
+// another — for hosted, one installation's endpoint with another's credential.
+func resolveVia(ctx context.Context, bin, profileName string, forceRefresh bool) (Resolved, error) {
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, oracleTimeout)
 		defer cancel()
 	}
 
-	// `profile show [<name>]` takes the name positionally. There is no
-	// --profile flag on it, and none on the root command either, so a flag form
-	// would not parse.
-	args := []string{"profile", "show"}
+	// --profile is a local flag on `resolve`, registered by AddConfigFlags, so
+	// it follows the subcommand. This is the opposite of `profile show`, where
+	// the name is positional and no such flag exists.
+	args := []string{"connection", "resolve"}
 	if profileName != "" {
-		args = append(args, profileName)
+		args = append(args, "--profile", profileName)
 	}
 	args = append(args, "--output-consumer", "machine", "--output-schema", "json")
+	if forceRefresh {
+		args = append(args, "--force-refresh")
+	}
 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	// Own process group, so a deadline kills the CLI and anything it spawned.
@@ -106,35 +109,43 @@ func resolveVia(ctx context.Context, bin, profileName string) (Resolved, error) 
 		return Resolved{}, fmt.Errorf("reading configuration from %s: %w", bin, out.err)
 	}
 	if waitErr != nil {
-		// Reports the failure and the exit status, never the bytes.
+		// A declared failure is an envelope on this same stdout, so a non-zero
+		// exit is read rather than reported blind. decodeFailure falls back to
+		// the exit status when there is no envelope to read, and the bytes
+		// never reach an error either way.
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
-			return Resolved{}, fmt.Errorf("formae could not resolve the configuration (exit %d)", exitErr.ExitCode())
+			return Resolved{}, decodeFailure(out.data, exitErr.ExitCode())
 		}
 		return Resolved{}, fmt.Errorf("formae could not resolve the configuration: %w", waitErr)
 	}
 
-	return decodeProfileShow(out.data)
+	return decodeResolved(out.data)
 }
 
-// profileShowView is the subset of the machine view this code reads. Unknown
-// fields are ignored so the producer can add fields without a break.
-type profileShowView struct {
+// resolvedView is the subset of the machine view this code reads. Unknown
+// fields are ignored so the producer can add fields without a break — the
+// hosted arm's `auth` object is one such field, reduced to a type discriminator
+// this consumer has no use for.
+//
+// The connection is at the top level. `profile show` nests it under `cli`;
+// `connection resolve` does not, and reading the wrong shape would silently
+// yield no connection at all.
+type resolvedView struct {
 	SchemaVersion *int   `json:"schemaVersion"`
 	Profile       string `json:"profile"`
-	Cli           struct {
-		Connection *struct {
-			Mode         string `json:"mode"`
-			URL          string `json:"url"`
-			Port         int    `json:"port"`
-			Endpoint     string `json:"endpoint"`
-			Installation string `json:"installation"`
-		} `json:"connection"`
-	} `json:"cli"`
+	Connection    *struct {
+		Mode         string `json:"mode"`
+		URL          string `json:"url"`
+		Port         int    `json:"port"`
+		Endpoint     string `json:"endpoint"`
+		Installation string `json:"installation"`
+	} `json:"connection"`
+	Credential string `json:"credential"`
 }
 
-func decodeProfileShow(data []byte) (Resolved, error) {
-	var v profileShowView
+func decodeResolved(data []byte) (Resolved, error) {
+	var v resolvedView
 	dec := json.NewDecoder(bytes.NewReader(data))
 	if err := dec.Decode(&v); err != nil {
 		return Resolved{}, errors.New("formae returned output this version cannot read")
@@ -152,45 +163,66 @@ func decodeProfileShow(data []byte) (Resolved, error) {
 			"formae output uses schema version %d; this build understands %d",
 			*v.SchemaVersion, schemaVersion)
 	}
-	if v.Cli.Connection == nil {
-		return Resolved{}, errors.New("formae output carries no cli.connection")
+	if v.Connection == nil {
+		return Resolved{}, errors.New("formae output carries no connection")
 	}
 
-	switch v.Cli.Connection.Mode {
+	switch v.Connection.Mode {
 	case "classic":
 		// Classic gets a minimum check too. An empty URL would produce a
 		// valid-looking connection and defer the failure to request
 		// construction, which reports it far from its cause.
-		if v.Cli.Connection.URL == "" {
+		if v.Connection.URL == "" {
 			return Resolved{}, errors.New("formae reported a classic connection with no url")
 		}
-		if v.Cli.Connection.Port <= 0 {
-			return Resolved{}, fmt.Errorf("formae reported an unusable port %d", v.Cli.Connection.Port)
+		if v.Connection.Port <= 0 {
+			return Resolved{}, fmt.Errorf("formae reported an unusable port %d", v.Connection.Port)
+		}
+		// The MCP sends a self-hosted agent no credential. Refusing one here
+		// rather than dropping it keeps that non-goal out of reach of a
+		// producer bug, instead of leaving a token in a value that might later
+		// grow a path to a header.
+		if v.Credential != "" {
+			return Resolved{}, errors.New("formae reported a credential for a classic connection")
 		}
 		return Resolved{
 			Profile: v.Profile,
-			Conn:    Classic{URL: v.Cli.Connection.URL, Port: v.Cli.Connection.Port},
+			Conn:    Classic{URL: v.Connection.URL, Port: v.Connection.Port},
 		}, nil
 	case "hosted":
 		h := Hosted{
-			Endpoint:     v.Cli.Connection.Endpoint,
-			Installation: v.Cli.Connection.Installation,
+			Endpoint:     v.Connection.Endpoint,
+			Installation: v.Connection.Installation,
 		}
 		if err := ValidateHosted(h); err != nil {
 			return Resolved{}, fmt.Errorf("hosted connection is not usable: %w", err)
 		}
-		return Resolved{Profile: v.Profile, Conn: h}, nil
+		// A hosted connection that cannot be authenticated is not a usable
+		// connection. The producer refuses to emit one; this refuses to invent
+		// one rather than deferring the failure into a remote 401.
+		if v.Credential == "" {
+			return Resolved{}, errors.New("formae reported a hosted connection with no credential")
+		}
+		return Resolved{
+			Profile:    v.Profile,
+			Conn:       h,
+			Credential: secret.New(v.Credential),
+		}, nil
 	default:
-		return Resolved{}, fmt.Errorf("formae reported an unknown connection mode %q", v.Cli.Connection.Mode)
+		return Resolved{}, fmt.Errorf("formae reported an unknown connection mode %q", v.Connection.Mode)
 	}
 }
 
-// Resolve reads a profile's resolved configuration from the CLI. An empty
-// profileName lets the CLI resolve the active profile and report which one it
-// used, so this package never reasons about what "active" meant.
-func Resolve(ctx context.Context, bin, profileName string) (Resolved, error) {
+// Resolve reads a profile's resolved connection and credential from the CLI. An
+// empty profileName lets the CLI resolve the active profile and report which one
+// it used, so this package never reasons about what "active" meant.
+//
+// forceRefresh asks the auth plugin for a fresh credential rather than the
+// stored one. It is for the 401 path, which re-resolves and then checks that
+// the target did not move.
+func Resolve(ctx context.Context, bin, profileName string, forceRefresh bool) (Resolved, error) {
 	if err := featuregate.GuardFeatureContext(ctx, featuregate.FeatureConnectionOracle, bin); err != nil {
 		return Resolved{}, err
 	}
-	return resolveVia(ctx, bin, profileName)
+	return resolveVia(ctx, bin, profileName, forceRefresh)
 }

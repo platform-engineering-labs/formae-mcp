@@ -794,10 +794,24 @@ type stubResolver struct {
 	err        error
 	managed    bool
 	sawProfile string
+	// calls and refreshes count what the 401 path did, so a test can assert
+	// that a refresh happened, or that one did not.
+	calls     int
+	refreshes int
+	// refreshed, when set, is what a forced refresh resolves to. Nil means a
+	// refresh returns the same context as the first resolution.
+	refreshed *execctx.Context
 }
 
-func (r *stubResolver) Resolve(_ context.Context, profileName string) (execctx.Context, error) {
+func (r *stubResolver) Resolve(_ context.Context, profileName string, forceRefresh bool) (execctx.Context, error) {
 	r.sawProfile = profileName
+	r.calls++
+	if forceRefresh {
+		r.refreshes++
+		if r.refreshed != nil {
+			return *r.refreshed, nil
+		}
+	}
 	return r.ec, r.err
 }
 
