@@ -39,6 +39,10 @@ type routing interface {
 	// collectionMiss answers a 404 from an endpoint that lists things.
 	collectionMiss(empty json.RawMessage) (json.RawMessage, error)
 
+	// unrouted reports the error for a 404 this connection cannot explain as an
+	// object simply being absent, or nil when it can.
+	unrouted() error
+
 	// scrub removes any credential this connection has sent from bytes the far
 	// end returned, before they can reach a result, an error, or a log.
 	scrub(body []byte) []byte
@@ -64,6 +68,10 @@ func (classicRoute) collectionMiss(empty json.RawMessage) (json.RawMessage, erro
 // scrub does nothing: the MCP sends a self-hosted agent no credential, so a
 // response cannot be quoting one.
 func (classicRoute) scrub(body []byte) []byte { return body }
+
+// unrouted reports nothing. A self-hosted agent answers for itself, so its 404
+// means whatever the endpoint says a 404 means.
+func (classicRoute) unrouted() error { return nil }
 
 // refresh does nothing. The MCP sends a self-hosted agent no credential, so
 // there is nothing a second attempt would do differently.
@@ -114,10 +122,25 @@ func (r *hostedRoute) decorate(h http.Header) {
 // shared edge answers 404 for an unknown or unrouted installation, and "no
 // resources" would hide that behind a plausible answer.
 func (r *hostedRoute) collectionMiss(json.RawMessage) (json.RawMessage, error) {
-	return nil, fmt.Errorf(
-		"the hosted endpoint did not route this request to installation %s; "+
-			"this is more likely a routing problem than an empty result",
-		r.installation)
+	return nil, fmt.Errorf("%w; reporting this as an empty result would hide it", r.unrouted())
+}
+
+// unrouted reports that the shared endpoint may not have reached this
+// installation at all.
+//
+// The edge answers 404 for an installation it cannot route — one that has been
+// suspended, destroyed, or reaped when a trial or subscription ended — and that
+// is indistinguishable from any other 404 without an edge error envelope, which
+// does not exist. It happens on an ordinary day: a session left open for days
+// outlives the installation it was working against.
+//
+// So this never asserts a cause. Callers that could legitimately receive a 404
+// report both possibilities; callers whose endpoint has no such reading report
+// this alone.
+func (r *hostedRoute) unrouted() error {
+	return fmt.Errorf(
+		"the hosted endpoint did not route this request to installation %s, which happens when an "+
+			"installation is suspended, destroyed, or no longer covered by a subscription", r.installation)
 }
 
 // refresh re-resolves with the credential refreshed and refuses to let the
