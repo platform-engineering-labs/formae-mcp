@@ -835,7 +835,7 @@ func TestClientFor_RefusesHosted(t *testing.T) {
 		ProfileName: "acme-prod",
 		Conn: config.Hosted{
 			Endpoint:     config.HostedOrigin,
-			Installation: "3f2b8c14-0000-4000-8000-000000000000",
+			Installation: "3HzFPXfPDGhwLJJVtaHbmFs6vLa",
 		},
 	}}
 	s := New("")

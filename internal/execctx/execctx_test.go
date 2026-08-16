@@ -53,7 +53,7 @@ func TestResolveCarriesTheConnection(t *testing.T) {
 func TestResolveHosted(t *testing.T) {
 	hosted := config.Hosted{
 		Endpoint:     config.HostedOrigin,
-		Installation: "3f2b8c14-0000-4000-8000-000000000000",
+		Installation: "3HzFPXfPDGhwLJJVtaHbmFs6vLa",
 	}
 	r := &Resolver{
 		resolve: func(context.Context, string, string) (config.Resolved, error) {
