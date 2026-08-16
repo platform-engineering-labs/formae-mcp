@@ -112,6 +112,9 @@ func (c *FormaeClient) ListResources(ctx context.Context, query string) (json.Ra
 	if status == http.StatusNotFound {
 		return c.route.collectionMiss(json.RawMessage("[]"))
 	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
@@ -128,6 +131,9 @@ func (c *FormaeClient) ListStacks(ctx context.Context) (json.RawMessage, error) 
 	if status == http.StatusNotFound {
 		return c.route.collectionMiss(json.RawMessage("[]"))
 	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
@@ -143,6 +149,9 @@ func (c *FormaeClient) ListPolicies(ctx context.Context) (json.RawMessage, error
 	}
 	if status == http.StatusNotFound {
 		return c.route.collectionMiss(json.RawMessage("[]"))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -164,6 +173,9 @@ func (c *FormaeClient) ListTargets(ctx context.Context, query string) (json.RawM
 	}
 	if status == http.StatusNotFound {
 		return c.route.collectionMiss(json.RawMessage("[]"))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -187,7 +199,18 @@ func (c *FormaeClient) GetCommandStatus(ctx context.Context, commandID string, c
 		return nil, err
 	}
 	if status == http.StatusNotFound {
+		// Both readings, because the status alone cannot separate them: the
+		// agent answers 404 for a command it does not know, and the edge
+		// answers 404 for an installation it cannot route. Asserting the
+		// first sends the reader hunting for a command that was never the
+		// problem.
+		if unrouted := c.route.unrouted(); unrouted != nil {
+			return nil, fmt.Errorf("command %s was not found, or %w", commandID, unrouted)
+		}
 		return nil, fmt.Errorf("command %s not found", commandID)
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -218,6 +241,9 @@ func (c *FormaeClient) ListCommands(ctx context.Context, query string, maxResult
 	if status == http.StatusNotFound {
 		return c.route.collectionMiss(json.RawMessage(`{"Commands":[]}`))
 	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
@@ -229,6 +255,9 @@ func (c *FormaeClient) ListCommands(ctx context.Context, query string, maxResult
 func (c *FormaeClient) GetAgentStats(ctx context.Context) (json.RawMessage, error) {
 	body, status, err := c.get(ctx, "/api/v1/stats", nil, retryOnce)
 	if err != nil {
+		return nil, err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK {
@@ -243,6 +272,9 @@ func (c *FormaeClient) CheckHealth(ctx context.Context) error {
 	_, status, err := c.get(ctx, "/api/v1/health", nil, retryOnce)
 	if err != nil {
 		return fmt.Errorf("agent is not reachable: %w", err)
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return err
 	}
 	if status != http.StatusOK {
 		return fmt.Errorf("agent returned unhealthy status: %d", status)
@@ -276,6 +308,9 @@ func (c *FormaeClient) SubmitCommand(ctx context.Context, command string, mode s
 	if err != nil {
 		return nil, err
 	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
 	if !isCommandStatusOK(status, simulate) {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
@@ -293,6 +328,9 @@ func (c *FormaeClient) DestroyByQuery(ctx context.Context, query string, simulat
 
 	body, status, err := c.postMultipartWithHeaders(ctx, "/api/v1/commands", nil, fields, "", "", nil, map[string]string{"Client-ID": clientID})
 	if err != nil {
+		return nil, err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
 	if !isCommandStatusOK(status, simulate) {
@@ -342,6 +380,9 @@ func (c *FormaeClient) ListChangesSinceLastReconcile(ctx context.Context, stack 
 	if err != nil {
 		return nil, err
 	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
@@ -353,6 +394,9 @@ func (c *FormaeClient) ListChangesSinceLastReconcile(ctx context.Context, stack 
 func (c *FormaeClient) ForceSync(ctx context.Context) error {
 	_, status, err := c.post(ctx, "/api/v1/admin/synchronize", nil, noRetry)
 	if err != nil {
+		return err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return err
 	}
 	if status != http.StatusOK {
@@ -368,6 +412,9 @@ func (c *FormaeClient) ForceDiscover(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := c.unroutedIf(status); err != nil {
+		return err
+	}
 	if status != http.StatusOK {
 		return fmt.Errorf("agent returned status %d", status)
 	}
@@ -379,6 +426,9 @@ func (c *FormaeClient) ForceDiscover(ctx context.Context) error {
 func (c *FormaeClient) ForceCheckTTL(ctx context.Context) (json.RawMessage, error) {
 	body, status, err := c.post(ctx, "/api/v1/admin/check-ttl", nil, noRetry)
 	if err != nil {
+		return nil, err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK {
@@ -395,6 +445,9 @@ func (c *FormaeClient) ForceReconcileStack(ctx context.Context, label string) (j
 	body, status, err := c.post(ctx, path, nil, noRetry)
 	if err != nil {
 		return nil, 0, err
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return body, status, err
 	}
 	if status != http.StatusOK && status != http.StatusAccepted {
 		return body, status, fmt.Errorf("agent returned status %d", status)
@@ -434,4 +487,15 @@ func (c *FormaeClient) postMultipartWithHeaders(ctx context.Context, path string
 		Body:        &buf,
 		ContentType: w.FormDataContentType(),
 	}, noRetry)
+}
+
+// unroutedIf explains a 404 from an endpoint that has no "this object does not
+// exist" reading. The agent answers those with 200 or an error, never 404, so
+// under hosted a 404 came from the edge rather than from the installation.
+// Classic reports nothing and the caller's own status handling stands.
+func (c *FormaeClient) unroutedIf(status int) error {
+	if status != http.StatusNotFound {
+		return nil
+	}
+	return c.route.unrouted()
 }
