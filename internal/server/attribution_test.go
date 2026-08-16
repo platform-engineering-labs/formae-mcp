@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -298,4 +299,40 @@ func TestEveryAgentBackedHandlerAttributes(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Extract reaches the agent through the CLI, so its output never passes
+// through the executor's scrub. Its diagnostics are the whole value of the
+// failure and are kept, bounded, with the credential we handed the process
+// removed.
+func TestExtractFailureOutputIsBoundedAndScrubbed(t *testing.T) {
+	t.Run("the credential we passed is removed", func(t *testing.T) {
+		got := safeSubprocessOutput(
+			[]byte("plugin refused: Authorization: Bearer sup3rs3cr3t"),
+			secret.New("Bearer sup3rs3cr3t"))
+
+		if strings.Contains(got, "sup3rs3cr3t") {
+			t.Fatalf("extract output leaked the credential: %s", got)
+		}
+		if !strings.Contains(got, "plugin refused") {
+			t.Errorf("the diagnostics are the point and must survive: %s", got)
+		}
+	})
+
+	t.Run("output is bounded", func(t *testing.T) {
+		got := safeSubprocessOutput(bytes.Repeat([]byte("x"), maxSubprocessOutput*4), secret.Value{})
+
+		if len(got) > maxSubprocessOutput+len("\n… truncated") {
+			t.Fatalf("output was not bounded: %d bytes", len(got))
+		}
+		if !strings.Contains(got, "truncated") {
+			t.Errorf("a truncated result should say so")
+		}
+	})
+
+	t.Run("a classic call has no credential to remove", func(t *testing.T) {
+		if got := safeSubprocessOutput([]byte("plain diagnostics"), secret.Value{}); got != "plain diagnostics" {
+			t.Fatalf("got %q", got)
+		}
+	})
 }
