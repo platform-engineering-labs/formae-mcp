@@ -22,6 +22,10 @@ import (
 type FormaeClient struct {
 	route      routing
 	httpClient *http.Client
+	// reach is the high-water mark for this call: how far its requests got.
+	// One client is built per tool call, so there is nothing to reset, and the
+	// executor is the only thing that advances it.
+	reach reach
 }
 
 // NewFormaeClient builds a classic client for an endpoint that already carries

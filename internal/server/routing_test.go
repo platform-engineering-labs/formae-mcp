@@ -36,14 +36,24 @@ func hostedCtx(credential string) execctx.Context {
 // behaviour that would reach the edge.
 func newTestHostedClient(t *testing.T, srv *httptest.Server, credential string, refresh refresher) *FormaeClient {
 	t.Helper()
-	c, err := newClientFromCtx(hostedCtx(credential), refresh)
-	if err != nil {
-		t.Fatalf("newClientFromCtx: %v", err)
+	return newTestHostedClientAt(srv, credential, refresh)
+}
+
+// newTestHostedClientAt builds the same client without a *testing.T, for the
+// places that need one inside a seam closure.
+func newTestHostedClientAt(srv *httptest.Server, credential string, refresh refresher) *FormaeClient {
+	return &FormaeClient{
+		route: &hostedRoute{
+			endpoint:     srv.URL,
+			installation: testInstallation,
+			credential:   secret.New(credential),
+			refreshFn:    refresh,
+		},
+		httpClient: &http.Client{
+			Transport:     srv.Client().Transport,
+			CheckRedirect: refuseRedirects,
+		},
 	}
-	c.route = c.route.(*hostedRoute).withEndpoint(srv.URL)
-	c.httpClient = srv.Client()
-	c.httpClient.CheckRedirect = refuseRedirects
-	return c
 }
 
 func TestHostedRequestsCarryTheInstallationExactlyOnce(t *testing.T) {

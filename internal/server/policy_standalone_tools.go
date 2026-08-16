@@ -63,20 +63,38 @@ func mcpPolicyType(agentType string) string {
 // fetchPolicies reads the agent's standalone policy inventory from the
 // active/default profile's agent (empty profile = active/default, matching the
 // server's per-call client resolution).
-func (s *Server) fetchPolicies(ctx context.Context) ([]policyInventoryItem, error) {
-	c, err := s.clientFor(ctx, "")
+//
+// It reports the destination alongside the inventory because callers
+// deliberately swallow its error: a planner's real work is local file
+// planning, so an unreachable agent downgrades to "no policies known" rather
+// than failing the tool. That makes "the agent answered" underivable from the
+// planner's result, and a clean plan claiming an installation had answered
+// would assert something false about a real installation.
+//
+// Under hosted this makes a second thing visible. These tools take no profile
+// argument, so the inventory read resolves the active profile; with more than
+// one profile that is ambiguous, and the ambiguity is swallowed like any other
+// failure. The attribution is what says the installation was never reached.
+// Giving the policy tools a profile argument is the actual fix, and belongs
+// with whatever revisits that tool surface.
+func (s *Server) fetchPolicies(ctx context.Context) ([]policyInventoryItem, destination, error) {
+	ec, err := s.resolveCtx(ctx, "")
 	if err != nil {
-		return nil, err
+		return nil, destination{}, err
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return nil, resolved(ec), err
 	}
 	body, err := c.ListPolicies(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list policies from agent: %w", err)
+		return nil, reached(ec, c), fmt.Errorf("list policies from agent: %w", err)
 	}
 	var items []policyInventoryItem
 	if err := json.Unmarshal(body, &items); err != nil {
-		return nil, fmt.Errorf("parse policy inventory: %w", err)
+		return nil, reached(ec, c), fmt.Errorf("parse policy inventory: %w", err)
 	}
-	return items, nil
+	return items, reached(ec, c), nil
 }
 
 // standaloneTypeOf resolves a standalone policy label to its MCP policy type,
@@ -136,7 +154,12 @@ func validateStandalonePolicyFields(label, policyType string, ttlSeconds int64, 
 	return nil
 }
 
-func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.CreateStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.CreateStandalonePolicyInput) (res *mcp.CallToolResult, _ any, _ error) {
+	// Every return from here on carries the destination, whatever path it takes.
+	// A defer rather than an edit per return: these handlers have many exits and
+	// a new one must not be able to slip out unattributed.
+	var dest destination
+	defer func() { res = attribute(dest, res) }()
 	if err := validateStandalonePolicyFields(input.Label, input.PolicyType, input.TTLSeconds, input.OnDependents, input.IntervalSeconds); err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -153,7 +176,9 @@ func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 	// state. The agent inventory is authoritative for what already exists, so
 	// check it first: a policy the agent already knows must not be re-declared,
 	// even if the current workspace source does not (yet) contain it.
-	if agentItems, err := s.fetchPolicies(ctx); err == nil {
+	agentItems, d, err := s.fetchPolicies(ctx)
+	dest = d
+	if err == nil {
 		if _, known := findPolicyByLabel(agentItems, input.Label); known {
 			out := tools.CreateStandalonePolicyOutput{
 				Operation: "noop",
@@ -241,7 +266,12 @@ func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 	return jsonResult(body), nil, nil
 }
 
-func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.AttachStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.AttachStandalonePolicyInput) (res *mcp.CallToolResult, _ any, _ error) {
+	// Every return from here on carries the destination, whatever path it takes.
+	// A defer rather than an edit per return: these handlers have many exits and
+	// a new one must not be able to slip out unattributed.
+	var dest destination
+	defer func() { res = attribute(dest, res) }()
 	if input.Stack == "" {
 		return errorResult(fmt.Errorf("stack is required")), nil, nil
 	}
@@ -263,7 +293,8 @@ func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 	// before the first apply. Fall back to the workspace source in that case
 	// rather than refusing a documented flow.
 	var notes []string
-	items, fetchErr := s.fetchPolicies(ctx)
+	items, d, fetchErr := s.fetchPolicies(ctx)
+	dest = d
 	if fetchErr != nil {
 		items = nil
 	}
@@ -429,7 +460,12 @@ func specFromInventoryItem(item policyInventoryItem) (StandalonePolicySpec, erro
 	}, nil
 }
 
-func (s *Server) handleDeleteStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.DeleteStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleDeleteStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.DeleteStandalonePolicyInput) (res *mcp.CallToolResult, _ any, _ error) {
+	// Every return from here on carries the destination, whatever path it takes.
+	// A defer rather than an edit per return: these handlers have many exits and
+	// a new one must not be able to slip out unattributed.
+	var dest destination
+	defer func() { res = attribute(dest, res) }()
 	if input.Label == "" {
 		return errorResult(fmt.Errorf("label is required")), nil, nil
 	}
@@ -437,7 +473,8 @@ func (s *Server) handleDeleteStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 		return errorResult(err), nil, nil
 	}
 
-	inventory, err := s.fetchPolicies(ctx)
+	inventory, d, err := s.fetchPolicies(ctx)
+	dest = d
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
