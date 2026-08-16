@@ -57,7 +57,20 @@ func TestHostedRequestsCarryTheInstallationExactlyOnce(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestHostedClient(t, srv, "Bearer live-token", nil)
-	if _, _, err := c.do(context.Background(), request{Method: "GET", Path: "/api/v1/health"}, noRetry); err != nil {
+	// The request names both headers itself. This is the case that separates
+	// Set from Add: on a fresh header the two are indistinguishable, and a
+	// second routing value is not a warning at the edge but a rejection that
+	// happens after a router has already been chosen, so it surfaces somewhere
+	// else entirely. It also pins that the routing decorates last and wins,
+	// rather than a caller being able to redirect a credentialled request.
+	if _, _, err := c.do(context.Background(), request{
+		Method: "GET",
+		Path:   "/api/v1/health",
+		Headers: map[string]string{
+			"Formae-Installation": "2ZaBcDeFgHiJkLmNoPqRsTuVwXy",
+			"Authorization":       "Bearer somebody-elses",
+		},
+	}, noRetry); err != nil {
 		t.Fatalf("do: %v", err)
 	}
 
@@ -65,10 +78,10 @@ func TestHostedRequestsCarryTheInstallationExactlyOnce(t *testing.T) {
 		t.Fatalf("Formae-Installation must be set exactly once, got %d values: %v", len(values), values)
 	}
 	if values[0] != testInstallation {
-		t.Errorf("Formae-Installation = %q", values[0])
+		t.Errorf("Formae-Installation = %q, want the routing's own", values[0])
 	}
 	if auth != "Bearer live-token" {
-		t.Errorf("Authorization = %q", auth)
+		t.Errorf("Authorization = %q, want the routing's own", auth)
 	}
 }
 
