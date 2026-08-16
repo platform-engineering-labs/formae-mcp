@@ -14,6 +14,8 @@ Install via the
 
 ### Added
 
+- Hosted formae support. A profile whose `cli.connection` is a `Hosted` connection now routes to its installation behind the shared endpoint and carries a credential, so every tool works against a hosted installation the way it does against a self-hosted agent. Requires formae 0.89.0 or newer.
+- Hosted results say which installation answered, in a separate block alongside the payload. When a change fails after it was already sent, the result says so rather than implying nothing happened, so you know whether to go and check.
 - The MCP now warns when the connected formae agent is newer than your local `formae`, so you can tell when authoring may not reflect the agent's latest capabilities. The notice points at `/formae:upgrade`, which fetches the newer `formae` after you confirm (never silently in classic mode).
 
 ### Changed
@@ -21,7 +23,10 @@ Install via the
 - Plugin renamed from `formae-mcp` to `formae`; added `/formae:setup` and `/formae:upgrade`.
 - The plugin now downloads its prebuilt `formae-mcp` and a matched `formae` into `~/.formae-ai/opt` on first run (no build-from-source; set `FORMAE_MCP_DEV=1` for local dev builds).
 - Commands issued through the MCP (apply, destroy, cancel, status, list) now identify with your CLI's client ID (`~/.pel/formae/cli_client_id`) instead of a fixed `formae-mcp` identity, so the agent attributes them to the same client as your own `formae` runs. When the ID file does not exist yet, the MCP runs `formae --version` once so formae creates it, and falls back to the old `formae-mcp` identity if it still cannot be read.
-- Configuration now comes from the formae CLI (`formae profile show`) instead of a text scan of the profile file, so the MCP and your own `formae` runs always agree on where a profile points. Requires formae 0.89.0 or newer.
+- Configuration and credentials now come from a single `formae connection resolve` per tool call, replacing `formae profile show`, so the MCP and your own `formae` runs always agree on where a profile points and a request can never combine one profile revision's endpoint with another's credential. Requires formae 0.89.0 or newer.
+- An expired hosted credential is refreshed and the call retried once, but only for reads. A change that fails with an expired credential refreshes it for next time and reports the failure rather than being sent twice.
+- On a hosted profile, a listing endpoint that answers "not found" is now reported as a routing problem rather than as an empty result, since the shared endpoint answers that way for an installation it cannot route to.
+- When several profiles exist and none is named, a hosted call now lists the candidates and asks for the `profile` argument instead of guessing.
 - Every agent request is built by one internal executor, so cancellation and timeouts apply uniformly across every tool.
 - The plugin no longer installs a second `formae` alongside one you already have. On launch it looks for yours (`PATH`, then `/opt/pel/bin`, `/usr/local/bin`, `~/.local/bin`, `~/bin`) and uses it; it downloads one into `~/.formae-ai/opt` only when the machine has none. Previously it downloaded a copy on every launch and then ran whichever `formae` came first on `PATH`, so the downloaded one was usually dead weight — and `/formae:upgrade` could upgrade a copy the plugin was not running.
 - The version-skew notice now says which upgrade applies: `/formae:upgrade` for the copy the plugin installed, or the path of your own install, which the plugin will not change.
