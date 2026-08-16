@@ -37,7 +37,10 @@ func implementation() *mcp.Implementation {
 // contextResolver is the seam server tests substitute. The concrete resolver
 // lives in execctx and its injection points are unexported there.
 type contextResolver interface {
-	Resolve(ctx context.Context, profileName string) (execctx.Context, error)
+	// Resolve produces the frozen context for a call. forceRefresh is for the
+	// 401 path, which re-resolves with a fresh credential and then checks that
+	// the target did not move.
+	Resolve(ctx context.Context, profileName string, forceRefresh bool) (execctx.Context, error)
 	Bin() string
 	// Managed reports whether the resolved formae is the copy we provisioned,
 	// which decides whether an upgrade needs sudo.
@@ -109,7 +112,7 @@ func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Co
 			FormaeBin: s.ctxResolver.Bin(),
 		}, nil
 	}
-	ec, err := s.ctxResolver.Resolve(ctx, profileName)
+	ec, err := s.ctxResolver.Resolve(ctx, profileName, false)
 	if err != nil {
 		return execctx.Context{}, s.explainIfTooOld(err)
 	}
