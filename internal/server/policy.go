@@ -23,7 +23,12 @@ func currentEvalFunc(bin string) EvalFunc {
 	return makeFormaeEval(bin)
 }
 
-func (s *Server) handleCreateInlinePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.CreateInlinePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleCreateInlinePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.CreateInlinePolicyInput) (res *mcp.CallToolResult, _ any, _ error) {
+	// Every return from here on carries the destination, whatever path it takes.
+	// A defer rather than an edit per return: these handlers have many exits and
+	// a new one must not be able to slip out unattributed.
+	var dest destination
+	defer func() { res = attribute(dest, res) }()
 	if err := validateCreateInlinePolicyInput(input); err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -51,7 +56,9 @@ func (s *Server) handleCreateInlinePolicy(ctx context.Context, _ *mcp.CallToolRe
 	// policies known from the agent" and the source check still runs.
 	var inventory []policyInventoryItem
 	if input.Operation == "set" {
-		if items, err := s.fetchPolicies(ctx); err == nil {
+		items, d, err := s.fetchPolicies(ctx)
+		dest = d
+		if err == nil {
 			inventory = items
 		}
 		for _, item := range inventory {

@@ -91,10 +91,16 @@ func (c *FormaeClient) send(ctx context.Context, r request) ([]byte, int, error)
 	// header or the credential by naming one in Headers.
 	c.route.decorate(req.Header)
 
+	// Advanced before the call rather than after: once Do returns an error we
+	// cannot tell whether the request reached the agent, and "it may have
+	// acted" is the answer that keeps an operator safe.
+	c.advance(reachAttempted)
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("request failed: %w", err)
 	}
+	c.advance(reachAnswered)
 	defer func() { _ = resp.Body.Close() }()
 
 	// A 3xx only reaches here on a connection whose policy refuses to follow
@@ -111,4 +117,12 @@ func (c *FormaeClient) send(ctx context.Context, r request) ([]byte, int, error)
 		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
 	}
 	return body, resp.StatusCode, nil
+}
+
+// advance raises the high-water mark, never lowers it: a call that answered
+// once has answered, whatever a later attempt does.
+func (c *FormaeClient) advance(r reach) {
+	if r > c.reach {
+		c.reach = r
+	}
 }
