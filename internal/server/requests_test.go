@@ -25,7 +25,7 @@ func TestDo_SendsSuppliedHeaders(t *testing.T) {
 		Method:  "GET",
 		Path:    "/api/v1/health",
 		Headers: map[string]string{"Client-ID": "abc123"},
-	}); err != nil {
+	}, noRetry); err != nil {
 		t.Fatalf("do: unexpected error: %v", err)
 	}
 	if got != "abc123" {
@@ -45,7 +45,7 @@ func TestDo_HonoursCancellation(t *testing.T) {
 	cancel()
 
 	c := newTestFormaeClient(srv)
-	if _, _, err := c.do(ctx, request{Method: "GET", Path: "/api/v1/health"}); err == nil {
+	if _, _, err := c.do(ctx, request{Method: "GET", Path: "/api/v1/health"}, noRetry); err == nil {
 		t.Fatal("do with a cancelled context: expected an error, got nil")
 	}
 }

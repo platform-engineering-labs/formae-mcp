@@ -86,7 +86,29 @@ func (s *Server) clientFor(ctx context.Context, profileName string) (*FormaeClie
 	if err != nil {
 		return nil, err
 	}
-	return newClientFromCtx(ec)
+	return s.clientFrom(ec)
+}
+
+// clientFrom builds the client for an already-resolved context.
+//
+// This is the one place that pairs a context with its refresher, so a 401 on
+// any call re-resolves through the same seam the first resolution used rather
+// than reaching past it. Handlers that resolve their own context call this
+// instead of constructing a client directly.
+func (s *Server) clientFrom(ec execctx.Context) (*FormaeClient, error) {
+	return newClientFromCtx(ec, s.refresherFor(ec))
+}
+
+// refresherFor re-resolves the same profile with the credential refreshed.
+//
+// It closes over the effective profile name from the original snapshot, not
+// over whatever the active pointer says at refresh time: re-resolving "whatever
+// is active now" is exactly the skew that resolving configuration and
+// credentials together exists to prevent.
+func (s *Server) refresherFor(ec execctx.Context) refresher {
+	return func(ctx context.Context) (execctx.Context, error) {
+		return s.ctxResolver.Resolve(ctx, ec.ProfileName, true)
+	}
 }
 
 // resolveCtx returns the immutable execution context for an optional profile.
@@ -375,7 +397,7 @@ func (s *Server) handleGetCommandStatus(ctx context.Context, _ *mcp.CallToolRequ
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.clientFrom(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -395,7 +417,7 @@ func (s *Server) handleListCommands(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.clientFrom(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -423,7 +445,7 @@ func (s *Server) handleCheckHealth(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.clientFrom(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -565,7 +587,7 @@ func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequ
 	}
 
 	notice := ""
-	if c, cerr := newClientFromCtx(ec); cerr == nil {
+	if c, cerr := s.clientFrom(ec); cerr == nil {
 		notice = s.buildSkewNotice(ctx, ec.FormaeBin, c)
 	}
 	return withNotice(textResult(string(content)), notice), nil, nil
@@ -652,7 +674,7 @@ func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	c, err := newClientFromCtx(ec)
+	c, err := s.clientFrom(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -674,7 +696,7 @@ func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.clientFrom(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -704,7 +726,7 @@ func (s *Server) handleCancelCommands(ctx context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.clientFrom(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}

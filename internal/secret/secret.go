@@ -22,6 +22,13 @@ const Mask = "<redacted>"
 // Methods take value receivers so a copy cannot lose the masking: a Value
 // travels into structs, closures and interface values constantly, and a pointer
 // receiver would leave every copy rendering its raw field.
+//
+// One limit, and it is not a small one. fmt reaches these methods through
+// reflect.Value's Interface, which it cannot call on an *unexported* field, so
+// a struct holding a Value in an unexported field is printed reflectively and
+// the credential comes straight out under %v. Exported fields, encoding/json,
+// and slog are all fine. A type that keeps a Value unexported must mask itself,
+// which is a thing to check for rather than assume.
 type Value struct {
 	// v is unexported, so encoding/json and any other reflection-based encoder
 	// sees a struct with no exported fields even before the marshallers below
