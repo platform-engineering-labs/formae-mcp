@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -232,5 +233,96 @@ func TestClientDoesNotRenderTheCredential(t *testing.T) {
 	}
 	if strings.Contains(string(out), "sup3rs3cr3t") {
 		t.Fatalf("a JSON rendering of the routing leaked the credential: %s", out)
+	}
+}
+
+// The far end is trusted to route, not to be careful. An error page from an
+// intermediary that echoed the request headers would otherwise put the bearer
+// token into a tool result, and from there into a model's context and a
+// transcript, where it can never be withdrawn from.
+func TestAResponseEchoingTheCredentialIsScrubbed(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusBadGateway} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				_, _ = fmt.Fprintf(w, `{"error":"upstream rejected %s"}`, r.Header.Get("Authorization"))
+			}))
+			defer srv.Close()
+
+			c := newTestHostedClient(t, srv, "Bearer sup3rs3cr3t", nil)
+			body, _, err := c.do(context.Background(), request{Method: "GET", Path: "/api/v1/health"}, noRetry)
+			if err != nil {
+				t.Fatalf("do: %v", err)
+			}
+			if strings.Contains(string(body), "sup3rs3cr3t") {
+				t.Fatalf("the response body carried the credential back out: %s", body)
+			}
+			if !strings.Contains(string(body), secret.Mask) {
+				t.Errorf("the scrub should leave the mask behind: %s", body)
+			}
+		})
+	}
+}
+
+// A retry's response can still be quoting the request that failed, so the
+// credential the first attempt used has to be scrubbed too.
+func TestAScrubCoversTheCredentialARetryReplaced(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"note":"the earlier token Bearer stale-secret was rejected"}`)
+	}))
+	defer srv.Close()
+
+	rr := &recordingRefresher{next: hostedAt(srv.URL, "Bearer fresh-secret")}
+	c := newTestHostedClient(t, srv, "Bearer stale-secret", rr.refresh)
+
+	body, _, err := c.do(context.Background(), request{Method: "GET", Path: "/api/v1/health"}, retryOnce)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	if strings.Contains(string(body), "stale-secret") {
+		t.Fatalf("the superseded credential survived the scrub: %s", body)
+	}
+}
+
+// An unbounded read from a peer is an unbounded allocation, and under hosted
+// that peer is remote and shared rather than a process on this machine.
+func TestAnOversizedResponseIsRefused(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chunk := make([]byte, 1<<20)
+		for i := 0; i <= maxResponseBytes>>20; i++ {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestHostedClient(t, srv, "Bearer live-token", nil)
+	_, _, err := c.do(context.Background(), request{Method: "GET", Path: "/api/v1/health"}, noRetry)
+
+	if !errors.Is(err, errResponseTooLarge) {
+		t.Fatalf("want errResponseTooLarge, got %v", err)
+	}
+}
+
+// Bytes that never left cannot have taken effect. A connection refused before
+// the request is written must not tell an operator to go and check.
+func TestATransportFailureBeforeTheRequestIsWrittenClaimsNothingWasSent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	c := newTestHostedClient(t, srv, "Bearer live-token", nil)
+	srv.Close() // nothing is listening now
+
+	_, _, err := c.do(context.Background(), request{Method: "POST", Path: "/api/v1/commands"}, noRetry)
+	if err == nil {
+		t.Fatal("expected a transport failure")
+	}
+	if c.reach != reachResolved {
+		t.Fatalf("reach = %v, want resolved: nothing was written, so nothing can have acted", c.reach)
 	}
 }
