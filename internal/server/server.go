@@ -18,6 +18,7 @@ import (
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 	"github.com/platform-engineering-labs/formae-mcp/internal/formaebin"
 	"github.com/platform-engineering-labs/formae-mcp/internal/profile"
+	"github.com/platform-engineering-labs/formae-mcp/internal/secret"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 	"github.com/platform-engineering-labs/formae-mcp/internal/version"
 )
@@ -615,7 +616,8 @@ func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequ
 	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return attribute(resolved(ec),
-			errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output)))), nil, nil
+			errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s",
+				err, safeSubprocessOutput(output, ec.Credential)))), nil, nil
 	}
 	extracted := destination{ec: ec, reach: reachAnswered}
 
@@ -841,6 +843,30 @@ func (s *Server) handleForceReconcileStack(ctx context.Context, _ *mcp.CallToolR
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
 	return attribute(reached(ec, c), jsonResult(body)), nil, nil
+}
+
+// maxSubprocessOutput bounds the diagnostics a failed CLI invocation may put
+// into a tool result. Unlike the configuration oracle, which reports an exit
+// status and never the bytes, extract's output is the user's own Pkl and
+// plugin diagnostics and is the whole value of the failure, so it is kept —
+// bounded, and with the credential we handed the process removed.
+const maxSubprocessOutput = 8 << 10
+
+// safeSubprocessOutput bounds subprocess output and removes the credential
+// this call resolved.
+//
+// It covers the credential we gave the process. A credential the CLI minted
+// for itself is not ours to know, and masking that is the CLI's own job on its
+// own output — said plainly here because "output is sanitised" would be a
+// wider claim than this makes good.
+func safeSubprocessOutput(output []byte, credential secret.Value) string {
+	if len(output) > maxSubprocessOutput {
+		output = append(output[:maxSubprocessOutput:maxSubprocessOutput], []byte("\n… truncated")...)
+	}
+	if credential.IsZero() {
+		return string(output)
+	}
+	return strings.ReplaceAll(string(output), credential.Reveal(), secret.Mask)
 }
 
 // Helpers

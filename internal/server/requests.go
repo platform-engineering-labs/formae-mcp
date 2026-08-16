@@ -102,10 +102,13 @@ func (c *FormaeClient) send(ctx context.Context, r request) ([]byte, int, error)
 	// call Do", because a DNS or TLS failure sends nothing and telling an
 	// operator to go and check would be a false alarm in the costly direction.
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
-		WroteRequest: func(info httptrace.WroteRequestInfo) {
-			if info.Err == nil {
-				c.advance(reachAttempted)
-			}
+		WroteRequest: func(httptrace.WroteRequestInfo) {
+			// Any invocation counts, including one carrying an error. The
+			// callback runs only after a connection exists and a write was
+			// attempted, and a write can fail having already put part of a
+			// multipart mutation on the wire. DNS, connection and TLS failures
+			// never reach here, which is the distinction this is for.
+			c.advance(reachAttempted)
 		},
 	}))
 
