@@ -63,6 +63,37 @@ func TestValueMasksInsideAStruct(t *testing.T) {
 	assertHidden(t, "json.MarshalIndent of a containing struct", string(pretty))
 }
 
+// holder keeps a credential unexported, the way a routing or a client does.
+type holder struct {
+	name       string
+	credential Value
+}
+
+// The limit, pinned rather than left to be discovered. fmt reaches these
+// methods through reflect.Value's Interface, which it cannot call on an
+// unexported field, so a struct holding a Value unexported prints the
+// credential under %v. A type in that shape has to mask itself, and this test
+// exists so that requirement is a documented fact rather than folklore.
+func TestAnUnexportedFieldIsNotProtectedByTheTypeAlone(t *testing.T) {
+	h := holder{name: "prod", credential: New(token)}
+
+	if !strings.Contains(fmt.Sprintf("%v", h), "sup3rs3cr3t") {
+		t.Skip("fmt no longer prints unexported fields reflectively; " +
+			"the caveat on Value can be dropped and holders can stop masking themselves")
+	}
+
+	// The remedy, and the only one: the holder masks.
+	if strings.Contains(fmt.Sprintf("%v", maskedHolder(h)), "sup3rs3cr3t") {
+		t.Fatal("a holder that masks itself must not leak")
+	}
+}
+
+type maskedHolder holder
+
+func (h maskedHolder) String() string {
+	return fmt.Sprintf("holder{name:%s credential:%s}", h.name, h.credential)
+}
+
 func TestValueMasksInJSONAndYAML(t *testing.T) {
 	v := New(token)
 

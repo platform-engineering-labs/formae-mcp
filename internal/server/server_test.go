@@ -836,8 +836,8 @@ func TestClientFor_ExplicitProfileReachesTheResolver(t *testing.T) {
 	if r.sawProfile != "p" {
 		t.Errorf("resolver saw profile %q, want %q", r.sawProfile, "p")
 	}
-	if c.endpoint != "http://p-host:7000" {
-		t.Errorf("endpoint = %q, want the profile endpoint", c.endpoint)
+	if got := c.route.url("", nil); got != "http://p-host:7000" {
+		t.Errorf("endpoint = %q, want the profile endpoint", got)
 	}
 }
 
@@ -875,8 +875,8 @@ func TestClientFor_ClassicBuildsURLPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.endpoint != "http://localhost:49684" {
-		t.Errorf("endpoint = %q", c.endpoint)
+	if got := c.route.url("", nil); got != "http://localhost:49684" {
+		t.Errorf("endpoint = %q", got)
 	}
 }
 
@@ -900,8 +900,8 @@ func TestClientFor_ForcedEndpointIsClassicWithoutAPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.endpoint != "http://forced:1" {
-		t.Errorf("endpoint = %q, want the forced endpoint", c.endpoint)
+	if got := c.route.url("", nil); got != "http://forced:1" {
+		t.Errorf("endpoint = %q, want the forced endpoint", got)
 	}
 }
 
