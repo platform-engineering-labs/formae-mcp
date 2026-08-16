@@ -15,7 +15,7 @@ const classicView = `{"schemaVersion":1,"profile":"dev",
 
 const hostedView = `{"schemaVersion":1,"profile":"prod",
  "cli":{"connection":{"mode":"hosted","endpoint":"https://cloud.formae.ai",
- "installation":"3f2b8c14-0000-4000-8000-000000000000"}}}`
+ "installation":"3HzFPXfPDGhwLJJVtaHbmFs6vLa"}}}`
 
 func TestDecodeProfileShow_Classic(t *testing.T) {
 	got, err := decodeProfileShow([]byte(classicView))
@@ -41,7 +41,7 @@ func TestDecodeProfileShow_Hosted(t *testing.T) {
 	}
 	want := Hosted{
 		Endpoint:     "https://cloud.formae.ai",
-		Installation: "3f2b8c14-0000-4000-8000-000000000000",
+		Installation: "3HzFPXfPDGhwLJJVtaHbmFs6vLa",
 	}
 	if got.Conn != Connection(want) {
 		t.Errorf("connection: want %#v, got %#v", want, got.Conn)
@@ -72,7 +72,7 @@ func TestDecodeProfileShow_Rejects(t *testing.T) {
 		{"unknown mode", `{"schemaVersion":1,"cli":{"connection":{"mode":"orbital"}}}`},
 		{"missing connection", `{"schemaVersion":1,"profile":"dev","cli":{}}`},
 		{"hosted without installation", `{"schemaVersion":1,"cli":{"connection":{"mode":"hosted","endpoint":"https://cloud.formae.ai"}}}`},
-		{"hosted with a foreign endpoint", `{"schemaVersion":1,"cli":{"connection":{"mode":"hosted","endpoint":"https://evil.example.com","installation":"3f2b8c14-0000-4000-8000-000000000000"}}}`},
+		{"hosted with a foreign endpoint", `{"schemaVersion":1,"cli":{"connection":{"mode":"hosted","endpoint":"https://evil.example.com","installation":"3HzFPXfPDGhwLJJVtaHbmFs6vLa"}}}`},
 		{"not json", `formae: command not found`},
 		{"classic with an empty url", `{"schemaVersion":1,"cli":{"connection":{"mode":"classic","port":49684}}}`},
 		{"classic with no port", `{"schemaVersion":1,"cli":{"connection":{"mode":"classic","url":"http://localhost"}}}`},

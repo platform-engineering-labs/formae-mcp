@@ -12,10 +12,18 @@ import (
 // credentials may be sent is an escape hatch that outlives its reason.
 const HostedOrigin = "https://cloud.formae.ai"
 
-// installationRE matches the canonical lowercase UUID text form. The constraint
-// is syntactic and mirrors what the edge accepts as a routing key; it says
-// nothing about UUID version or variant bits.
-var installationRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+// installationRE is the routing-key grammar: 27 base62 characters, case
+// sensitive, which is the text form of a KSUID. It mirrors byte for byte what
+// the edge accepts as a routing key.
+//
+// It is a shape check and deliberately not a decode. 27 base62 digits span a
+// wider range than the 160 bits a KSUID encodes, so a few strings this accepts
+// would fail a KSUID parser. Refusing them would make this client stricter than
+// the edge that does the routing, so we would refuse an identifier the router
+// would have accepted, and gain nothing: nothing mints one that cannot be
+// decoded, and a well-formed identifier that is not routable comes back from
+// the edge as a 404 that says so.
+var installationRE = regexp.MustCompile(`^[0-9A-Za-z]{27}$`)
 
 // Connection is where the MCP sends agent requests. It has exactly two arms, so
 // a resolved configuration cannot be both classic and hosted, and a hosted one
@@ -49,7 +57,7 @@ func ValidateHosted(h Hosted) error {
 		return err
 	}
 	if !installationRE.MatchString(h.Installation) {
-		return fmt.Errorf("installation %q is not a canonical lowercase UUID", h.Installation)
+		return fmt.Errorf("installation %q is not a well-formed installation id", h.Installation)
 	}
 	return nil
 }
