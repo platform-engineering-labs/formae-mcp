@@ -330,6 +330,28 @@ func TestExtractFailureOutputIsBoundedAndScrubbed(t *testing.T) {
 		}
 	})
 
+	// The order matters: truncating first would leave a credential that
+	// straddles the cutoff partly intact, because the search string is no
+	// longer present in the truncated bytes.
+	t.Run("a credential straddling the cutoff is still removed", func(t *testing.T) {
+		const cred = "Bearer sup3rs3cr3t-and-then-some-more"
+		for offset := -len(cred); offset <= 1; offset++ {
+			start := maxSubprocessOutput + offset
+			if start < 0 {
+				continue
+			}
+			raw := append(bytes.Repeat([]byte("x"), start), []byte(cred)...)
+			raw = append(raw, bytes.Repeat([]byte("y"), 128)...)
+
+			got := safeSubprocessOutput(raw, secret.New(cred))
+
+			if strings.Contains(got, "sup3rs3cr3t") {
+				t.Fatalf("a credential starting at offset %d survived truncation: %q",
+					start, got[max(0, len(got)-160):])
+			}
+		}
+	})
+
 	t.Run("a classic call has no credential to remove", func(t *testing.T) {
 		if got := safeSubprocessOutput([]byte("plain diagnostics"), secret.Value{}); got != "plain diagnostics" {
 			t.Fatalf("got %q", got)
