@@ -860,13 +860,18 @@ const maxSubprocessOutput = 8 << 10
 // own output — said plainly here because "output is sanitised" would be a
 // wider claim than this makes good.
 func safeSubprocessOutput(output []byte, credential secret.Value) string {
-	if len(output) > maxSubprocessOutput {
-		output = append(output[:maxSubprocessOutput:maxSubprocessOutput], []byte("\n… truncated")...)
+	// Scrub first, then truncate. The other order leaves a credential that
+	// straddles the cutoff partly intact: the search string is no longer
+	// present in the truncated bytes, so nothing is replaced and all but the
+	// tail of the token survives.
+	scrubbed := string(output)
+	if !credential.IsZero() {
+		scrubbed = strings.ReplaceAll(scrubbed, credential.Reveal(), secret.Mask)
 	}
-	if credential.IsZero() {
-		return string(output)
+	if len(scrubbed) > maxSubprocessOutput {
+		scrubbed = scrubbed[:maxSubprocessOutput] + "\n… truncated"
 	}
-	return strings.ReplaceAll(string(output), credential.Reveal(), secret.Mask)
+	return scrubbed
 }
 
 // Helpers
