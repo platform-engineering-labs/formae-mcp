@@ -164,6 +164,9 @@ func TestAMutationThatFailsAfterDispatchSaysItMayHaveActed(t *testing.T) {
 	if strings.Contains(got[1], "answered") {
 		t.Errorf("nothing answered, so the attribution must not say so: %q", got[1])
 	}
+	if strings.Contains(got[1], "was sent to installation") {
+		t.Errorf("the MCP cannot know the installation itself received it: %q", got[1])
+	}
 }
 
 // Resolved is not addressed. An apply whose forma file fails to evaluate has a

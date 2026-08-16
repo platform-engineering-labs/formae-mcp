@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
@@ -37,6 +39,10 @@ type routing interface {
 	// collectionMiss answers a 404 from an endpoint that lists things.
 	collectionMiss(empty json.RawMessage) (json.RawMessage, error)
 
+	// scrub removes any credential this connection has sent from bytes the far
+	// end returned, before they can reach a result, an error, or a log.
+	scrub(body []byte) []byte
+
 	// refresh re-resolves the credential and reports whether anything changed,
 	// so the caller knows whether a second attempt could differ from the first.
 	refresh(ctx context.Context) (bool, error)
@@ -55,6 +61,10 @@ func (classicRoute) collectionMiss(empty json.RawMessage) (json.RawMessage, erro
 	return empty, nil
 }
 
+// scrub does nothing: the MCP sends a self-hosted agent no credential, so a
+// response cannot be quoting one.
+func (classicRoute) scrub(body []byte) []byte { return body }
+
 // refresh does nothing. The MCP sends a self-hosted agent no credential, so
 // there is nothing a second attempt would do differently.
 func (classicRoute) refresh(context.Context) (bool, error) { return false, nil }
@@ -65,6 +75,9 @@ type hostedRoute struct {
 	installation string
 	credential   secret.Value
 	refreshFn    refresher
+	// used is every credential this route has put on the wire, kept so a
+	// response quoting one can be scrubbed. It is bounded by one refresh.
+	used []string
 }
 
 // String and GoString mask, and holding a secret.Value is not enough on its own
@@ -90,7 +103,11 @@ func (r *hostedRoute) url(path string, q url.Values) string { return joinURL(r.e
 // is not a warning, it is a failure that surfaces somewhere else entirely.
 func (r *hostedRoute) decorate(h http.Header) {
 	h.Set(installationHeader, r.installation)
-	h.Set("Authorization", r.credential.Reveal())
+	sent := r.credential.Reveal()
+	h.Set("Authorization", sent)
+	if !slices.Contains(r.used, sent) {
+		r.used = append(r.used, sent)
+	}
 }
 
 // collectionMiss refuses to report a routing failure as an empty list. The
@@ -134,6 +151,25 @@ func (r *hostedRoute) refresh(ctx context.Context) (bool, error) {
 	}
 	r.credential = next.Credential
 	return true, nil
+}
+
+// scrub removes any credential this route has used from bytes the far end
+// sent back.
+//
+// The far end is trusted to route, not to be careful. An error page from an
+// intermediary that echoes request headers would otherwise put the bearer
+// token into a tool result and from there into a model's context and a
+// transcript — a copy of the credential somewhere it can never be withdrawn
+// from. Both the current and the previous credential are scrubbed, because a
+// retry's response can still be quoting the request that failed.
+func (r *hostedRoute) scrub(body []byte) []byte {
+	for _, used := range r.used {
+		if used == "" {
+			continue
+		}
+		body = bytes.ReplaceAll(body, []byte(used), []byte(secret.Mask))
+	}
+	return body
 }
 
 // withEndpoint returns a copy addressing a different origin. It exists for

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 )
 
@@ -39,6 +40,11 @@ const (
 	// retryOnce resends once, and only once, after a successful refresh.
 	retryOnce
 )
+
+// maxResponseBytes bounds one agent response.
+const maxResponseBytes = 32 << 20
+
+var errResponseTooLarge = errors.New("the agent returned more data than this build will read")
 
 // errRetryableBody guards a combination that would corrupt a request silently.
 var errRetryableBody = errors.New(
@@ -91,10 +97,17 @@ func (c *FormaeClient) send(ctx context.Context, r request) ([]byte, int, error)
 	// header or the credential by naming one in Headers.
 	c.route.decorate(req.Header)
 
-	// Advanced before the call rather than after: once Do returns an error we
-	// cannot tell whether the request reached the agent, and "it may have
-	// acted" is the answer that keeps an operator safe.
-	c.advance(reachAttempted)
+	// Attempted means bytes left this process, which is what "it may have
+	// acted" rests on. Taken from the trace rather than from "we are about to
+	// call Do", because a DNS or TLS failure sends nothing and telling an
+	// operator to go and check would be a false alarm in the costly direction.
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				c.advance(reachAttempted)
+			}
+		},
+	}))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -112,11 +125,18 @@ func (c *FormaeClient) send(ctx context.Context, r request) ([]byte, int, error)
 				"this is a routing problem, not a response", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Bounded, and scrubbed before it can reach a caller. The bound matches the
+	// one the configuration oracle already applies to its subprocess: an
+	// unbounded read from a peer is an unbounded allocation, and under hosted
+	// that peer is remote and shared rather than a process on this machine.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
 	}
-	return body, resp.StatusCode, nil
+	if len(body) > maxResponseBytes {
+		return nil, resp.StatusCode, errResponseTooLarge
+	}
+	return c.route.scrub(body), resp.StatusCode, nil
 }
 
 // advance raises the high-water mark, never lowers it: a call that answered

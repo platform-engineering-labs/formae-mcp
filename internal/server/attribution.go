@@ -66,12 +66,18 @@ func (d destination) note() string {
 	}
 	switch d.reach {
 	case reachAnswered:
-		return fmt.Sprintf("Installation %s answered, via profile %q.",
+		// "The hosted endpoint answered", not "the installation answered".
+		// Every response arrives from the shared edge, and the edge answers for
+		// itself when it cannot route: a hosted 404 on a collection is reported
+		// two lines away as a routing miss, so claiming the installation had
+		// answered would contradict it in the same result. Telling the two
+		// apart needs a stable edge error envelope, which does not exist yet.
+		return fmt.Sprintf("The hosted endpoint answered for installation %s, via profile %q.",
 			hosted.Installation, d.ec.ProfileName)
 	case reachAttempted:
 		return fmt.Sprintf(
-			"This request was sent to installation %s via profile %q, and its outcome is unknown: "+
-				"it may already have taken effect.",
+			"This request was sent for installation %s via profile %q and no response came back, "+
+				"so its outcome is unknown: it may already have taken effect.",
 			hosted.Installation, d.ec.ProfileName)
 	default:
 		return fmt.Sprintf("Profile %q resolves to installation %s; nothing was sent.",
