@@ -125,12 +125,20 @@ case "$CLAUDE_AUTH" in
         # is the state a new user is in.
         ;;
     copy)
-        CLAUDE_HOME="$(mktemp -d)"
-        [ -e "$HOME/.claude" ]      && cp -a "$HOME/.claude" "$CLAUDE_HOME/.claude"
-        [ -e "$HOME/.claude.json" ] && cp -a "$HOME/.claude.json" "$CLAUDE_HOME/.claude.json"
-        echo "Claude config: throwaway copy at $CLAUDE_HOME"
-        [ -e "$CLAUDE_HOME/.claude" ]      && MOUNTS="$MOUNTS -v $CLAUDE_HOME/.claude:/root/.claude"
-        [ -e "$CLAUDE_HOME/.claude.json" ] && MOUNTS="$MOUNTS -v $CLAUDE_HOME/.claude.json:/root/.claude.json"
+        # Just the two files that carry the signed-in account, mounted read-only
+        # and seeded into writable copies inside the container.
+        #
+        # Copying the whole ~/.claude was worse three ways: cp -a aborts on the
+        # first unreadable entry and a real ~/.claude accumulates project
+        # directories that hit exactly that; it can be gigabytes; and it drags the
+        # host plugin set in, which is most of what this option exists to prevent.
+        [ -r "$HOME/.claude/.credentials.json" ] || {
+            echo "CLAUDE_AUTH=copy needs a logged-in Claude Code on the host." >&2
+            echo "  No readable $HOME/.claude/.credentials.json — use CLAUDE_AUTH=none and /login inside." >&2
+            exit 1
+        }
+        MOUNTS="$MOUNTS -v $HOME/.claude/.credentials.json:/seed/credentials.json:ro"
+        [ -r "$HOME/.claude.json" ] && MOUNTS="$MOUNTS -v $HOME/.claude.json:/seed/claude.json:ro"
         ;;
     host)
         [ -e "$HOME/.claude" ]      && MOUNTS="$MOUNTS -v $HOME/.claude:/root/.claude"
@@ -235,6 +243,35 @@ exec docker run -it --rm --network host \
     mkdir -p ~/.ssh && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
     echo "installing Claude Code..."
     npm i -g @anthropic-ai/claude-code >/dev/null 2>&1
+
+    # Seed Claude Code auth from the read-only mounts CLAUDE_AUTH=copy provided.
+    # Writable copies: a read-only credentials file cannot be rewritten when the
+    # token refreshes, and the account record is what an interactive session reads
+    # before deciding it is signed in — print mode does not, which is how an
+    # earlier version of this looked fine and was not.
+    #
+    # Only the account keys are taken. The host projects, plugins and marketplaces
+    # are left out on purpose: bringing them in would load the real formae plugin
+    # beside the one under test.
+    if [ -r /seed/credentials.json ]; then
+      mkdir -p /root/.claude
+      cp /seed/credentials.json /root/.claude/.credentials.json
+      chmod 600 /root/.claude/.credentials.json
+      if [ -r /seed/claude.json ]; then
+        cat > /tmp/seed-account.js <<"SEEDJS"
+const fs = require("fs");
+const seed = JSON.parse(fs.readFileSync("/seed/claude.json", "utf8"));
+let cur = {};
+try { cur = JSON.parse(fs.readFileSync("/root/.claude.json", "utf8")); } catch (e) {}
+for (const k of ["oauthAccount", "hasCompletedOnboarding", "userID", "lastOnboardingVersion"]) {
+  if (seed[k] !== undefined) cur[k] = seed[k];
+}
+fs.writeFileSync("/root/.claude.json", JSON.stringify(cur, null, 2));
+SEEDJS
+        node /tmp/seed-account.js || echo "  (account record not seeded — you may need /login)"
+      fi
+      echo "claude auth: seeded from the host"
+    fi
 
     # Completing a MOUNTED formae, and only that. A provisioned one already has
     # both halves: resolve_formae installs oidc alongside formae, and the launcher
