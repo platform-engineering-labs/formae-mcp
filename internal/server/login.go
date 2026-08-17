@@ -70,6 +70,17 @@ type startedDoc struct {
 	ExpiresInSeconds int    `json:"expiresInSeconds"`
 }
 
+// usable reports whether this document carries an instruction a user could act
+// on. The two flows have different requirements and neither is optional: a
+// browser flow with no URL, or a device flow with no code, is not something a
+// person can complete.
+func (d startedDoc) usable() bool {
+	if d.Method == "device" {
+		return d.VerificationURI != "" && d.UserCode != ""
+	}
+	return d.BrowserURL != ""
+}
+
 // completeDoc is what `complete_login` reports: who signed in and what it wrote.
 type completeDoc struct {
 	SchemaVersion int    `json:"schemaVersion"`
@@ -97,6 +108,9 @@ const loginSchemaVersion = 1
 // It does not wait for the flow. A session already open produces the completion
 // document directly, which is what makes driving setup twice harmless.
 func (s *Server) handleLogin(ctx context.Context, _ *mcp.CallToolRequest, input tools.LoginInput) (*mcp.CallToolResult, any, error) {
+	s.opMu.Lock()
+	defer s.opMu.Unlock()
+
 	args := []string{"login", "--hosted"}
 	if input.Device {
 		args = append(args, "--device")
@@ -152,12 +166,20 @@ func (s *Server) handleLogin(ctx context.Context, _ *mcp.CallToolRequest, input 
 		if derr != nil {
 			return errorResult(s.failLogin(p, derr)), nil, nil
 		}
-		s.closePendingLogin()
+		s.clearPendingLogin(p)
+		p.close()
 		return textResult(renderComplete(done)), nil, nil
 
 	case docStarted:
 		var started startedDoc
 		if err := json.Unmarshal(line, &started); err != nil {
+			return errorResult(s.failLogin(p, errUnreadableLogin)), nil, nil
+		}
+		// A document that parses is not a document that says anything. Every field
+		// is optional to the decoder, so a formae of another vintage emitting
+		// {"schemaVersion":1,"phase":"started"} would have had us tell the user a
+		// sign-in had started and then show them an empty URL.
+		if !started.usable() {
 			return errorResult(s.failLogin(p, errUnreadableLogin)), nil, nil
 		}
 		return textResult(renderStarted(started)), nil, nil
@@ -169,15 +191,24 @@ func (s *Server) handleLogin(ctx context.Context, _ *mcp.CallToolRequest, input 
 
 // handleCompleteLogin waits for the sign-in `login` began and reports what it did.
 func (s *Server) handleCompleteLogin(_ context.Context, _ *mcp.CallToolRequest, _ tools.EmptyInput) (*mcp.CallToolResult, any, error) {
+	s.opMu.Lock()
+	defer s.opMu.Unlock()
+
 	p := s.peekPendingLogin()
 	if p == nil {
 		return errorResult(errors.New(
 			"no sign-in is in progress; call the login tool first, show the user the URL it returns, " +
 				"and call this once they have finished in the browser")), nil, nil
 	}
-	// Released only once this login is finished with, so a second login replaces
-	// a child that is still running rather than starting one beside it.
-	defer func() { s.clearPendingLogin(p); p.cancel() }()
+	// Released only once this login is finished with, so a second login replaces a
+	// child that is still running rather than starting one beside it.
+	//
+	// close rather than cancel: cancelling ends the process but never reaps it,
+	// and returns before its pipes are finished with. Every early return below —
+	// an extra document, a refusal read from the next one — took that path, so a
+	// formae that emitted something unexpected left a zombie and two open pipes
+	// until the server exited.
+	defer func() { s.clearPendingLogin(p); p.close() }()
 
 	line, err := readDocument(p.out)
 	if err != nil {
@@ -414,6 +445,11 @@ func decodeComplete(line []byte) (completeDoc, error) {
 	if done.SchemaVersion != loginSchemaVersion || done.Phase != "complete" {
 		return completeDoc{}, errUnreadableLogin
 	}
+	// A completion with no status is not evidence that anything completed, and
+	// reporting "signed in" off the back of it would be inventing the outcome.
+	if done.Status == "" {
+		return completeDoc{}, errUnreadableLogin
+	}
 	return done, nil
 }
 
@@ -525,8 +561,23 @@ func renderComplete(d completeDoc) string {
 	return b.String()
 }
 
-// loginState is the pending sign-in and the lock over it, embedded in Server.
+// loginState is the pending sign-in and the locks over it, embedded in Server.
 type loginState struct {
+	// opMu serialises the sign-in handlers against each other, for their whole
+	// duration.
+	//
+	// The slot lock below protects the pointer; it does not confer exclusive use
+	// of what the pointer refers to. Two complete_login calls could take the same
+	// pendingLogin and call Scan on the same bufio.Scanner, which is not
+	// concurrency-safe: one would consume the other's document and the scanner's
+	// own state would be raced. A replacement login could likewise close a child
+	// another handler was mid-read on.
+	//
+	// Serialising costs nothing here. There is one user and one conversation, so
+	// a second concurrent sign-in is a mistake rather than a workload, and making
+	// it wait is a better answer than making it race.
+	opMu sync.Mutex
+
 	loginMu sync.Mutex
 	pending *pendingLogin
 	// runCtx is the server's own context, captured by Run. The login child is
