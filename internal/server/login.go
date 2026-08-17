@@ -169,24 +169,42 @@ func (s *Server) handleLogin(ctx context.Context, _ *mcp.CallToolRequest, input 
 
 // handleCompleteLogin waits for the sign-in `login` began and reports what it did.
 func (s *Server) handleCompleteLogin(_ context.Context, _ *mcp.CallToolRequest, _ tools.EmptyInput) (*mcp.CallToolResult, any, error) {
-	p := s.takePendingLogin()
+	p := s.peekPendingLogin()
 	if p == nil {
 		return errorResult(errors.New(
 			"no sign-in is in progress; call the login tool first, show the user the URL it returns, " +
 				"and call this once they have finished in the browser")), nil, nil
 	}
-	defer p.cancel()
+	// Released only once this login is finished with, so a second login replaces
+	// a child that is still running rather than starting one beside it.
+	defer func() { s.clearPendingLogin(p); p.cancel() }()
 
 	line, err := readDocument(p.out)
 	if err != nil {
 		return errorResult(p.explain(err)), nil, nil
 	}
-	done, derr := decodeComplete(line)
-	if derr != nil {
-		return errorResult(p.explain(derr)), nil, nil
+
+	// A refusal after the URL was handed out is the ordinary failure, not an
+	// edge case: waiting is where a timeout, a rejected exchange, an invalid
+	// id_token and a failed session write all land. Decoding this only as a
+	// completion turned "your session expired, sign in again" into a generic
+	// unreadable-output error, which is the one message that helps least.
+	switch classify(line) {
+	case docFailure:
+		_ = p.cmd.Wait()
+		return errorResult(envelopeError(line)), nil, nil
+
+	case docComplete:
+		done, derr := decodeComplete(line)
+		if derr != nil {
+			return errorResult(p.explain(derr)), nil, nil
+		}
+		_ = p.cmd.Wait()
+		return textResult(renderComplete(done)), nil, nil
+
+	default:
+		return errorResult(p.explain(errUnreadableLogin)), nil, nil
 	}
-	_ = p.cmd.Wait()
-	return textResult(renderComplete(done)), nil, nil
 }
 
 // lifetime is the context the login child is tied to. It is the server's, so a
@@ -214,18 +232,41 @@ func (s *Server) setPendingLogin(p *pendingLogin) {
 	}
 }
 
-// takePendingLogin removes and returns the pending sign-in, if there is one.
-func (s *Server) takePendingLogin() *pendingLogin {
+// peekPendingLogin returns the pending sign-in without giving up ownership.
+//
+// complete_login used to take it, which cleared the slot while the child was
+// still running: a second login then started a second child instead of replacing
+// the first, so two flows and two loopback listeners could coexist. The slot is
+// released by clearPendingLogin once this login is actually finished.
+func (s *Server) peekPendingLogin() *pendingLogin {
 	s.loginMu.Lock()
 	defer s.loginMu.Unlock()
-	p := s.pending
-	s.pending = nil
-	return p
+	return s.pending
 }
 
-// closePendingLogin ends whatever sign-in is pending.
+// clearPendingLogin releases the slot only if p is still the login in it.
+//
+// The identity check is the point. Without it, a login that fails after another
+// has replaced it cleans up its successor: A is replaced by B, A's read fails,
+// and A's cleanup closes whatever is pending — which is now B, a sign-in the
+// user is part-way through.
+func (s *Server) clearPendingLogin(p *pendingLogin) {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	if s.pending == p {
+		s.pending = nil
+	}
+}
+
+// closePendingLogin ends whatever sign-in is pending. Used on shutdown, where
+// there is no successor to protect.
 func (s *Server) closePendingLogin() {
-	if p := s.takePendingLogin(); p != nil {
+	s.loginMu.Lock()
+	p := s.pending
+	s.pending = nil
+	s.loginMu.Unlock()
+
+	if p != nil {
 		p.close()
 	}
 }
@@ -240,10 +281,12 @@ func (s *Server) pendingPID() int {
 	return s.pending.cmd.Process.Pid
 }
 
-// failLogin ends a sign-in that could not be started and explains why.
+// failLogin ends a sign-in that could not be started and explains why. Only this
+// login is ended, never a successor that has since replaced it.
 func (s *Server) failLogin(p *pendingLogin, err error) error {
 	explained := p.explain(err)
-	s.closePendingLogin()
+	s.clearPendingLogin(p)
+	p.close()
 	return explained
 }
 
@@ -394,6 +437,15 @@ func readEnvelope(r *bufio.Scanner) (error, bool) {
 // describeLoginFailure renders a declared code as the MCP's own text.
 func describeLoginFailure(code, pluginCode string) string {
 	switch code {
+	case "sync_incomplete":
+		// The distinction the user pays for if this is wrong: they ARE signed in,
+		// their session is saved, and signing in again fixes nothing. Reporting
+		// this as a failed sign-in sends them back through a browser flow for a
+		// problem that is on the other side of it.
+		return "you are signed in and your session is saved, but formae could not write the profiles " +
+			"for your installations — it could not complete the request to the control plane. " +
+			"Your sign-in is not lost: run `formae login --hosted` to see the reason, and once it is " +
+			"fixed run login again (it will find the open session and go straight to writing profiles)"
 	case "plugin_missing":
 		return "signing in to the hosted platform needs the oidc auth plugin, which is not installed. " +
 			"Install it with `pelmgr install oidc`, then try again"
@@ -454,6 +506,9 @@ func renderComplete(d completeDoc) string {
 	}
 	if len(d.Profiles.Updated) > 0 {
 		b.WriteString("Updated profiles: " + strings.Join(d.Profiles.Updated, ", ") + "\n")
+	}
+	if len(d.Profiles.Renamed) > 0 {
+		b.WriteString("Renamed profiles: " + strings.Join(d.Profiles.Renamed, ", ") + "\n")
 	}
 	if len(d.Profiles.Removed) > 0 {
 		b.WriteString("Removed profiles: " + strings.Join(d.Profiles.Removed, ", ") + "\n")
