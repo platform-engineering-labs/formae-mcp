@@ -119,15 +119,49 @@ func State() (StoreState, []string, error) {
 		return Unconfigured, names, nil
 	}
 
-	// hasUserConfig already established that the pointer, if valid, names a
-	// profile that exists — so a failure here is exactly the "configuration
-	// exists but nothing usable is selected" case.
-	active, err := readActive(dir)
-	if err != nil || ValidateName(active) != nil {
+	// What follows mirrors the CLI's own initialization decision, because the
+	// question is not "is something here" but "would the CLI resolve it". Two of
+	// its outcomes recover on their own and must not be reported as needing the
+	// user's hand.
+	//
+	// Measured against the real binary, one temp config dir per row:
+	//
+	//	store                       CLI resolves   this reports
+	//	a valid pointer             yes            Ready
+	//	a legacy formae.conf.pkl    yes            Ready
+	//	an orphaned default.pkl     yes            Ready
+	//	profiles, no pointer        no             NoActive
+	//	a pointer to a gone profile no             NoActive
+	//	nothing at all              yes*           Unconfigured
+	//
+	// * and that row is the whole point: the CLI resolves an empty store by
+	// creating a classic localhost default, which is the decision the user has
+	// not been asked about yet.
+	if active, err := readActive(dir); err == nil && ValidateName(active) == nil {
+		if _, err := os.Stat(profilePath(dir, active)); err == nil {
+			return Ready, names, nil // the pointer names a profile that exists.
+		}
+		// A pointer naming a profile that is gone. The CLI stops here and asks
+		// the user to choose, and so does this.
 		return NoActive, names, nil
 	}
-	if _, err := os.Stat(filepath.Join(dir, "profiles", active+".pkl")); err != nil {
-		return NoActive, names, nil
+
+	// No usable pointer. A legacy formae.conf.pkl is migrated into a default
+	// profile and pointed at, and an orphaned default is adopted, so both resolve
+	// without anyone being asked anything.
+	if _, err := os.Lstat(filepath.Join(dir, "formae.conf.pkl")); err == nil {
+		return Ready, names, nil
 	}
-	return Ready, names, nil
+	if _, err := os.Stat(profilePath(dir, "default")); err == nil {
+		return Ready, names, nil
+	}
+
+	// Profiles, but no default and no pointer: the one state the CLI itself
+	// refuses, naming the profiles it found.
+	return NoActive, names, nil
+}
+
+// profilePath is where a profile of this name lives.
+func profilePath(dir, name string) string {
+	return filepath.Join(dir, "profiles", name+".pkl")
 }

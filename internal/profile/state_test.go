@@ -223,3 +223,42 @@ func TestList_AnAbsentProfilesDirIsEmptyAndNotAnError(t *testing.T) {
 		}
 	})
 }
+
+// A legacy config with no pointer is Ready, not NoActive: the CLI migrates it
+// into a default profile and points at it, so nobody has to be asked anything.
+// Reporting it as needing a choice would interrupt a user whose machine works.
+func TestState_ALegacyConfigResolvesWithoutAChoice(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "formae.conf.pkl"),
+		[]byte("amends \"formae:/Config.pkl\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	unchanged(t, dir, func() {
+		state, _, err := State()
+		if err != nil {
+			t.Fatalf("State: %v", err)
+		}
+		if state != Ready {
+			t.Errorf("state = %v, want Ready", state)
+		}
+	})
+}
+
+// An orphaned default with no pointer is adopted by the CLI, so it is Ready too.
+func TestState_AnOrphanedDefaultIsAdopted(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	writeProfile(t, dir, "default")
+
+	unchanged(t, dir, func() {
+		state, _, err := State()
+		if err != nil {
+			t.Fatalf("State: %v", err)
+		}
+		if state != Ready {
+			t.Errorf("state = %v, want Ready", state)
+		}
+	})
+}

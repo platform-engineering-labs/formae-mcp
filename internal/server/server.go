@@ -141,9 +141,19 @@ func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Co
 			FormaeBin: s.ctxResolver.Bin(),
 		}, nil
 	}
+
+	// Asked before anything resolves, and after the forced endpoint, which is the
+	// seam a test injects a mock agent URL through and must keep working with no
+	// profile store at all. The order matters in both directions and neither is
+	// incidental: gating first would break every test that uses that seam, and
+	// resolving first would create the profile whose absence is the question.
+	if err := gateStore(); err != nil {
+		return execctx.Context{}, err
+	}
+
 	ec, err := s.ctxResolver.Resolve(ctx, profileName, false)
 	if err != nil {
-		return execctx.Context{}, s.explainIfTooOld(err)
+		return execctx.Context{}, explainLapsedSession(s.explainIfTooOld(err))
 	}
 	return ec, nil
 }
