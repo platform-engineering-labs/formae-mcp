@@ -84,6 +84,21 @@ ISOLATE_CLAUDE="${ISOLATE_CLAUDE:-0}"
 CLAUDE_AUTH="${CLAUDE_AUTH:-none}"
 [ "$ISOLATE_CLAUDE" = "1" ] && CLAUDE_AUTH="copy"
 GO_VERSION="${GO_VERSION:-1.25.1}"
+# Mount paths are word-split deliberately when the docker command is assembled
+# (see the shellcheck disable below), so whitespace in one silently becomes two
+# arguments and docker fails to start with a message about neither. Refused here
+# instead: a rework to positional arguments is more change than the case is worth,
+# but a confusing failure is not what a shared script should hand anyone.
+for _p in "$HOME" "${FORMAE_LOCAL_BIN:-}"; do
+    case "$_p" in
+        *[[:space:]]*)
+            echo "This script cannot handle whitespace in mount paths: '$_p'" >&2
+            echo "  Build to a path without spaces, or set HOME for the run." >&2
+            exit 1
+            ;;
+    esac
+done
+
 HOSTED="${HOSTED:-0}"
 FORMAE_LOCAL_BIN="${FORMAE_LOCAL_BIN:-}"
 CLOUD_URL="${CLOUD_URL:-https://console.formae.ai}"
@@ -137,8 +152,18 @@ case "$CLAUDE_AUTH" in
             echo "  No readable $HOME/.claude/.credentials.json — use CLAUDE_AUTH=none and /login inside." >&2
             exit 1
         }
+        # Both files, and both required. The account record is what an interactive
+        # session reads before deciding it is signed in, so with credentials alone
+        # the container starts unauthenticated while this option's whole promise is
+        # that it does not. Better to refuse here than to print "seeded" and let
+        # the tester discover it at the prompt.
+        [ -r "$HOME/.claude.json" ] || {
+            echo "CLAUDE_AUTH=copy needs a readable $HOME/.claude.json (the signed-in account record)." >&2
+            echo "  Use CLAUDE_AUTH=none and /login inside the container instead." >&2
+            exit 1
+        }
         MOUNTS="$MOUNTS -v $HOME/.claude/.credentials.json:/seed/credentials.json:ro"
-        [ -r "$HOME/.claude.json" ] && MOUNTS="$MOUNTS -v $HOME/.claude.json:/seed/claude.json:ro"
+        MOUNTS="$MOUNTS -v $HOME/.claude.json:/seed/claude.json:ro"
         ;;
     host)
         [ -e "$HOME/.claude" ]      && MOUNTS="$MOUNTS -v $HOME/.claude:/root/.claude"
@@ -268,9 +293,14 @@ for (const k of ["oauthAccount", "hasCompletedOnboarding", "userID", "lastOnboar
 }
 fs.writeFileSync("/root/.claude.json", JSON.stringify(cur, null, 2));
 SEEDJS
-        node /tmp/seed-account.js || echo "  (account record not seeded — you may need /login)"
+        if node /tmp/seed-account.js; then
+          echo "claude auth: seeded from the host"
+        else
+          echo "claude auth: NOT seeded — the account record could not be read; run /login" >&2
+        fi
+      else
+        echo "claude auth: credentials only, no account record — run /login if it asks" >&2
       fi
-      echo "claude auth: seeded from the host"
     fi
 
     # Completing a MOUNTED formae, and only that. A provisioned one already has
