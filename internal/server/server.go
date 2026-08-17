@@ -60,6 +60,12 @@ type Server struct {
 	// against a compile-time origin, so without a seam no test can exercise a
 	// hosted handler at all. Production never replaces it.
 	newClient func(execctx.Context) (*FormaeClient, error)
+
+	// loginState holds the sign-in a user is part-way through. It is the one
+	// piece of state this server keeps between calls, and it exists because the
+	// auth plugin's pending login is in-process memory that no second process
+	// could resume.
+	loginState
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -182,7 +188,17 @@ func (s *Server) formaeBin() string {
 }
 
 // Run starts the MCP server with the given transport.
+// Run serves the MCP protocol until ctx is done.
+//
+// The context is captured because a sign-in outlives the tool call that starts
+// it: the login child is tied to this one, so it ends when the server does rather
+// than when `login` returns.
 func (s *Server) Run(ctx context.Context, transport mcp.Transport) error {
+	s.loginMu.Lock()
+	s.runCtx = ctx
+	s.loginMu.Unlock()
+	defer s.closePendingLogin()
+
 	return s.mcpServer.Run(ctx, transport)
 }
 
@@ -249,6 +265,16 @@ func (s *Server) registerTools() {
 		Description: tools.ExtractResourcesDescription,
 		Annotations: readOnly,
 	}, s.handleExtractResources)
+
+	// Signing in creates profiles and changes no infrastructure, so neither hint
+	// fits: ReadOnlyHint would be a lie and DestructiveHint would warn about the
+	// wrong thing.
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "login", Description: tools.LoginDescription,
+	}, s.handleLogin)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "complete_login", Description: tools.CompleteLoginDescription,
+	}, s.handleCompleteLogin)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
