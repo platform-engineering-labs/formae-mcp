@@ -40,14 +40,20 @@ import (
 // because there is one user and one conversation, and a second `login` means the
 // first was abandoned.
 
-// loginMaxDocument bounds a single document read from the child, so a formae that
-// streams unbounded output cannot exhaust memory here.
+// loginMaxDocument bounds a single document read from the child.
+//
+// bufio.Scanner rather than ReadBytes, because ReadBytes accumulates a whole
+// line before anything can reject it: a length check after the fact is a check
+// made once the memory has already been spent. Scanner refuses past the limit
+// instead of buying it first.
 const loginMaxDocument = 1 << 20 // 1 MiB
 
 // pendingLogin is a sign-in waiting for the user to finish it.
 type pendingLogin struct {
-	cmd    *exec.Cmd
-	out    *bufio.Reader
+	cmd *exec.Cmd
+	// out is shared across the two tool calls, so the second reads where the
+	// first stopped rather than from a fresh view of the pipe.
+	out    *bufio.Scanner
 	cancel context.CancelFunc
 }
 
@@ -122,7 +128,9 @@ func (s *Server) handleLogin(ctx context.Context, _ *mcp.CallToolRequest, input 
 	// Drained and discarded so the child cannot block on a full pipe.
 	go func() { _, _ = io.Copy(io.Discard, stderrPipe) }()
 
-	p := &pendingLogin{cmd: cmd, out: bufio.NewReader(stdout), cancel: cancel}
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), loginMaxDocument)
+	p := &pendingLogin{cmd: cmd, out: scanner, cancel: cancel}
 	s.setPendingLogin(p)
 
 	line, err := readDocument(p.out)
@@ -283,16 +291,20 @@ func killGroup(cmd *exec.Cmd) {
 // errUnreadableLogin is a document this build could not read.
 var errUnreadableLogin = errors.New("unreadable sign-in output")
 
-// readDocument reads one JSON document from the child, bounded.
-func readDocument(r *bufio.Reader) ([]byte, error) {
-	line, err := r.ReadBytes('\n')
-	if len(line) > loginMaxDocument {
-		return nil, errUnreadableLogin
+// readDocument reads one JSON document from the child.
+//
+// A document longer than the bound makes Scan report an error rather than
+// returning it, so an oversized document is refused without being held.
+func readDocument(r *bufio.Scanner) ([]byte, error) {
+	for r.Scan() {
+		line := r.Bytes()
+		if len(strings.TrimSpace(string(line))) == 0 {
+			continue // a blank line is not a document.
+		}
+		// Bytes() aliases the scanner's buffer, which the next Scan reuses.
+		return append([]byte(nil), line...), nil
 	}
-	if err != nil && len(strings.TrimSpace(string(line))) == 0 {
-		return nil, errUnreadableLogin
-	}
-	return line, nil
+	return nil, errUnreadableLogin
 }
 
 // docKind is which of the three documents this is.
@@ -368,13 +380,11 @@ func decodeComplete(line []byte) (completeDoc, error) {
 // auth plugin's error string, and a Pkl failure quotes profile source lines,
 // which for a classic profile can mean an inline password. The MCP renders its
 // own text from the code.
-func readEnvelope(r *bufio.Reader) (error, bool) {
-	line, err := r.ReadBytes('\n')
-	if len(line) == 0 || len(line) > loginMaxDocument {
+func readEnvelope(r *bufio.Scanner) (error, bool) {
+	line, err := readDocument(r)
+	if err != nil {
 		return nil, false
 	}
-	_ = err
-
 	if classify(line) != docFailure {
 		return nil, false
 	}
