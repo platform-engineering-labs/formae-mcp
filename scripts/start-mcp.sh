@@ -46,4 +46,22 @@ fi
 resolve_formae "$channel"
 export FORMAE_BIN FORMAE_BIN_MANAGED
 
+# formae's own bin directory goes on PATH, and this is not cosmetic.
+#
+# formae shells out to `pkl` by bare name to evaluate a plugin's manifest, which
+# is how an auth plugin is recognised as one — and pkl is installed into the same
+# bin directory as formae, not into a system location. Launched from a shell whose
+# PATH never had that directory (a desktop session, a harness, anything but a
+# terminal the user set up), the lookup fails, discovery discards the error, and
+# every auth plugin becomes invisible: a hosted sign-in then reports the oidc
+# plugin as not installed when it is sitting right there.
+#
+# Prepended rather than appended so the pkl beside this formae wins over an older
+# one earlier in PATH; the two have to agree for manifests to evaluate.
+FORMAE_BIN_DIR="$(dirname -- "$FORMAE_BIN")"
+case ":$PATH:" in
+    *":$FORMAE_BIN_DIR:"*) ;;
+    *) PATH="$FORMAE_BIN_DIR:$PATH"; export PATH ;;
+esac
+
 exec "$FORMAE_MCP_BIN" "$@"
