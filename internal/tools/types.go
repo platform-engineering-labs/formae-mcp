@@ -232,3 +232,11 @@ type DeleteStandalonePolicyOutput struct {
 	DestroyFormaPKL       string   `json:"destroy_forma_pkl,omitempty"`
 	Notes                 []string `json:"notes,omitempty"`
 }
+
+// LoginInput starts a hosted sign-in.
+type LoginInput struct {
+	// Device asks for a device code instead of a browser URL. It is a parameter
+	// rather than a guess because a harness with no browser is a real case and
+	// the caller is the one who knows.
+	Device bool `json:"device,omitempty" jsonschema:"Use a device code instead of a browser URL. Set this when the user has no browser on this machine, or when they say so."`
+}
