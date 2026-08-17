@@ -28,8 +28,16 @@ func hasUserConfig(dir string) bool {
 			}
 		}
 	}
-	if matches, _ := filepath.Glob(filepath.Join(dir, "profiles", "*.pkl")); len(matches) > 0 {
-		return true
+	// Regular files only, as the CLI counts them. Glob matched symlinks and
+	// directories ending in .pkl too, and this predicate also decides which config
+	// directory wins: a stray profiles/x.pkl symlink under the legacy path could
+	// select it over an XDG directory holding the user's real profiles.
+	if entries, err := os.ReadDir(filepath.Join(dir, "profiles")); err == nil {
+		for _, e := range entries {
+			if e.Type().IsRegular() && strings.HasSuffix(e.Name(), ".pkl") {
+				return true
+			}
+		}
 	}
 	if _, err := os.Lstat(filepath.Join(dir, "formae.conf.pkl")); err == nil {
 		return true
