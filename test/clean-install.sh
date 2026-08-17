@@ -174,9 +174,13 @@ if [ "$HOSTED" = "1" ]; then
     fi
 fi
 echo "Inside the session, run:"
+if [ "$CLAUDE_AUTH" = "none" ]; then
+    echo "  /login               # nothing is mounted, so sign in first (paste-code flow works headless)"
+fi
 echo "  /plugin marketplace add /mkt"
 echo "  /plugin install formae@formae-dev"
-echo "  /reload-plugins ; /mcp"
+echo "  /reload-plugins      # the MCP does not connect until the plugin is loaded"
+echo "  /mcp                 # formae should show as connected"
 if [ "$HOSTED" = "1" ]; then
     echo "  /formae:setup        # the onboarding journey"
 else
@@ -257,6 +261,10 @@ exec docker run -it --rm --network host \
     fi
 
     echo "ready — marketplace at /mkt, channel='"$CHANNEL"'"
-    echo "run:  /plugin marketplace add /mkt   then   /plugin install formae@formae-dev"
+    if [ -z "$(ls -A /root/.claude 2>/dev/null)" ]; then
+      echo "run:  /login   then   /plugin marketplace add /mkt   then   /plugin install formae@formae-dev"
+    else
+      echo "run:  /plugin marketplace add /mkt   then   /plugin install formae@formae-dev"
+    fi
     exec claude
   '
