@@ -137,19 +137,31 @@ func State() (StoreState, []string, error) {
 	// * and that row is the whole point: the CLI resolves an empty store by
 	// creating a classic localhost default, which is the decision the user has
 	// not been asked about yet.
-	if active, err := readActive(dir); err == nil && ValidateName(active) == nil {
-		if _, err := os.Stat(profilePath(dir, active)); err == nil {
-			return Ready, names, nil // the pointer names a profile that exists.
+
+	// A pointer that exists is decisive either way, and must not fall through to
+	// the recovery cases below. The CLI returns on it immediately and refuses to
+	// rewrite a malformed one, so a store whose pointer reads "../bad" is broken
+	// however many profiles sit beside it; treating it as recoverable reported
+	// Ready and then let resolution fail with ErrInvalidName.
+	if raw, err := readActive(dir); err == nil {
+		if ValidateName(raw) != nil {
+			return NoActive, names, nil
 		}
-		// A pointer naming a profile that is gone. The CLI stops here and asks
-		// the user to choose, and so does this.
+		if _, err := os.Stat(profilePath(dir, raw)); err == nil {
+			return Ready, names, nil
+		}
 		return NoActive, names, nil
 	}
 
 	// No usable pointer. A legacy formae.conf.pkl is migrated into a default
 	// profile and pointed at, and an orphaned default is adopted, so both resolve
 	// without anyone being asked anything.
-	if _, err := os.Lstat(filepath.Join(dir, "formae.conf.pkl")); err == nil {
+	//
+	// A legacy config is only usable if it is something the CLI would migrate: a
+	// regular file, or a symlink that resolves to one. A broken symlink is
+	// rejected there and falls through, so reporting Ready for it admitted a
+	// machine whose resolution fails.
+	if info, err := os.Stat(filepath.Join(dir, "formae.conf.pkl")); err == nil && info.Mode().IsRegular() {
 		return Ready, names, nil
 	}
 	if _, err := os.Stat(profilePath(dir, "default")); err == nil {

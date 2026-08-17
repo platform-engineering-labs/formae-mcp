@@ -262,3 +262,69 @@ func TestState_AnOrphanedDefaultIsAdopted(t *testing.T) {
 		}
 	})
 }
+
+// A pointer that exists is decisive, whichever way it reads. The CLI returns on
+// it immediately and refuses to rewrite a malformed one, so a store whose pointer
+// reads "../bad" is broken however many profiles sit beside it — reporting Ready
+// there admitted the call and let resolution fail with ErrInvalidName instead.
+func TestState_AMalformedPointerIsNotRecoverable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	writeProfile(t, dir, "default")
+	writeActive(t, dir, "../bad")
+
+	unchanged(t, dir, func() {
+		state, _, err := State()
+		if err != nil {
+			t.Fatalf("State: %v", err)
+		}
+		if state == Ready {
+			t.Error("a malformed active pointer was reported as ready; resolution would fail on it")
+		}
+	})
+}
+
+// A broken legacy symlink is not something the CLI migrates — it rejects it and
+// falls through — so with a non-default profile present the store needs a choice.
+func TestState_ABrokenLegacySymlinkIsNotReady(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	writeProfile(t, dir, "prod")
+	if err := os.Symlink(filepath.Join(dir, "gone.pkl"), filepath.Join(dir, "formae.conf.pkl")); err != nil {
+		t.Fatal(err)
+	}
+
+	unchanged(t, dir, func() {
+		state, _, err := State()
+		if err != nil {
+			t.Fatalf("State: %v", err)
+		}
+		if state == Ready {
+			t.Error("a broken legacy symlink was reported as ready")
+		}
+	})
+}
+
+// hasUserConfig counts what the CLI counts: regular files. It also decides which
+// config directory wins, so a stray symlink under the legacy path could otherwise
+// select it over an XDG directory holding the real profiles.
+func TestState_ASymlinkedProfileIsNotConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "profiles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "nowhere.pkl"), filepath.Join(dir, "profiles", "prod.pkl")); err != nil {
+		t.Fatal(err)
+	}
+
+	unchanged(t, dir, func() {
+		state, _, err := State()
+		if err != nil {
+			t.Fatalf("State: %v", err)
+		}
+		if state != Unconfigured {
+			t.Errorf("state = %v, want Unconfigured: a symlink is not a profile the CLI would count", state)
+		}
+	})
+}
