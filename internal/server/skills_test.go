@@ -101,3 +101,44 @@ func TestSetupSkill_DoesNotOfferAForcedCreate(t *testing.T) {
 		t.Error("the setup skill offers a forced write")
 	}
 }
+
+// Setup must not ask hosted-or-self-hosted. It is advertised in exactly one
+// place — the hosted console, which tells the user to run it after creating an
+// account — so someone running it has already answered that question with their
+// last click. The gate asks it instead, where a user reaching for any other tool
+// genuinely could be either.
+func TestSetupSkill_AssumesHostedRatherThanAsking(t *testing.T) {
+	text := setupSkill(t)
+
+	if !strings.Contains(text, "assumes hosted") {
+		t.Error("the setup skill no longer states that it assumes hosted")
+	}
+
+	// The question belongs in the gate, not here.
+	for _, asking := range []string{
+		"Are you using the **hosted** formae platform, or running **your own agent**?",
+		"hosted or self-hosted?",
+	} {
+		if strings.Contains(text, asking) {
+			t.Errorf("the setup skill asks the user which platform they are on: %q", asking)
+		}
+	}
+
+	// The gate still asks, because there the ambiguity is real.
+	if !strings.Contains((&ErrNoProfile{}).Error(), "hosted") {
+		t.Error("the onboarding gate no longer offers the hosted branch")
+	}
+}
+
+// A sign-in whose profile sync failed must not be reported as a failed sign-in:
+// the session is saved and signing in again fixes nothing.
+func TestLoginFailure_SyncIncompleteDoesNotReadAsAFailedSignIn(t *testing.T) {
+	msg := describeLoginFailure("sync_incomplete", "")
+
+	if !strings.Contains(msg, "signed in") {
+		t.Errorf("the message does not tell the user they are signed in: %s", msg)
+	}
+	if strings.Contains(msg, "did not complete") {
+		t.Errorf("the message says the sign-in did not complete, which is the opposite of what happened: %s", msg)
+	}
+}
