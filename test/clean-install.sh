@@ -28,10 +28,16 @@
 #   MOUNT_PROFILES=0  do not mount the host ~/.config/formae, so the container
 #                     is a machine where formae has never run. Required to
 #                     exercise first-run: bootstrap, provisioning, and setup.
-#   ISOLATE_CLAUDE=1  mount a throwaway copy of ~/.claude instead of the real
-#                     one, so installing a plugin in the container cannot
-#                     disturb the host's own plugin set. Auth still works: the
-#                     copy carries the same credentials.
+#   CLAUDE_AUTH       where Claude Code's own auth comes from. Default "none".
+#                       none  nothing is mounted — a genuinely fresh machine, so
+#                             you run /login inside, as a new user does. Slower by
+#                             one sign-in, and the only faithful option.
+#                       copy  a throwaway copy of ~/.claude, so the container is
+#                             authenticated without a plugin install landing in
+#                             the host's own config. Convenient, not faithful.
+#                       host  the real ~/.claude, read-write. Fastest, and an
+#                             install inside the container lands on the host too.
+#                     ISOLATE_CLAUDE=1 is still accepted and means "copy".
 #   HOSTED=1          set up for the hosted onboarding journey: no host profiles
 #                     (so the machine really is unconfigured), the control-plane
 #                     pair exported, and the oidc auth plugin installed — nothing
@@ -60,8 +66,9 @@
 #   which is exactly what stops the plugin replacing it. The formae-mcp download
 #   still happens. The two cannot both be demonstrated in one run.
 #
-# Requires: docker, a logged-in Claude Code on the host (~/.claude), and the
-# chosen ref pushed to origin (the repo must be reachable — public, or auth'd).
+# Requires: docker, and the chosen ref pushed to origin (the repo must be
+# reachable — public, or auth'd). A logged-in Claude Code on the host is needed
+# only for CLAUDE_AUTH=copy/host; the default signs in inside the container.
 set -eu
 
 CHANNEL="${1:-dev}"
@@ -71,6 +78,11 @@ IMAGE="${IMAGE:-node:22-bookworm}"
 DEV_BUILD="${DEV_BUILD:-0}"
 MOUNT_PROFILES="${MOUNT_PROFILES:-1}"
 ISOLATE_CLAUDE="${ISOLATE_CLAUDE:-0}"
+# A fresh machine is the default, because that is what the thing under test is for:
+# a new user has no ~/.claude to mount, and mounting ours hides whatever a real
+# first run would hit. ISOLATE_CLAUDE=1 still selects the copy.
+CLAUDE_AUTH="${CLAUDE_AUTH:-none}"
+[ "$ISOLATE_CLAUDE" = "1" ] && CLAUDE_AUTH="copy"
 GO_VERSION="${GO_VERSION:-1.25.1}"
 HOSTED="${HOSTED:-0}"
 FORMAE_LOCAL_BIN="${FORMAE_LOCAL_BIN:-}"
@@ -107,16 +119,28 @@ JSON
 # Optional host mounts: Claude Code auth + config, and formae profiles for
 # check_health. Only mount what exists so the run never fails on a missing path.
 MOUNTS=""
-CLAUDE_HOME="$HOME"
-if [ "$ISOLATE_CLAUDE" = "1" ]; then
-    # A copy, so a plugin installed in here cannot land in the host's config.
-    CLAUDE_HOME="$(mktemp -d)"
-    [ -e "$HOME/.claude" ]      && cp -a "$HOME/.claude" "$CLAUDE_HOME/.claude"
-    [ -e "$HOME/.claude.json" ] && cp -a "$HOME/.claude.json" "$CLAUDE_HOME/.claude.json"
-    echo "Isolated Claude config: $CLAUDE_HOME (throwaway copy)"
-fi
-[ -e "$CLAUDE_HOME/.claude" ]      && MOUNTS="$MOUNTS -v $CLAUDE_HOME/.claude:/root/.claude"
-[ -e "$CLAUDE_HOME/.claude.json" ] && MOUNTS="$MOUNTS -v $CLAUDE_HOME/.claude.json:/root/.claude.json"
+case "$CLAUDE_AUTH" in
+    none)
+        # Nothing mounted. The container has no Claude Code config at all, which
+        # is the state a new user is in.
+        ;;
+    copy)
+        CLAUDE_HOME="$(mktemp -d)"
+        [ -e "$HOME/.claude" ]      && cp -a "$HOME/.claude" "$CLAUDE_HOME/.claude"
+        [ -e "$HOME/.claude.json" ] && cp -a "$HOME/.claude.json" "$CLAUDE_HOME/.claude.json"
+        echo "Claude config: throwaway copy at $CLAUDE_HOME"
+        [ -e "$CLAUDE_HOME/.claude" ]      && MOUNTS="$MOUNTS -v $CLAUDE_HOME/.claude:/root/.claude"
+        [ -e "$CLAUDE_HOME/.claude.json" ] && MOUNTS="$MOUNTS -v $CLAUDE_HOME/.claude.json:/root/.claude.json"
+        ;;
+    host)
+        [ -e "$HOME/.claude" ]      && MOUNTS="$MOUNTS -v $HOME/.claude:/root/.claude"
+        [ -e "$HOME/.claude.json" ] && MOUNTS="$MOUNTS -v $HOME/.claude.json:/root/.claude.json"
+        ;;
+    *)
+        echo "CLAUDE_AUTH must be none, copy, or host (got '$CLAUDE_AUTH')" >&2
+        exit 1
+        ;;
+esac
 if [ "$MOUNT_PROFILES" = "1" ] && [ -e "$HOME/.config/formae" ]; then
     MOUNTS="$MOUNTS -v $HOME/.config/formae:/root/.config/formae:ro"
 fi
@@ -132,17 +156,18 @@ if [ "$MOUNT_PROFILES" = "1" ]; then
 else
     echo "  profiles: none — a machine where formae has never run"
 fi
-if [ "$ISOLATE_CLAUDE" = "1" ]; then
-    echo "  claude config: throwaway copy — host plugin set untouched"
-else
-    echo "  claude config: host ~/.claude mounted read-write — installs land on the host too"
-fi
+case "$CLAUDE_AUTH" in
+    none) echo "  claude auth:   none — a fresh machine; run /login inside, as a new user does" ;;
+    copy) echo "  claude auth:   throwaway copy — host plugin set untouched" ;;
+    host) echo "  claude auth:   host ~/.claude read-write — installs land on the host too" ;;
+esac
 if [ "$HOSTED" = "1" ]; then
-    echo "  hosted:   control plane $CLOUD_URL (issuer $CLOUD_ISSUER), oidc plugin installed"
+    echo "  hosted:   control plane $CLOUD_URL (issuer $CLOUD_ISSUER)"
     if [ -n "$FORMAE_LOCAL_BIN" ]; then
         echo "  formae:   mounted from $FORMAE_LOCAL_BIN — NOT downloaded (a local binary is 'your own install')"
+        echo "            oidc + pkl are laid down for it here, since a mount skips provisioning"
     else
-        echo "  formae:   pulled from the '$CHANNEL' channel."
+        echo "  formae:   pulled from the '$CHANNEL' channel, with oidc alongside it."
         echo "            NOTE: released binaries have no 'formae login --hosted' yet, so"
         echo "            /formae:setup will stop at 'unknown flag: --hosted'. That is the"
         echo "            expected outcome — set FORMAE_LOCAL_BIN to complete the journey."
@@ -171,6 +196,7 @@ if [ "$HOSTED" = "1" ]; then
     if [ -n "$FORMAE_LOCAL_BIN" ]; then
         [ -x "$FORMAE_LOCAL_BIN" ] || { echo "FORMAE_LOCAL_BIN is not executable: $FORMAE_LOCAL_BIN" >&2; exit 1; }
         MOUNTS="$MOUNTS -v $FORMAE_LOCAL_BIN:/usr/local/bin/formae:ro"
+        HOSTED_ENV="$HOSTED_ENV -e MOUNTED_FORMAE=1"
     fi
 fi
 
@@ -206,36 +232,26 @@ exec docker run -it --rm --network host \
     echo "installing Claude Code..."
     npm i -g @anthropic-ai/claude-code >/dev/null 2>&1
 
-    if [ "${HOSTED:-0}" = "1" ]; then
-      # The oidc auth plugin is what a hosted sign-in drives, and nothing else
-      # here installs it: formae'"'"'s own package requires only pkl, so a freshly
-      # provisioned tree has no plugins at all. Installed up front so the journey
-      # is not interrupted by a privilege prompt half-way through a sign-in — the
-      # same reason it belongs in the standard bundle.
-      #
-      # Into the same user tree the plugin provisions into, so it needs no sudo
-      # and is found by the discovery that derives from the binary'"'"'s location.
-      echo "installing the oidc auth plugin..."
+    # Completing a MOUNTED formae, and only that. A provisioned one already has
+    # both halves: resolve_formae installs oidc alongside formae, and the launcher
+    # puts that bin directory on PATH. A mount bypasses provisioning entirely, so
+    # nothing has laid either down for it.
+    if [ -n "${MOUNTED_FORMAE:-}" ]; then
+      echo "completing the mounted formae..."
       mkdir -p /root/.formae-ai
-      bash -c "$(curl -fsSL https://hub.platform.engineering/get/setup.sh)" -- install         --install-path /root/.formae-ai/opt --channel "$FORMAE_MCP_CHANNEL" --yes oidc         >/dev/null 2>&1 || echo "  (oidc install failed — sign-in will report the remedy)"
-      # Discovery searches the configured plugin dir before the one derived from
-      # the binary'"'"'s own location, and the configured default is the same in both
-      # modes. Linking it once therefore covers a mounted formae and a downloaded
-      # one, where linking the binary-derived path would only cover whichever we
-      # happened to run.
+      bash -c "$(curl -fsSL https://hub.platform.engineering/get/setup.sh)" -- install \
+        --install-path /root/.formae-ai/opt --channel "$FORMAE_MCP_CHANNEL" --yes oidc \
+        >/dev/null 2>&1 || echo "  (oidc install failed — the sign-in path names the remedy)"
+
+      # The configured plugin dir is searched before the one derived from the
+      # binary, and its default does not depend on where the binary is, so linking
+      # it once serves the mount.
       mkdir -p /root/.pel/formae
       ln -sfn /root/.formae-ai/opt/formae/plugins /root/.pel/formae/plugins 2>/dev/null || true
       ls /root/.formae-ai/opt/formae/plugins 2>/dev/null | sed "s/^/  plugin: /"
 
-      # pkl has to be on PATH, and this is not incidental: classifying a plugin as
-      # an auth plugin means evaluating its formae-plugin.pkl manifest, which
-      # shells out to `pkl` found on PATH. Without it every auth plugin is
-      # invisible and a sign-in reports the plugin as not installed — pointing at
-      # an install command that cannot help, because it already is.
-      #
-      # Linked rather than exported, so it survives into whatever shell or child
-      # the MCP launches, and so it cannot shadow a formae mounted at
-      # /usr/local/bin by putting the provisioned tree ahead of it on PATH.
+      # Linked rather than put on PATH: prepending the provisioned tree would
+      # shadow the mounted formae with the downloaded one.
       [ -x /root/.formae-ai/opt/bin/pkl ] && ln -sf /root/.formae-ai/opt/bin/pkl /usr/local/bin/pkl
       echo "  pkl: $(command -v pkl || echo MISSING)"
     fi

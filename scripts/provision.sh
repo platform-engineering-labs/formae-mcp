@@ -98,6 +98,24 @@ resolve_formae() {
 
     # Nothing installed: lay one down in the user's own tree, sudo-free.
     provision_pkg formae "$_rchan" || return 1
+
+    # And the auth plugin, because a formae we provisioned is one nobody else is
+    # going to complete.
+    #
+    # formae's own package depends on pkl and nothing else, so provisioning it
+    # alone leaves a tree with no plugins in it at all. The oidc plugin ships in
+    # the `standard` bundle, but nothing on this path installs that bundle — so
+    # for a user whose formae came from here, a hosted sign-in had no auth plugin
+    # to drive and could never succeed.
+    #
+    # Just oidc, not `standard`: the bundle also carries the cloud resource
+    # plugins, which are hundreds of megabytes the user has not asked for yet and
+    # which nothing in onboarding needs. They install what their forma requires.
+    #
+    # Best-effort. A failure here leaves a working formae that cannot sign in to
+    # the hosted platform, which is exactly what it could do before, and the
+    # sign-in path names the remedy.
+    provision_pkg oidc "$_rchan" || echo "provision_pkg: oidc not installed; a hosted sign-in will say so" >&2
     FORMAE_BIN="$_rmanaged"
     FORMAE_BIN_MANAGED=1
     return 0
