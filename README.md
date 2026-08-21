@@ -4,8 +4,11 @@ MCP server and AI coding skills for the Infrastructure-as-code (IaC) platform [f
 
 ## Prerequisites
 
-- Go 1.25+
-- A running formae agent (`formae agent start`)
+- A running formae agent (`formae agent start`) and a formae profile pointing at it
+
+On first use the plugin downloads a prebuilt MCP server and a matched `formae`
+binary into `~/.formae-ai/opt` — no Go toolchain required. (A Go toolchain is only
+needed for local development builds, via `FORMAE_MCP_DEV=1`.)
 
 ## Installation
 
@@ -23,7 +26,7 @@ Install the plugin:
 /plugin install formae@formae-marketplace
 ```
 
-Run `/reload-plugins` (Claude Code v2.1.116+) to apply the install without restarting your session. On older versions, restart Claude Code instead. The MCP server binary is built automatically on first use.
+Run `/reload-plugins` (Claude Code v2.1.116+) to apply the install without restarting your session. On older versions, restart Claude Code instead. On first use the plugin downloads a prebuilt MCP server and a matched `formae` binary into `~/.formae-ai/opt` — nothing is compiled on your machine.
 
 Verify by asking Claude to run `/formae:formae-status`.
 
@@ -43,7 +46,7 @@ If you prefer not to use the marketplace:
    claude --plugin-dir ~/.claude/plugins/formae-mcp
    ```
 
-The MCP server binary is built automatically on first use.
+On first use the plugin downloads a prebuilt MCP server and a matched `formae` binary into `~/.formae-ai/opt`; set `FORMAE_MCP_DEV=1` to build from source instead.
 
 ### Codex
 
