@@ -121,11 +121,18 @@ Finish the trip rather than ending on it:
    their signup by telling them to run `/formae:setup` — which is what they are
    already inside — and points them back to this session instead.
 2. Wait until they say the agent is set up. It takes about a minute.
-3. Call `login`, then `complete_login`, again.
+3. Call `login` again.
 
-   There is no second browser hop. The session they opened in step 3 is still
-   good, so this reports that they are already signed in and goes straight to
-   enumerating what their account now covers, which is what writes the profile.
+   There is normally no second browser hop: the session from step 3 is still
+   open, so `login` reports that they are already signed in and goes straight on
+   to enumerating what their account now covers, which is what writes the
+   profile. It returns that result itself.
+
+   **Only call `complete_login` if this `login` hands you a URL or a device
+   code.** That means the session lapsed and a real flow started, so show it to
+   them and wait, exactly as in step 3. Calling `complete_login` after a `login`
+   that already finished is an error: there is no sign-in in progress for it to
+   complete, and it will say so.
 4. Run `list_profiles` once more.
 
 **If the second pass still writes no profiles, stop and say so.** Do not loop
