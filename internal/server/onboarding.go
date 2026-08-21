@@ -26,8 +26,23 @@ import (
 // their next call, which is accepted: the state is cheap to re-derive, and
 // remembering it would mean session state whose only job is to suppress a prompt.
 
-// consoleURL is where a user creates a hosted account.
-const consoleURL = "https://console.formae.ai"
+// consoleURL is the hosted console, and consoleFromMCP is the link this server
+// hands out.
+//
+// The query parameter marks the visit as coming from an MCP server. The console
+// reads it and stops closing the signup with "now run /formae:setup", because a
+// reader who arrived by this link already did: that command is what sent them.
+// Instead it points them back at the harness session they came from.
+//
+// The two are separate constants so the marker is written once, and every
+// message that sends someone to the console reaches for the marked one. A test
+// pins that no bare origin survives in the instruction, because an edit that
+// reached for consoleURL would drop the marker silently and the console would go
+// back to telling people to do the thing they just did.
+const (
+	consoleURL     = "https://console.formae.ai"
+	consoleFromMCP = consoleURL + "/?from=mcp"
+)
 
 // ErrNoProfile is a machine with nothing configured. Its message is the
 // instruction a caller acts on rather than a description of the problem, in the
@@ -39,6 +54,22 @@ const consoleURL = "https://console.formae.ai"
 // create removes its destination first, and on a store whose configuration is a
 // legacy formae.conf.pkl that destination is the file initialization has just
 // migrated the user's own configuration into.
+//
+// The hosted branch has to be self-sufficient. Codex and OpenCode install this
+// MCP server without the skills, so for those harnesses this message is the only
+// onboarding instruction that exists and it cannot assume /formae:setup is
+// invocable.
+//
+// It signs in before it mentions the console, which is the opposite of what it
+// used to do, for two reasons. An invited user has their invite claimed at their
+// first sign-in and finishes it with grants over an org that already has an
+// agent, so sending them to the console is a wasted trip. And a user who really
+// does need one cannot be told to go there and left: the console now closes by
+// pointing them back at their harness, so the harness has to have something to
+// do when they return. Signing in again is that something, and it costs no
+// second browser hop: the sync runs after an already-authenticated sign-in just
+// as it does after a completed flow, and it is what writes the profile the newly
+// provisioned agent earns them.
 type ErrNoProfile struct{}
 
 func (*ErrNoProfile) Error() string {
@@ -46,7 +77,9 @@ func (*ErrNoProfile) Error() string {
 		"running your own agent or using the hosted platform, and it will not guess. Ask the user which, then:\n" +
 		"  - self-hosted: call use_profile with name \"default\", then retry. Afterwards mention " +
 		"`formae profile edit` for pointing it at their agent, and offer to help author a forma.\n" +
-		"  - hosted: send them to " + consoleURL + " to create an account, then run /formae:setup to sign in."
+		"  - hosted: call the login tool to sign in. If the sign-in writes no profiles they have no agent " +
+		"yet: send them to " + consoleFromMCP + " to create an organization and provision one, wait until " +
+		"they say it is done, then call login again to pick it up."
 }
 
 // ErrNoActiveProfile is configuration with nothing usable selected: profiles but

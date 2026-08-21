@@ -73,11 +73,11 @@ func TestGate_TheInstructionNamesBothBranches(t *testing.T) {
 	msg := err.Error()
 
 	for _, want := range []string{
-		"use_profile",         // the self-hosted action
-		`"default"`,           // with this name
-		"console.formae.ai",   // where a hosted user creates an account
-		"/formae:setup",       // what they run when they come back
-		"formae profile edit", // the self-hoster's next step
+		"use_profile",                         // the self-hosted action
+		`"default"`,                           // with this name
+		"https://console.formae.ai/?from=mcp", // where a hosted user provisions an agent
+		"login",                               // what starts the hosted branch
+		"formae profile edit",                 // the self-hoster's next step
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("the onboarding instruction does not mention %q:\n%s", want, msg)
@@ -88,6 +88,64 @@ func TestGate_TheInstructionNamesBothBranches(t *testing.T) {
 	// must not be what the MCP tells anyone to run.
 	if strings.Contains(msg, "force") {
 		t.Errorf("the instruction offers a forced create, which can destroy a legacy config:\n%s", msg)
+	}
+}
+
+// The console link is the one string this repo and the console agree on, with
+// no shared type between them. An edit that reaches for the bare origin drops
+// the marker silently, and the console goes back to closing a signup by telling
+// the reader to run the command that sent them there.
+func TestGate_TheConsoleLinkCarriesTheOriginMarker(t *testing.T) {
+	s, _ := gatedServer(t, t.TempDir())
+
+	_, err := s.resolveCtx(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected the onboarding instruction")
+	}
+	msg := err.Error()
+
+	marked := "https://console.formae.ai/?from=mcp"
+	for _, unmarked := range []string{
+		"https://console.formae.ai ",
+		"https://console.formae.ai\n",
+		"https://console.formae.ai.",
+	} {
+		if strings.Contains(msg, unmarked) {
+			t.Errorf("an unmarked console link reached the instruction (%q); use %s:\n%s",
+				strings.TrimSpace(unmarked), marked, msg)
+		}
+	}
+}
+
+// The hosted branch is a loop, not a hand-off. The console tells an MCP-origin
+// visitor to go back to their harness, so this message has to give the harness
+// something to do when they arrive: sign in again, which reuses the session
+// they already have and writes the profile the console's new agent earns them.
+//
+// Ending at the console is the defect this pins against. It is also why the
+// branch does not open by telling them to create an account: an invited user
+// has grants at their first sign-in and never needs the console at all.
+func TestGate_TheHostedBranchReturnsFromTheConsole(t *testing.T) {
+	s, _ := gatedServer(t, t.TempDir())
+
+	_, err := s.resolveCtx(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected the onboarding instruction")
+	}
+	msg := err.Error()
+
+	if n := strings.Count(msg, "login"); n < 2 {
+		t.Errorf("the hosted branch names login %d time(s); it must sign in, "+
+			"send them to the console, and sign in again:\n%s", n, msg)
+	}
+
+	console := strings.Index(msg, "console.formae.ai")
+	if console < 0 {
+		t.Fatalf("no console link in the instruction:\n%s", msg)
+	}
+	if !strings.Contains(msg[console:], "login") {
+		t.Errorf("the instruction ends at the console, stranding the user "+
+			"there with nothing to come back to:\n%s", msg)
 	}
 }
 
