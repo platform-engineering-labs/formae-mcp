@@ -31,12 +31,15 @@ config and add it if missing.
 
 **This skill assumes hosted. Do not ask.**
 
-`/formae:setup` is advertised in one place: the hosted console, which tells a user
-to run it after creating an account. Someone running it therefore came from there.
-Asking which of the two they are on makes a user answer a question their own last
-click already answered. (The question is not written out anywhere in this file on
-purpose: a quoted question is a thing a model skimming for its next action can
-end up asking.)
+`/formae:setup` is advertised in one place: the hosted console. Someone running it
+therefore came from there, and asking which of the two they are on makes a user
+answer a question their own last click already answered. (The question is not
+written out anywhere in this file on purpose: a quoted question is a thing a model
+skimming for its next action can end up asking.)
+
+The one reader this does not describe is someone who came here *before* the
+console, which is the case step 4 exists to close. They are still hosted, so the
+assumption holds; they just take the longer way round.
 
 That is not true of anything else. A user who reaches for some other tool with no
 profile on disk genuinely could be either, and the MCP asks them — the question
@@ -56,11 +59,17 @@ go to step 6 instead. Do not prompt for it.
 
 ## Step 3 — Hosted
 
-If they do not have an account yet, send them to
-[console.formae.ai](https://console.formae.ai) to create one, and wait until they
-say it is done.
+**Sign in first. Do not ask whether they have an account, and do not send them
+anywhere yet.**
 
-Then:
+An invitation is claimed at the invited user's first sign-in, so someone who has
+never heard of formae's console may still finish `login` with a working agent
+already waiting for them. Sending them to the console first costs them a trip
+they never needed. And for a user who genuinely has no organization, signing in
+is not wasted either: the session it opens is what makes the second pass in step
+4 cheap.
+
+So:
 
 1. **Decide the flow before you start one.** A browser sign-in redirects to
    `127.0.0.1` on *this* machine, so it only works where a browser can reach
@@ -92,13 +101,38 @@ be written**, do not start another sign-in. Their session is saved and a second
 one fixes nothing; the problem is between formae and the control plane. Report it
 as the message says, and offer `formae login --hosted` for the reason.
 
-## Step 4 — Check what was written
+## Step 4 — Check what was written, and finish the round trip
 
-Run `list_profiles` again and tell the user which profile is now active.
+Run `list_profiles` again.
 
-A sign-in that created no profiles is a real outcome, not a failure to report
-around: it usually means the account covers no installations yet. Say so plainly
-and point them back to the console rather than continuing as though it worked.
+**A profile exists and one is active** → tell them which, and go to step 5.
+
+**No profiles were written.** This is a real outcome, not a failure to report
+around: it means their account covers no installations yet, so there is no agent
+to point a profile at. Do not treat it as a sign-in failure and do not start
+another sign-in; the session is fine, they just have nothing to connect to.
+
+Finish the trip rather than ending on it:
+
+1. Send them to
+   [console.formae.ai](https://console.formae.ai/?from=mcp) to create an
+   organization and provision an agent. **Use that link, with the `?from=mcp` on
+   it.** It tells the console the reader came from here, so it stops closing
+   their signup by telling them to run `/formae:setup` — which is what they are
+   already inside — and points them back to this session instead.
+2. Wait until they say the agent is set up. It takes about a minute.
+3. Call `login`, then `complete_login`, again.
+
+   There is no second browser hop. The session they opened in step 3 is still
+   good, so this reports that they are already signed in and goes straight to
+   enumerating what their account now covers, which is what writes the profile.
+4. Run `list_profiles` once more.
+
+**If the second pass still writes no profiles, stop and say so.** Do not loop
+again on your own. Report what you found and let them decide; asking the same
+question a third time only spends their time. `formae login --hosted` in a
+terminal is worth offering at that point, because its own output says more about
+why than this tool surfaces.
 
 ## Step 5 — Now check the agent
 
