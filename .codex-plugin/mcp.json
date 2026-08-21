@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "formae": {
+      "command": "./scripts/start-mcp.sh",
+      "cwd": "./",
+      "required": true,
+      "startup_timeout_sec": 120
+    }
+  }
+}
