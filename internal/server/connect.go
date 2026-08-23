@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
 
@@ -252,6 +253,116 @@ func renderRegistered(d registeredDoc) string {
 		fmt.Fprintf(&b, "Connected account %s.\n", d.Account)
 	}
 	fmt.Fprintf(&b, "Role: %s\n", d.RoleArn)
+	for _, w := range d.Warnings {
+		fmt.Fprintf(&b, "\nWarning: %s\n", w)
+	}
+	return b.String()
+}
+
+// cloudConnection is one registered row in a connections listing. RoleArn is
+// absent for a cloud that has no such concept (only AWS has one today).
+type cloudConnection struct {
+	Cloud   string `json:"cloud"`
+	Account string `json:"account"`
+	RoleArn string `json:"roleArn,omitempty"`
+}
+
+// connectionsDoc is what `formae connect list` reports.
+//
+// SchemaVersion and Complete are pointers so a document missing either field
+// is distinguishable from one that spells it out as zero/false: json.Unmarshal
+// treats a missing field and an explicit zero value identically, and here that
+// difference is load-bearing. Complete in particular is the whole point of
+// this document: a caller decides whether to offer provisioning on this
+// answer, so an absent field must fail validation rather than default to
+// "false" and read as "definitely incomplete" when it might just be a
+// malformed producer.
+type connectionsDoc struct {
+	SchemaVersion *int              `json:"schemaVersion"`
+	Phase         string            `json:"phase"`
+	Installation  string            `json:"installation"`
+	Complete      *bool             `json:"complete"`
+	Connections   []cloudConnection `json:"connections"`
+	Warnings      []string          `json:"warnings"`
+}
+
+// connectionsPhase is the phase value a connections listing carries.
+const connectionsPhase = "connections"
+
+// errUnreadableConnections is a connections document this build could not
+// read.
+var errUnreadableConnections = errors.New("formae connect list produced output this build could not read; " +
+	"the connected formae may be older than this plugin")
+
+// decodeConnectionsDoc validates a connections document rather than trusting
+// json.Unmarshal: a document missing every field this handler cares about
+// decodes cleanly into a zero value, and rendering that zero value would
+// silently claim a complete, empty listing.
+func decodeConnectionsDoc(out []byte) (connectionsDoc, error) {
+	var d connectionsDoc
+	dec := json.NewDecoder(bytes.NewReader(out))
+	if err := dec.Decode(&d); err != nil {
+		return connectionsDoc{}, errUnreadableConnections
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return connectionsDoc{}, errUnreadableConnections
+	}
+	if d.SchemaVersion == nil || *d.SchemaVersion != connectSchemaVersion {
+		return connectionsDoc{}, errUnreadableConnections
+	}
+	if d.Phase != connectionsPhase {
+		return connectionsDoc{}, errUnreadableConnections
+	}
+	if d.Complete == nil {
+		return connectionsDoc{}, errUnreadableConnections
+	}
+	return d, nil
+}
+
+// handleListCloudConnections reports which cloud accounts this installation
+// has registered, so a caller (the setup skill, in particular) can decide
+// whether to offer the connect flow.
+func (s *Server) handleListCloudConnections(ctx context.Context, _ *mcp.CallToolRequest, _ tools.EmptyInput) (*mcp.CallToolResult, any, error) {
+	bin := s.formaeBin()
+	if err := featuregate.GuardFeatureContext(ctx, featuregate.FeatureCloudConnectionList, bin); err != nil {
+		return errorResult(err), nil, nil
+	}
+
+	out, err := s.runConnect(ctx, []string{"connect", "list", "--output-consumer", "machine", "--output-schema", "json"})
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+
+	doc, err := decodeConnectionsDoc(out)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+
+	return textResult(renderConnections(doc)), nil, nil
+}
+
+// renderConnections tells the caller what is registered, or that it could not
+// tell.
+//
+// An incomplete listing is reported as "cannot be determined", never as an
+// empty one: a caller that reads "no accounts" out of an incomplete answer
+// would send someone with a working connection through provisioning again.
+func renderConnections(d connectionsDoc) string {
+	var b strings.Builder
+	if !*d.Complete {
+		b.WriteString("Whether any cloud account is registered could not be determined: the listing did not " +
+			"complete. This is NOT the same as no account being registered; do not offer the connect flow on " +
+			"this answer alone.\n")
+	} else if len(d.Connections) == 0 {
+		b.WriteString("No cloud account is registered yet.\n")
+	}
+	for _, c := range d.Connections {
+		fmt.Fprintf(&b, "%s account %s is registered", c.Cloud, c.Account)
+		if c.RoleArn != "" {
+			fmt.Fprintf(&b, " (role %s)", c.RoleArn)
+		}
+		b.WriteString("\n")
+	}
 	for _, w := range d.Warnings {
 		fmt.Fprintf(&b, "\nWarning: %s\n", w)
 	}

@@ -271,6 +271,18 @@ const ConnectCloudAccountDescription = "Compute the CloudFormation console link 
 	"reached CREATE_COMPLETE, then call register_cloud_role. Ask the user for the account id; never infer it from " +
 	"ambient credentials. Do NOT run any formae command yourself to do this."
 
+// ListCloudConnectionsDescription is the list_cloud_connections tool
+// description.
+//
+// The "registered" wording is deliberate and matches the tool's own output:
+// this reports what the control plane has on file, not whether formae has
+// used the role successfully.
+const ListCloudConnectionsDescription = "List the cloud accounts this installation has registered. Use this to " +
+	"decide whether to offer connect_cloud_account, before starting that flow. An account here is REGISTERED, " +
+	"not verified: this does not confirm formae can use the role. If the result says the listing could not be " +
+	"determined, treat that as unknown, never as \"no account is registered\": do not send a caller who may " +
+	"already have a working connection through the connect flow on that basis."
+
 // RegisterCloudRoleDescription is the register_cloud_role tool description.
 //
 // It names already_registered as success on purpose: a model that reads the

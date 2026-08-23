@@ -46,6 +46,14 @@ const FeatureAutoReconcilePolicy Feature = "auto-reconcile-policy"
 // rather than a silent downgrade.
 const FeatureConnectionOracle Feature = "connection-oracle"
 
+// FeatureCloudConnectionList gates `formae connect list`, the command
+// list_cloud_connections shells out to. It has its own constant rather than
+// reusing FeatureConnectionOracle, which is consulted on every configuration
+// resolution (internal/config/oracle.go): pinning that one to this command's
+// floor would raise the CLI version required for every tool in this server,
+// not just this one.
+const FeatureCloudConnectionList Feature = "cloud-connection-list"
+
 // detectTimeout applies when the caller supplies no deadline of its own, so
 // version detection is bounded even on the context-free path.
 const detectTimeout = 10 * time.Second
@@ -56,6 +64,10 @@ var registry = map[Feature]string{
 	FeatureProfile:             "0.87.0",
 	FeatureStandalonePolicy:    "0.82.0",
 	FeatureAutoReconcilePolicy: "0.88.0",
+	// 0.90.0 is a placeholder pending the release that ships `formae connect
+	// list`. Confirm it against the actual release tag once that change ships
+	// and correct it here if the tag differs.
+	FeatureCloudConnectionList: "0.90.0",
 }
 
 type result struct {
