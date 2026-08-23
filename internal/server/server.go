@@ -293,6 +293,22 @@ func (s *Server) registerTools() {
 		Annotations: readOnly,
 	}, s.handleListCloudConnections)
 
+	// The faster path alongside the two above: when the user has local AWS
+	// credentials, formae can create the connect role directly with them.
+	// list_aws_profiles only reads local profiles, so ReadOnlyHint fits it the
+	// way it fits list_cloud_connections. provision_cloud_role creates the role
+	// (and possibly the account-global OIDC provider) immediately, with no
+	// console step in between, which is what earns it DestructiveHint where
+	// connect_cloud_account above does not.
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "list_aws_profiles", Description: tools.ListAwsProfilesDescription,
+		Annotations: readOnly,
+	}, s.handleListAwsProfiles)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "provision_cloud_role", Description: tools.ProvisionCloudRoleDescription,
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true)},
+	}, s.handleProvisionCloudRole)
+
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
 	}, s.handleListProfiles)
