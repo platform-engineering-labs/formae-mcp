@@ -124,19 +124,19 @@ func (s *Server) runConnect(ctx context.Context, args []string) ([]byte, error) 
 // understands, checked before any other field.
 const connectFailureSchemaVersion = 2
 
-// declaredConnectFailureCodes is the closed namespace the producer promises
-// for a declared connect failure. A code outside it is a protocol mismatch,
-// not a message to pass along.
-var declaredConnectFailureCodes = map[string]bool{
-	"untrusted_issuer":       true,
-	"control_plane_too_old":  true,
-	"installation_not_ready": true,
-	"registration_conflict":  true,
-	"unsupported_partition":  true,
-	"hosted_required":        true,
-	"not_authorized":         true,
-	"account_mismatch":       true,
-	"auth_failed":            true,
+// connectFailureDescriptions is the closed namespace the producer promises for
+// a declared connect failure, mapped to how this build describes it. A code
+// outside this map is a protocol mismatch, not a message to pass along.
+var connectFailureDescriptions = map[string]string{
+	"untrusted_issuer":       "this profile's hosted connection names an issuer this build will not authenticate against",
+	"control_plane_too_old":  "the connected control plane is too old to support connect; upgrade it and try again",
+	"installation_not_ready": "the installation is not ready to accept a connect yet; try again shortly",
+	"registration_conflict":  "another installation has already registered a different role for this account",
+	"unsupported_partition":  "this AWS partition is not supported",
+	"hosted_required":        "connect needs a hosted profile; switch to one and try again",
+	"not_authorized":         "you are not authorized to connect this account",
+	"account_mismatch":       "the account does not match what this connect invocation expected",
+	"auth_failed":            "formae could not authenticate for this connect operation",
 }
 
 // connectFailureView is the envelope the producer emits on stdout when a
@@ -172,37 +172,20 @@ func decodeConnectFailure(stdout []byte, exitStatus int) error {
 	if v.SchemaVersion == nil || *v.SchemaVersion != connectFailureSchemaVersion {
 		return unreadable
 	}
-	if !declaredConnectFailureCodes[v.Code] {
+	desc, ok := connectFailureDescriptions[v.Code]
+	if !ok {
 		return unreadable
 	}
 
-	return errors.New(describeConnectFailure(v.Code))
+	return errors.New(desc)
 }
 
-// describeConnectFailure renders a declared code as the MCP's own text.
+// describeConnectFailure renders a declared code as the MCP's own text. Every
+// caller passes a code decodeConnectFailure has already validated against
+// connectFailureDescriptions, so the lookup always hits; there is no
+// undeclared-code fallback to maintain here as well as there.
 func describeConnectFailure(code string) string {
-	switch code {
-	case "untrusted_issuer":
-		return "this profile's hosted connection names an issuer this build will not authenticate against"
-	case "control_plane_too_old":
-		return "the connected control plane is too old to support connect; upgrade it and try again"
-	case "installation_not_ready":
-		return "the installation is not ready to accept a connect yet; try again shortly"
-	case "registration_conflict":
-		return "another installation has already registered a different role for this account"
-	case "unsupported_partition":
-		return "this AWS partition is not supported"
-	case "hosted_required":
-		return "connect needs a hosted profile; switch to one and try again"
-	case "not_authorized":
-		return "you are not authorized to connect this account"
-	case "account_mismatch":
-		return "the account does not match what this connect invocation expected"
-	case "auth_failed":
-		return "formae could not authenticate for this connect operation"
-	default:
-		return "formae could not complete the connect operation"
-	}
+	return connectFailureDescriptions[code]
 }
 
 // registeredDoc is what a registration reports.
