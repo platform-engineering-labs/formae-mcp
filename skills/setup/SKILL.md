@@ -55,7 +55,7 @@ lives there, where the ambiguity is real, and not here.
   to do with the agent.
 
 The one exception: if the user *volunteers* that they self-host, believe them and
-go to step 6 instead. Do not prompt for it.
+go to step 7 instead. Do not prompt for it.
 
 ## Step 3 — Hosted
 
@@ -141,7 +141,7 @@ question a third time only spends their time. `formae login --hosted` in a
 terminal is worth offering at that point, because its own output says more about
 why than this tool surfaces.
 
-## Step 5 — Now check the agent
+## Step 5 — Now check the agent, and that there is a cloud account to manage
 
 Run `check_health`.
 
@@ -152,10 +152,34 @@ This is the first step that needs a reachable agent, which is why it is last.
   running yet, or the profile points at the wrong address — not that setup went
   wrong. Say which, and offer `formae profile edit`.
 
-Then tell them they can work with their infrastructure, and offer a first step:
-listing what they have, or authoring something new.
+A reachable agent is not the finish line: a hosted installation with no cloud
+account registered cannot manage anything yet. Before telling them the journey
+is done, run `list_cloud_connections`.
 
-## Step 6 — Self-hosted, only if they said so
+- **Registered connections exist.** Name each one (cloud and account). Say
+  they are **registered**, never verified, working, or that formae can manage
+  them: this reports what the control plane has on file, not that the role
+  has been used successfully.
+- **The listing completed and came back empty.** No cloud account is
+  registered yet. Say so, and offer to connect one. AWS is the only cloud
+  `formae connect` has a subcommand for, so offer that directly rather than
+  presenting a menu of clouds that mostly dead-end.
+
+  An affirmative answer is not enough to act on: the account id is still
+  needed. Do not hand off and stop here; continue straight into the
+  `/formae:connect` flow, which opens by asking for the 12-digit AWS account
+  id.
+- **The listing did not complete, or the tool failed.** Say that whether a
+  cloud account is registered could not be determined, and stop there. Do
+  **not** offer to connect one on this basis: an unreadable answer is not the
+  same as "none registered", and offering to provision because a response
+  could not be read is exactly the mistake this check exists to prevent.
+
+Only once a cloud account is confirmed registered (found already, or just
+connected) tell them they can work with their infrastructure, and offer a
+first step: listing what they have, or authoring something new.
+
+## Step 7 — Self-hosted, only if they said so
 
 Reached only when the user volunteered that they run their own agent.
 
