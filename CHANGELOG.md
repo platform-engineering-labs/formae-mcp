@@ -14,6 +14,8 @@ Install via the
 
 ### Added
 
+- `connect_cloud_account` and `register_cloud_role`, which connect an AWS account to a hosted installation from the conversation. The first computes the CloudFormation console link that creates the role formae assumes; you apply the stack yourself, in your own browser, and the second records the role it produced. Re-running a connection that already exists is harmless. AWS only, matching the CLI.
+- `/formae:connect`, the skill that drives those two: it asks for the account, hands you the link, waits while you apply it, registers the role, and tells you how to add another account afterwards.
 - Onboarding for a machine with nothing configured. Reaching for any tool on a machine that has no formae configuration now asks whether you are using the hosted platform or running your own agent, instead of silently creating a local-agent profile on your behalf. The question is asked before anything is resolved, because resolving is what would answer it for you.
 - `login` and `complete_login`, which sign in to the hosted platform from the conversation. `login` returns the URL (or device code) to give the user; `complete_login` finishes once they have. Signing in again while a session is open is harmless.
 - `/formae:setup` now works on a machine where nothing is configured. It finds out what the machine holds, signs in, confirms what was written, and only then checks the agent — so a machine with no agent yet no longer reports a setup failure that is not about setup.

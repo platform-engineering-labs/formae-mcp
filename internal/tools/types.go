@@ -240,3 +240,25 @@ type LoginInput struct {
 	// the caller is the one who knows.
 	Device bool `json:"device,omitempty" jsonschema:"Use a device code instead of a browser URL. Set this when the user has no browser on this machine, or when they say so."`
 }
+
+// ConnectCloudAccountInput computes the console link that connects one cloud
+// account to the active installation.
+type ConnectCloudAccountInput struct {
+	// Account is always explicit and never inferred from ambient credentials,
+	// matching the CLI's own rule: provisioning trust into the wrong account is
+	// not a mistake a default should be able to make.
+	Account string `json:"account" jsonschema:"The 12-digit AWS account id to connect. Ask the user for it; never infer it from ambient credentials."`
+	// ProviderExists answers 'was this account connected to formae before?'. The
+	// shared OIDC identity provider is account-global, so a second connection on
+	// the same account must not try to create it again.
+	ProviderExists bool `json:"provider_exists,omitempty" jsonschema:"Set only when the account was already connected to formae before, so the OIDC provider exists. Do NOT ask the user this for an account formae has never seen: a fresh account has no provider, and the default is correct."`
+}
+
+// RegisterCloudRoleInput records the role an applied stack produced.
+type RegisterCloudRoleInput struct {
+	Account string `json:"account" jsonschema:"The 12-digit AWS account id the role lives in."`
+	// RoleArn is what the applied stack produced. It is normally the
+	// expectedRoleArn connect_cloud_account reported, but the operator can edit
+	// quick-create parameters, so the applied role wins whenever it differs.
+	RoleArn string `json:"role_arn" jsonschema:"The role ARN the applied CloudFormation stack produced. Use the expected ARN from connect_cloud_account unless the user says the applied role differs."`
+}
