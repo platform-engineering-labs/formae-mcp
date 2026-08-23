@@ -198,13 +198,21 @@ func TestRunConnect_NeverSurfacesProducerProse(t *testing.T) {
 }
 
 // Trailing bytes after the document mean this is not a document this build can
-// read, and taking the first value would be a guess.
+// read, and taking the first value would be a guess. The result must be the
+// exit-status fallback, not the code the trailing-content document happens to
+// name: asserting on a wording property (e.g. "no mention of signing in") would
+// pass by accident whenever the decoded message does not happen to use that
+// word, without the EOF check ever running.
 func TestRunConnect_RefusesTrailingContent(t *testing.T) {
 	env := `{"schemaVersion":2,"code":"auth_failed"}`
 	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s}'\nexit 1\n", env)))
 	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
 		tools.ConnectCloudAccountInput{Account: "123456789012"})
-	if strings.Contains(strings.ToLower(resultText(res)), "sign") {
-		t.Errorf("malformed trailing content was decoded as a real code: %s", resultText(res))
+	got := resultText(res)
+	if !strings.Contains(got, "formae connect failed (exit 1)") {
+		t.Errorf("result does not carry the exit-status fallback: %s", got)
+	}
+	if strings.Contains(got, describeConnectFailure("auth_failed")) {
+		t.Errorf("malformed trailing content was decoded as the auth_failed code: %s", got)
 	}
 }
