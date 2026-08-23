@@ -64,10 +64,15 @@ var registry = map[Feature]string{
 	FeatureProfile:             "0.87.0",
 	FeatureStandalonePolicy:    "0.82.0",
 	FeatureAutoReconcilePolicy: "0.88.0",
-	// 0.90.0 is a placeholder pending the release that ships `formae connect
-	// list`. Confirm it against the actual release tag once that change ships
-	// and correct it here if the tag differs.
-	FeatureCloudConnectionList: "0.90.0",
+	// `formae connect list` ships in the 0.89.0 line, alongside the connection
+	// oracle above. The two share a floor today and are separate constants
+	// because they are separate capabilities: one can move without the other.
+	//
+	// A dev build satisfies this. parseParts splits on "." and discards what it
+	// cannot read, so 0.89.0-dev.9 parses as 0.89.0 rather than sorting below it
+	// the way semver would. That is what lets the floor above accept the dev
+	// tags this work is tested against.
+	FeatureCloudConnectionList: "0.89.0",
 }
 
 type result struct {
