@@ -293,3 +293,30 @@ const RegisterCloudRoleDescription = "Record the role an applied CloudFormation 
 	"says the applied role differs, in which case use theirs. Reporting that the account was already connected with " +
 	"the same role is SUCCESS, not a conflict — it is what makes re-running the flow safe. A registered connection " +
 	"is complete: there is no verification step to wait for and nothing to poll."
+
+// ListAwsProfilesDescription is the list_aws_profiles tool description.
+//
+// Showing the account beside the name is the point of this tool: the user is
+// picking credentials, not an account, so seeing where each profile resolves
+// to is what makes the pick an informed choice about where trust gets
+// provisioned. That is why both kinds of row matter and neither is dropped.
+const ListAwsProfilesDescription = "List the user's local AWS profiles, each with the account it resolves to, so " +
+	"they can pick one to provision a cloud connection with provision_cloud_role. Show every profile: one that " +
+	"resolved names its account; one that could not (e.g. an expired SSO session) names the reason instead — that " +
+	"is not an error, and it is something the user can act on. Always offer 'none of these' as an option alongside " +
+	"the list, which falls back to connect_cloud_account. An empty list is a normal result, not a failure: it means " +
+	"connect_cloud_account is the only path available."
+
+// ProvisionCloudRoleDescription is the provision_cloud_role tool description.
+//
+// The description states plainly what happens and when, matching the
+// DestructiveHint annotation this tool carries: unlike connect_cloud_account,
+// there is no console step and no user-applied stack standing between this
+// call and the mutation.
+const ProvisionCloudRoleDescription = "Create the AWS IAM role formae will assume, and register it, using the " +
+	"named local AWS profile's credentials — in one call. This happens immediately: it creates a real IAM role, " +
+	"and possibly the account-global OIDC identity provider if this account does not have one yet, with no " +
+	"console step and nothing for the user to apply themselves. Only call this after list_aws_profiles has shown " +
+	"the user the profile and its account, and the user picked it. Reporting that the account was already " +
+	"connected with the same role is SUCCESS, not a conflict. A registered connection is complete: there is no " +
+	"verification step to wait for and nothing to poll."

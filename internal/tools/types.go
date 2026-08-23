@@ -262,3 +262,17 @@ type RegisterCloudRoleInput struct {
 	// quick-create parameters, so the applied role wins whenever it differs.
 	RoleArn string `json:"role_arn" jsonschema:"The role ARN the applied CloudFormation stack produced. Use the expected ARN from connect_cloud_account unless the user says the applied role differs."`
 }
+
+// ProvisionCloudRoleInput creates the connect role directly with the named
+// local AWS credentials and registers it, in one invocation. Both fields are
+// required: there is no ambient default for either, matching
+// ConnectCloudAccountInput's rule that provisioning trust into the wrong
+// account or with the wrong credentials is not a mistake a default should be
+// able to make.
+type ProvisionCloudRoleInput struct {
+	Account string `json:"account" jsonschema:"The 12-digit AWS account id to connect. Ask the user for it; never infer it from ambient credentials."`
+	// AwsProfile is a name list_aws_profiles just showed the user, picked
+	// because they recognized the account beside it — never inferred or
+	// defaulted.
+	AwsProfile string `json:"aws_profile" jsonschema:"The local AWS profile name to provision the role with, as shown by list_aws_profiles. Ask the user to pick one; never guess or default it."`
+}

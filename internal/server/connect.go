@@ -209,15 +209,28 @@ func (s *Server) handleRegisterCloudRole(ctx context.Context, _ *mcp.CallToolReq
 		return errorResult(err), nil, nil
 	}
 
-	var doc registeredDoc
-	if err := json.Unmarshal(out, &doc); err != nil {
-		return errorResult(errUnreadableConnect), nil, nil
-	}
-	if doc.SchemaVersion != connectSchemaVersion || doc.Phase != "registered" {
-		return errorResult(errUnreadableConnect), nil, nil
+	doc, err := decodeRegisteredDoc(out)
+	if err != nil {
+		return errorResult(err), nil, nil
 	}
 
 	return textResult(renderRegistered(doc)), nil, nil
+}
+
+// decodeRegisteredDoc validates a registered document rather than trusting
+// json.Unmarshal: a document missing both discriminators decodes cleanly into
+// a zero value. Shared by register_cloud_role and provision_cloud_role, which
+// both end at the same "registered" document — one from a two-step flow, one
+// from a single invocation that provisions and registers together.
+func decodeRegisteredDoc(out []byte) (registeredDoc, error) {
+	var doc registeredDoc
+	if err := json.Unmarshal(out, &doc); err != nil {
+		return registeredDoc{}, errUnreadableConnect
+	}
+	if doc.SchemaVersion != connectSchemaVersion || doc.Phase != "registered" {
+		return registeredDoc{}, errUnreadableConnect
+	}
+	return doc, nil
 }
 
 // renderRegistered reports what the registration did.
