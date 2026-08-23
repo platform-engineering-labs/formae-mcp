@@ -141,7 +141,7 @@ question a third time only spends their time. `formae login --hosted` in a
 terminal is worth offering at that point, because its own output says more about
 why than this tool surfaces.
 
-## Step 5 — Now check the agent, and that there is a cloud account to manage
+## Step 5 — Now check the agent
 
 Run `check_health`.
 
@@ -151,6 +151,8 @@ This is the first step that needs a reachable agent, which is why it is last.
 - If it fails on a self-hosted setup, the likely cause is that no agent is
   running yet, or the profile points at the wrong address — not that setup went
   wrong. Say which, and offer `formae profile edit`.
+
+## Step 6 — Is there a cloud account to manage?
 
 A reachable agent is not the finish line: a hosted installation with no cloud
 account registered cannot manage anything yet. Before telling them the journey
