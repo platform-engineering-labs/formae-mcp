@@ -182,14 +182,13 @@ actually a problem:
      manage them: this reports what the control plane has on file, not that
      the role has been used successfully.
    - **The listing completed and came back empty.** No cloud account is
-     registered yet. Say so, and offer to connect one. AWS is the only cloud
-     `formae connect` has a subcommand for, so offer that directly rather than
-     presenting a menu of clouds that mostly dead-end.
+     registered yet. Say so, and offer to connect one.
 
-     An affirmative answer is not enough to act on: the account id is still
-     needed. Do not hand off and stop here; continue straight into the
-     `/formae:connect` flow, which opens by asking for the 12-digit AWS
-     account id.
+     An affirmative answer is not enough to act on: do not hand off and stop
+     here. Continue straight into the `/formae:connect` flow, which opens by
+     asking which cloud (AWS is implemented; Azure and GCP are not, yet), then
+     for AWS offers local AWS profiles to provision from directly or, failing
+     that, the console-link path.
 
 Close the journey in every outcome except the genuine cannot-determine one:
 once the step did not apply, or a cloud account is confirmed registered (found
