@@ -314,3 +314,32 @@ func TestRunConnect_RefusesTrailingContent(t *testing.T) {
 		t.Errorf("malformed trailing content was decoded as the auth_failed code: %s", got)
 	}
 }
+
+// The document the control plane and CLI actually emit, captured from a live
+// hosted installation and redacted. Every earlier test in this file feeds the
+// decoder a document this repository wrote, which proves the decoder agrees
+// with itself; this one proves it agrees with the producer.
+//
+// Two details are load-bearing and were confirmed against the real emit rather
+// than assumed: `warnings` is absent entirely when empty rather than present as
+// [], and an AWS row carries roleArn while the field is omitted on clouds that
+// have no role.
+const realConnectionsDoc = `{"schemaVersion":2,"phase":"connections",` +
+	`"installation":"3REDACTEDREDACTEDREDACTEDxx","complete":true,` +
+	`"connections":[{"cloud":"aws","account":"123456789012",` +
+	`"roleArn":"arn:aws:iam::123456789012:role/formae-connect-REDACTED"}]}`
+
+func TestListCloudConnections_DecodesWhatTheProducerActuallyEmits(t *testing.T) {
+	s := serverForConnectionsList(t, realConnectionsDoc)
+
+	res, _, err := s.handleListCloudConnections(context.Background(), nil, tools.EmptyInput{})
+	if err != nil {
+		t.Fatalf("list_cloud_connections: %v", err)
+	}
+	if isError(res) {
+		t.Fatalf("the real document was refused: %s", resultText(res))
+	}
+	if !strings.Contains(resultText(res), "123456789012") {
+		t.Errorf("the registered account is not named: %s", resultText(res))
+	}
+}
