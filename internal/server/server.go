@@ -276,6 +276,18 @@ func (s *Server) registerTools() {
 		Name: "complete_login", Description: tools.CompleteLoginDescription,
 	}, s.handleCompleteLogin)
 
+	// Computing the console link mutates nothing — the CloudFormation stack is
+	// applied by the user, in their own browser, under their own admin session —
+	// so DestructiveHint would warn about the wrong actor. Registration writes one
+	// row and is idempotent.
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "connect_cloud_account", Description: tools.ConnectCloudAccountDescription,
+	}, s.handleConnectCloudAccount)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "register_cloud_role", Description: tools.RegisterCloudRoleDescription,
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
+	}, s.handleRegisterCloudRole)
+
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
 	}, s.handleListProfiles)

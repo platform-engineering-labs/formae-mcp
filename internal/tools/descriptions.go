@@ -257,3 +257,27 @@ profiles formae wrote for the installations their grants cover, and which profil
 is now active.
 
 Calling it without a preceding login tool call is an error, not a no-op.`
+
+// ConnectCloudAccountDescription is the connect_cloud_account tool description.
+//
+// The last line is load-bearing. The CLI's own resume command is for a human at
+// a terminal, and a model handed a command reads it as an instruction: it will
+// run an interactive OAuth or CloudFormation flow in a terminal it cannot drive,
+// and burn real state doing so.
+const ConnectCloudAccountDescription = "Compute the CloudFormation console link that connects one AWS account to " +
+	"the active formae installation. Returns a quick-create URL, the role ARN the stack will produce, and any " +
+	"warnings — surface warnings to the user verbatim. This tool changes nothing by itself: the user applies the " +
+	"stack in their own browser under their own admin session. Show them the link, wait until they say the stack " +
+	"reached CREATE_COMPLETE, then call register_cloud_role. Ask the user for the account id; never infer it from " +
+	"ambient credentials. Do NOT run any formae command yourself to do this."
+
+// RegisterCloudRoleDescription is the register_cloud_role tool description.
+//
+// It names already_registered as success on purpose: a model that reads the
+// idempotent case as a conflict will start trying to repair a connection that is
+// already correct.
+const RegisterCloudRoleDescription = "Record the role an applied CloudFormation stack produced, completing a cloud " +
+	"connection started with connect_cloud_account. Use the expected role ARN that tool reported, unless the user " +
+	"says the applied role differs, in which case use theirs. Reporting that the account was already connected with " +
+	"the same role is SUCCESS, not a conflict — it is what makes re-running the flow safe. A registered connection " +
+	"is complete: there is no verification step to wait for and nothing to poll."
