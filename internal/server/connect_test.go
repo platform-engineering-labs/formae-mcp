@@ -202,7 +202,9 @@ func TestRunConnect_NeverSurfacesProducerProse(t *testing.T) {
 // the call reaches the handler instead of dying at the gate.
 func serverForConnectionsList(t *testing.T, doc string) *Server {
 	t.Helper()
-	withFakeVersion(t, "0.90.0")
+	// A real dev tag, not a round number: parseParts discards the suffix, so
+	// this is the shape the gate actually meets in testing.
+	withFakeVersion(t, "0.89.0-dev.9")
 	return serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\n", doc)))
 }
 
@@ -288,7 +290,7 @@ func TestListCloudConnections_RefusedBelowTheVersionFloor(t *testing.T) {
 	if !isError(res) {
 		t.Fatalf("a formae below the floor was accepted: %s", resultText(res))
 	}
-	if !strings.Contains(resultText(res), "0.90.0") {
+	if !strings.Contains(resultText(res), "0.89.0") {
 		t.Errorf("the refusal does not name the required version: %s", resultText(res))
 	}
 }
