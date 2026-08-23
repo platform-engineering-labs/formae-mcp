@@ -197,6 +197,92 @@ func TestRunConnect_NeverSurfacesProducerProse(t *testing.T) {
 	}
 }
 
+// serverForConnectionsList builds a server whose formae binary emits doc and
+// whose detected version is forced above the list_cloud_connections floor, so
+// the call reaches the handler instead of dying at the gate.
+func serverForConnectionsList(t *testing.T, doc string) *Server {
+	t.Helper()
+	withFakeVersion(t, "0.90.0")
+	return serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\n", doc)))
+}
+
+// A complete listing names every registered account, which is what a caller
+// deciding whether to provision on this answer needs.
+func TestListCloudConnections_ReportsRegisteredAccounts(t *testing.T) {
+	doc := `{"schemaVersion":2,"phase":"connections","installation":"2abc","complete":true,` +
+		`"connections":[{"cloud":"aws","account":"123456789012"}]}`
+	s := serverForConnectionsList(t, doc)
+	res, _, err := s.handleListCloudConnections(context.Background(), nil, tools.EmptyInput{})
+	if err != nil || isError(res) {
+		t.Fatalf("%v %s", err, resultText(res))
+	}
+	if !strings.Contains(resultText(res), "123456789012") {
+		t.Errorf("the account is not named: %s", resultText(res))
+	}
+}
+
+// An incomplete listing must not read as an empty one: the caller decides
+// whether to provision on this answer. The document carries no warnings, so
+// the only way "could not"/"cannot" can appear is the incomplete branch
+// itself running, not an unrelated warning string riding along with it.
+func TestListCloudConnections_SaysWhenItCannotTell(t *testing.T) {
+	doc := `{"schemaVersion":2,"phase":"connections","installation":"2abc","complete":false,"connections":[]}`
+	s := serverForConnectionsList(t, doc)
+	res, _, err := s.handleListCloudConnections(context.Background(), nil, tools.EmptyInput{})
+	if err != nil {
+		t.Fatalf("list_cloud_connections: %v", err)
+	}
+	got := strings.ToLower(resultText(res))
+	if strings.Contains(got, "no cloud account is registered") {
+		t.Errorf("an incomplete listing was rendered as the empty-complete case: %s", resultText(res))
+	}
+	if !strings.Contains(got, "could not") && !strings.Contains(got, "cannot") {
+		t.Errorf("an incomplete listing does not say so: %s", resultText(res))
+	}
+}
+
+// A document missing both discriminators decodes cleanly into a zero value, so
+// the handler validates rather than trusting json.Unmarshal.
+func TestListCloudConnections_RefusesADocumentItCannotIdentify(t *testing.T) {
+	s := serverForConnectionsList(t, `{"connections":[]}`)
+	res, _, _ := s.handleListCloudConnections(context.Background(), nil, tools.EmptyInput{})
+	if !isError(res) {
+		t.Errorf("an unidentifiable document was accepted: %s", resultText(res))
+	}
+}
+
+// A complete listing with no rows reports that plainly, since the empty case
+// is the one a caller acts on to decide whether to offer the connect flow.
+func TestListCloudConnections_ReportsNoAccountRegistered(t *testing.T) {
+	doc := `{"schemaVersion":2,"phase":"connections","installation":"2abc","complete":true,"connections":[]}`
+	s := serverForConnectionsList(t, doc)
+	res, _, err := s.handleListCloudConnections(context.Background(), nil, tools.EmptyInput{})
+	if err != nil || isError(res) {
+		t.Fatalf("%v %s", err, resultText(res))
+	}
+	got := strings.ToLower(resultText(res))
+	if !strings.Contains(got, "no cloud account") {
+		t.Errorf("an empty complete listing does not say none are registered: %s", resultText(res))
+	}
+}
+
+// Below the version floor the call is refused at the gate, before any document
+// is read, so an old formae never gets a chance to emit a document this build
+// cannot parse anyway.
+func TestListCloudConnections_RefusedBelowTheVersionFloor(t *testing.T) {
+	s := serverWithLoginBin(t, loginStub(t, "echo '{}'\n")) // loginStub reports 0.89.0.
+	res, _, err := s.handleListCloudConnections(context.Background(), nil, tools.EmptyInput{})
+	if err != nil {
+		t.Fatalf("list_cloud_connections: %v", err)
+	}
+	if !isError(res) {
+		t.Fatalf("a formae below the floor was accepted: %s", resultText(res))
+	}
+	if !strings.Contains(resultText(res), "0.90.0") {
+		t.Errorf("the refusal does not name the required version: %s", resultText(res))
+	}
+}
+
 // Trailing bytes after the document mean this is not a document this build can
 // read, and taking the first value would be a guess. The result must be the
 // exit-status fallback, not the code the trailing-content document happens to

@@ -289,6 +289,11 @@ func (s *Server) registerTools() {
 	}, s.handleRegisterCloudRole)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "list_cloud_connections", Description: tools.ListCloudConnectionsDescription,
+		Annotations: readOnly,
+	}, s.handleListCloudConnections)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
 	}, s.handleListProfiles)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
