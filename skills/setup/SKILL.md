@@ -155,31 +155,47 @@ This is the first step that needs a reachable agent, which is why it is last.
 ## Step 6 — Is there a cloud account to manage?
 
 A reachable agent is not the finish line: a hosted installation with no cloud
-account registered cannot manage anything yet. Before telling them the journey
-is done, run `list_cloud_connections`.
+account registered cannot manage anything yet. Run `list_cloud_connections` and
+read what it says. Its wording can collapse three different outcomes into what
+looks like one failure — tell them apart, because only one of the three is
+actually a problem:
 
-- **Registered connections exist.** Name each one (cloud and account). Say
-  they are **registered**, never verified, working, or that formae can manage
-  them: this reports what the control plane has on file, not that the role
-  has been used successfully.
-- **The listing completed and came back empty.** No cloud account is
-  registered yet. Say so, and offer to connect one. AWS is the only cloud
-  `formae connect` has a subcommand for, so offer that directly rather than
-  presenting a menu of clouds that mostly dead-end.
+1. **The step does not apply.** `list_cloud_connections` refuses because
+   connect needs a hosted profile (the active profile is self-hosted/classic),
+   or it refuses with a `requires formae >=` version floor (the connected
+   formae is too old to support the check). Neither means anything is wrong: a
+   classic setup has no installation-wide cloud-account registry to check in
+   the first place, and an old-but-working hosted setup is still a working
+   setup. **Skip this step silently.** Do not report a failure and do not
+   mention a version floor unless the user asks — just close the journey as
+   below, exactly as if the check had come back clean.
+2. **The listing ran but did not complete.** This is the genuine
+   cannot-determine case, and it is the one worth stopping over. Say that
+   whether a cloud account is registered could not be determined, and stop
+   there. Do **not** offer to connect one on this basis: an unreadable answer
+   is not the same as "none registered", and offering to provision because a
+   response could not be read is exactly the mistake this check exists to
+   prevent.
+3. **The listing ran and succeeded.**
+   - **Registered connections exist.** Name each one (cloud and account). Say
+     they are **registered**, never verified, working, or that formae can
+     manage them: this reports what the control plane has on file, not that
+     the role has been used successfully.
+   - **The listing completed and came back empty.** No cloud account is
+     registered yet. Say so, and offer to connect one. AWS is the only cloud
+     `formae connect` has a subcommand for, so offer that directly rather than
+     presenting a menu of clouds that mostly dead-end.
 
-  An affirmative answer is not enough to act on: the account id is still
-  needed. Do not hand off and stop here; continue straight into the
-  `/formae:connect` flow, which opens by asking for the 12-digit AWS account
-  id.
-- **The listing did not complete, or the tool failed.** Say that whether a
-  cloud account is registered could not be determined, and stop there. Do
-  **not** offer to connect one on this basis: an unreadable answer is not the
-  same as "none registered", and offering to provision because a response
-  could not be read is exactly the mistake this check exists to prevent.
+     An affirmative answer is not enough to act on: the account id is still
+     needed. Do not hand off and stop here; continue straight into the
+     `/formae:connect` flow, which opens by asking for the 12-digit AWS
+     account id.
 
-Only once a cloud account is confirmed registered (found already, or just
-connected) tell them they can work with their infrastructure, and offer a
-first step: listing what they have, or authoring something new.
+Close the journey in every outcome except the genuine cannot-determine one:
+once the step did not apply, or a cloud account is confirmed registered (found
+already, or just connected), tell them they can work with their
+infrastructure, and offer a first step: listing what they have, or authoring
+something new.
 
 ## Step 7 — Self-hosted, only if they said so
 

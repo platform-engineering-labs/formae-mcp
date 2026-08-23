@@ -221,10 +221,12 @@ func TestListCloudConnections_ReportsRegisteredAccounts(t *testing.T) {
 	}
 }
 
-// An incomplete listing must not read as an empty one: the caller decides
-// whether to provision on this answer. The document carries no warnings, so
-// the only way "could not"/"cannot" can appear is the incomplete branch
-// itself running, not an unrelated warning string riding along with it.
+// An incomplete listing must not read as an empty one, and the success path
+// that reports it must not be confused with a decode failure either:
+// errUnreadableConnections also reads "could not read", so a substring check
+// alone would stay green even if decodeConnectionsDoc started rejecting
+// complete:false documents outright. Asserting isError is false and matching
+// the exact sentence is what tells the two apart.
 func TestListCloudConnections_SaysWhenItCannotTell(t *testing.T) {
 	doc := `{"schemaVersion":2,"phase":"connections","installation":"2abc","complete":false,"connections":[]}`
 	s := serverForConnectionsList(t, doc)
@@ -232,12 +234,16 @@ func TestListCloudConnections_SaysWhenItCannotTell(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list_cloud_connections: %v", err)
 	}
-	got := strings.ToLower(resultText(res))
-	if strings.Contains(got, "no cloud account is registered") {
-		t.Errorf("an incomplete listing was rendered as the empty-complete case: %s", resultText(res))
+	if isError(res) {
+		t.Fatalf("an incomplete listing was reported as a decode failure rather than the incomplete case: %s", resultText(res))
 	}
-	if !strings.Contains(got, "could not") && !strings.Contains(got, "cannot") {
-		t.Errorf("an incomplete listing does not say so: %s", resultText(res))
+	got := resultText(res)
+	if strings.Contains(strings.ToLower(got), "no cloud account is registered") {
+		t.Errorf("an incomplete listing was rendered as the empty-complete case: %s", got)
+	}
+	want := "Whether any cloud account is registered could not be determined: the listing did not complete."
+	if !strings.Contains(got, want) {
+		t.Errorf("an incomplete listing does not say so: %s", got)
 	}
 }
 
@@ -270,7 +276,11 @@ func TestListCloudConnections_ReportsNoAccountRegistered(t *testing.T) {
 // is read, so an old formae never gets a chance to emit a document this build
 // cannot parse anyway.
 func TestListCloudConnections_RefusedBelowTheVersionFloor(t *testing.T) {
-	s := serverWithLoginBin(t, loginStub(t, "echo '{}'\n")) // loginStub reports 0.89.0.
+	// detectFn is package-level state: an earlier test's withFakeVersion left it
+	// forced to return "0.0.0" (its t.Cleanup, not a restore to detectFromCLI),
+	// so in a full-package run loginStub's own --version reply is never
+	// consulted here. "0.0.0" is still below the floor either way.
+	s := serverWithLoginBin(t, loginStub(t, "echo '{}'\n"))
 	res, _, err := s.handleListCloudConnections(context.Background(), nil, tools.EmptyInput{})
 	if err != nil {
 		t.Fatalf("list_cloud_connections: %v", err)
