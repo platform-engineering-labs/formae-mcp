@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 
@@ -110,11 +112,96 @@ func (s *Server) runConnect(ctx context.Context, args []string) ([]byte, error) 
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
-			return nil, fmt.Errorf("formae connect failed (exit %d)", exit.ExitCode())
+			return nil, decodeConnectFailure(out, exit.ExitCode())
 		}
 		return nil, fmt.Errorf("run %s: %w", s.ctxResolver.Bin(), err)
 	}
 	return out, nil
+}
+
+// connectFailureSchemaVersion is the failure envelope shape this build
+// understands, checked before any other field.
+const connectFailureSchemaVersion = 2
+
+// declaredConnectFailureCodes is the closed namespace the producer promises
+// for a declared connect failure. A code outside it is a protocol mismatch,
+// not a message to pass along.
+var declaredConnectFailureCodes = map[string]bool{
+	"untrusted_issuer":       true,
+	"control_plane_too_old":  true,
+	"installation_not_ready": true,
+	"registration_conflict":  true,
+	"unsupported_partition":  true,
+	"hosted_required":        true,
+	"not_authorized":         true,
+	"account_mismatch":       true,
+	"auth_failed":            true,
+}
+
+// connectFailureView is the envelope the producer emits on stdout when a
+// connect invocation fails.
+type connectFailureView struct {
+	SchemaVersion *int   `json:"schemaVersion"`
+	Code          string `json:"code"`
+	// Message is decoded so it is visibly accounted for, and deliberately never
+	// read: the producer builds it from a plugin error string, and a Pkl
+	// failure quotes profile source lines, which for a classic profile can hold
+	// an inline password.
+	Message string `json:"message"`
+}
+
+// decodeConnectFailure turns a non-zero exit into an error the caller can act
+// on.
+//
+// exitStatus names the failure when the envelope cannot be read at all, which
+// is a supported path rather than a defensive one: argv the command cannot
+// parse fails before the flags that say how to render a failure exist, so it
+// exits non-zero with no envelope. The raw bytes never reach the error.
+func decodeConnectFailure(stdout []byte, exitStatus int) error {
+	unreadable := fmt.Errorf("formae connect failed (exit %d)", exitStatus)
+
+	var v connectFailureView
+	dec := json.NewDecoder(bytes.NewReader(stdout))
+	if err := dec.Decode(&v); err != nil {
+		return unreadable
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return unreadable
+	}
+	if v.SchemaVersion == nil || *v.SchemaVersion != connectFailureSchemaVersion {
+		return unreadable
+	}
+	if !declaredConnectFailureCodes[v.Code] {
+		return unreadable
+	}
+
+	return errors.New(describeConnectFailure(v.Code))
+}
+
+// describeConnectFailure renders a declared code as the MCP's own text.
+func describeConnectFailure(code string) string {
+	switch code {
+	case "untrusted_issuer":
+		return "this profile's hosted connection names an issuer this build will not authenticate against"
+	case "control_plane_too_old":
+		return "the connected control plane is too old to support connect; upgrade it and try again"
+	case "installation_not_ready":
+		return "the installation is not ready to accept a connect yet; try again shortly"
+	case "registration_conflict":
+		return "another installation has already registered a different role for this account"
+	case "unsupported_partition":
+		return "this AWS partition is not supported"
+	case "hosted_required":
+		return "connect needs a hosted profile; switch to one and try again"
+	case "not_authorized":
+		return "you are not authorized to connect this account"
+	case "account_mismatch":
+		return "the account does not match what this connect invocation expected"
+	case "auth_failed":
+		return "formae could not authenticate for this connect operation"
+	default:
+		return "formae could not complete the connect operation"
+	}
 }
 
 // registeredDoc is what a registration reports.
