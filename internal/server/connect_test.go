@@ -170,3 +170,41 @@ func TestRegisterCloudRole_DoesNotImplyAVerifiedStateIsComing(t *testing.T) {
 		}
 	}
 }
+
+// A declared failure reaches the caller as something it can act on rather than
+// an exit code.
+func TestRunConnect_RendersADeclaredFailure(t *testing.T) {
+	env := `{"schemaVersion":2,"code":"control_plane_too_old","message":"raw"}`
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", env)))
+	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
+		tools.ConnectCloudAccountInput{Account: "123456789012"})
+	if !isError(res) || !strings.Contains(strings.ToLower(resultText(res)), "too old") {
+		t.Errorf("nothing actionable: %s", resultText(res))
+	}
+}
+
+// The producer's own prose never crosses: it is built from a plugin error
+// string, and a Pkl failure quotes profile source lines that can hold an
+// inline password.
+func TestRunConnect_NeverSurfacesProducerProse(t *testing.T) {
+	secret := "inline-password-from-a-source-line"
+	env := fmt.Sprintf(`{"schemaVersion":2,"code":"auth_failed","message":%q}`, secret)
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", env)))
+	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
+		tools.ConnectCloudAccountInput{Account: "123456789012"})
+	if strings.Contains(resultText(res), secret) {
+		t.Fatal("the producer's message reached the caller")
+	}
+}
+
+// Trailing bytes after the document mean this is not a document this build can
+// read, and taking the first value would be a guess.
+func TestRunConnect_RefusesTrailingContent(t *testing.T) {
+	env := `{"schemaVersion":2,"code":"auth_failed"}`
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s}'\nexit 1\n", env)))
+	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
+		tools.ConnectCloudAccountInput{Account: "123456789012"})
+	if strings.Contains(strings.ToLower(resultText(res)), "sign") {
+		t.Errorf("malformed trailing content was decoded as a real code: %s", resultText(res))
+	}
+}
