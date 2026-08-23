@@ -270,7 +270,11 @@ type RegisterCloudRoleInput struct {
 // account or with the wrong credentials is not a mistake a default should be
 // able to make.
 type ProvisionCloudRoleInput struct {
-	Account string `json:"account" jsonschema:"The 12-digit AWS account id to connect. Ask the user for it; never infer it from ambient credentials."`
+	// Account comes from the listing, not from the user's keyboard. It is the
+	// account list_aws_profiles reported beside the profile they picked, which
+	// is what made the pick informed; asking them to retype it undoes that and
+	// invites a typo the credentials would then reject.
+	Account string `json:"account" jsonschema:"The 12-digit AWS account id, as list_aws_profiles reported it beside the chosen profile. Do NOT ask the user to type it: they already saw it when they chose the profile. Never infer it from ambient credentials."`
 	// AwsProfile is a name list_aws_profiles just showed the user, picked
 	// because they recognized the account beside it — never inferred or
 	// defaulted.
