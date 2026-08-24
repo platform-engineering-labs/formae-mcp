@@ -269,3 +269,8 @@ Then offer the next step:
 
 They can also do the console-link path from a terminal with
 `formae connect aws --account <id>`, which walks the same flow interactively.
+
+**That command is for the user, never for you.** Do not run it, and do not
+offer to. It is interactive and it provisions real cloud trust; run from a
+harness it cannot drive, it burns state and leaves a half-finished flow behind.
+Everything this skill needs is available through its tools.
