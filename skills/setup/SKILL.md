@@ -98,8 +98,14 @@ a valid session was already open. Carry on to step 4.
 
 If `complete_login` reports that they are **signed in but the profiles could not
 be written**, do not start another sign-in. Their session is saved and a second
-one fixes nothing; the problem is between formae and the control plane. Report it
-as the message says, and offer `formae login --hosted` for the reason.
+one fixes nothing; the problem is between formae and the control plane. Report
+what the tool said and stop there.
+
+**Do not tell them to run a formae command.** This skill drives the journey
+through its tools; handing the user a CLI command to run and paste back makes
+them the transport between two things that can already talk to each other. If
+the reason a step failed is not in what the tool returned, that is a gap in the
+tool, not a task to delegate to the user.
 
 ## Step 4 — Check what was written, and finish the round trip
 
@@ -137,9 +143,13 @@ Finish the trip rather than ending on it:
 
 **If the second pass still writes no profiles, stop and say so.** Do not loop
 again on your own. Report what you found and let them decide; asking the same
-question a third time only spends their time. `formae login --hosted` in a
-terminal is worth offering at that point, because its own output says more about
-why than this tool surfaces.
+question a third time only spends their time.
+
+**Do not fall back to telling them to run `formae login --hosted` in a
+terminal.** It reads as a diagnostic step but it is a dead end: it makes the
+user carry output between two components that are already connected, and on a
+machine where formae is not on the user's own PATH it fails with
+`command not found`, which looks like a broken install and is not one.
 
 ## Step 5 — Now check the agent
 
@@ -150,7 +160,8 @@ This is the first step that needs a reachable agent, which is why it is last.
 - On a version-skew notice, hand off to `/formae:upgrade`.
 - If it fails on a self-hosted setup, the likely cause is that no agent is
   running yet, or the profile points at the wrong address — not that setup went
-  wrong. Say which, and offer `formae profile edit`.
+  wrong. Say which. If the address is wrong, offer to repoint it yourself with
+  `write_profile`; do not send them to `formae profile edit`.
 
 ## Step 6 — Is there a cloud account to manage?
 
