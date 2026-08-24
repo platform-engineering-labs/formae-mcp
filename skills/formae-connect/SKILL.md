@@ -123,7 +123,100 @@ re-applied as an update: a quick-create URL always opens a create flow.
 
 Then go to step 6.
 
-## Step 6 — Confirm, and say how to add more
+## Step 6 — Offer to create a target
+
+Registering an account grants trust and, on its own, leaves the user with
+nothing to do: the agent cannot discover or manage anything until a
+**target** exists — an account paired with a region, the thing discovery and
+every apply both run against. Explain that in a sentence or two, then ask
+whether to create one now.
+
+**If they decline, go straight to step 7.**
+
+**AWS:** ask for a **region** and a **label** for the target.
+
+**Azure or GCP:** say plainly that support is not built yet, in the same
+voice as the cloud menu in step 1. Do not promise a date. Then go to step 7 —
+there is no target to create yet.
+
+Ask for the directory to create the project in, proposing the current
+directory by name as the default — the same thing `git init`, `npm init`,
+and `cargo init` do.
+
+**If that directory already contains a `PklProject`, say so and stop.** This
+flow creates a fresh project; it does not merge into an existing one. Then go
+to step 7.
+
+Otherwise, write three files with the harness's own file tools.
+
+`PklProject`, pinning `formae` and the `aws` plugin schema by canonical
+semver:
+
+```pkl
+amends "pkl:Project"
+
+dependencies {
+  ["formae"] {
+    uri = "package://hub.platform.engineering/plugins/pkl/schema/pkl/formae/formae@0.89.0"
+  }
+  ["aws"] {
+    uri = "package://hub.platform.engineering/plugins/aws/schema/pkl/aws/aws@0.1.17"
+  }
+}
+```
+
+**Never pin a `-dev.N` suffix.** A dev build overwrites the schema published
+at its canonical coordinate; the coordinates above are the ones that
+actually exist to resolve.
+
+`vars.pkl`, holding the definition. **The imports are not optional** —
+without them `formae.Target`, `aws.Config`, and `aws.OidcAuth` are unresolved
+and evaluation fails:
+
+```pkl
+import "@formae/formae.pkl"
+import "@aws/aws.pkl"
+
+awsTarget: formae.Target = new formae.Target {
+  label = "<the label they gave>"
+  discoverable = true
+  config = new aws.Config {
+    region = "<the region they gave>"
+    auth = new aws.OidcAuth { roleArn = "<the role ARN from the registration>" }
+  }
+}
+```
+
+**`discoverable` defaults to `false`.** Leave it off and the target exists,
+discovers nothing, and the user comes back later to an empty inventory with
+no error to explain it. Set it to `true`, and say why when you show them
+this file.
+
+**The role ARN comes from the registration, not the user.** Whichever path
+reached here, `provision_cloud_role` or `register_cloud_role` already
+returned it — asking the user to retype it invites a typo the target would
+silently carry, the same reasoning that governs the account id on the
+local-credentials path in step 3.
+
+`targets.pkl`, the file that gets applied:
+
+```pkl
+amends "@formae/forma.pkl"
+import "vars.pkl"
+
+forma {
+  vars.awsTarget
+}
+```
+
+Call `apply_forma` on `targets.pkl`. **Do not add a separate "resolve the
+project" step:** formae's evaluation already runs `pkl project resolve` when
+`PklProject.deps.json` is absent, including the evaluation `apply_forma`
+performs itself.
+
+Then go to step 7.
+
+## Step 7 — Confirm, and say how to add more
 
 Tell them the account is connected and name the role.
 
@@ -132,6 +225,18 @@ registered connection is complete. There is no verified state in the control
 plane, by decision rather than by omission: if the trust is wrong, the first
 command that needs it fails loudly and the agent logs say why, which tells
 them more than a stamp would and at the moment it actually matters.
+
+**If a target was created in step 6**, tell them what happens next and give
+one example prompt for each:
+
+- Discovery is already running against it. They can come back shortly and
+  ask what it found — e.g. `"What unmanaged resources do you see in
+  <label>?"`
+- They can start creating infrastructure against it now — e.g. `"Create an
+  S3 bucket in <label>."`
+
+If no target was created, skip the above — this step needs nothing extra for
+that case.
 
 Then offer the next step:
 
