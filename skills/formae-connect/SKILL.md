@@ -216,10 +216,21 @@ forma {
 }
 ```
 
-Call `apply_forma` on `targets.pkl`. **Do not add a separate "resolve the
-project" step:** formae's evaluation already runs `pkl project resolve` when
-`PklProject.deps.json` is absent, including the evaluation `apply_forma`
-performs itself.
+Apply `targets.pkl` the way `/formae:apply` does, because this is the user's
+first apply and it should look like every one after it: call `apply_forma` with
+`mode: reconcile` and `simulate: true`, show them what it will do, then apply
+for real.
+
+Simulating matters more here than the tiny forma suggests. Reconcile destroys
+deployed resources that the file does not declare, so a forma holding only a
+target is a claim about everything in scope, not just about the target. On a
+fresh installation there is nothing to destroy and the simulation says so in one
+line, which is exactly the point: the user sees the shape of an apply while the
+stakes are zero.
+
+**Do not add a separate "resolve the project" step:** formae's evaluation
+already runs `pkl project resolve` when `PklProject.deps.json` is absent,
+including the evaluation `apply_forma` performs itself.
 
 Then go to step 7.
 
