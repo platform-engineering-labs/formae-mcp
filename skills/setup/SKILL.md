@@ -213,7 +213,8 @@ Reached only when the user volunteered that they run their own agent.
 
 Call `use_profile` with `name: "default"`, which creates the default profile if it
 does not exist and makes it active. Then, in a sentence or two: the profile points
-at a local agent on `http://localhost:49684`, `formae profile edit` repoints it,
-and offer to help author a first forma.
+at a local agent on `http://localhost:49684`, offer to repoint it yourself with
+`write_profile` if their agent is somewhere else, and offer to help author a first
+forma.
 
 There is nothing to sign in to on a self-hosted setup, so do not offer it.
