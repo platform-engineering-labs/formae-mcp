@@ -131,6 +131,13 @@ nothing to do: the agent cannot discover or manage anything until a
 every apply both run against. Explain that in a sentence or two, then ask
 whether to create one now.
 
+This step writes a forma and applies it, and that is worth saying out loud to
+someone seeing formae for the first time, because it is not a detour: in formae
+everything is created by declaring it and applying — resources, stacks, targets,
+policies alike. There is no verb that creates a target, in the same way there is
+no verb that creates a bucket. So the first thing this journey produces is a
+small project the user owns, and the target is the first thing declared in it.
+
 **If they decline, go straight to step 7.**
 
 **AWS:** ask for a **region** and a **label** for the target.
