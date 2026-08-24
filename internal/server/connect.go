@@ -122,11 +122,23 @@ func (s *Server) runConnect(ctx context.Context, args []string) ([]byte, error) 
 
 // connectFailureSchemaVersion is the failure envelope shape this build
 // understands, checked before any other field.
-const connectFailureSchemaVersion = 2
+//
+// It is 1 while the success documents are 2, and that is not a mistake: the
+// envelope carries its own printer.failureSchemaVersion and the two version
+// independently. Assuming they matched made this decoder reject every real
+// failure and report an exit status instead, which is the behaviour decoding
+// exists to replace. Confirmed against a live run, not inferred.
+const connectFailureSchemaVersion = 1
 
-// connectFailureDescriptions is the closed namespace the producer promises for
-// a declared connect failure, mapped to how this build describes it. A code
-// outside this map is a protocol mismatch, not a message to pass along.
+// connectFailureDescriptions maps the codes the producer declares to how this
+// build describes them. It mirrors printer's Code constants; keep it in step
+// when that set grows.
+//
+// A code missing from here is NOT a protocol mismatch. The namespace is closed
+// but it grows, and this map will always lag it, so an unmapped code is named
+// verbatim rather than discarded: a code is our own vocabulary and safe to
+// surface, and telling the caller which failure happened beats telling them a
+// process exited. Only the producer's message is withheld.
 var connectFailureDescriptions = map[string]string{
 	"untrusted_issuer":       "this profile's hosted connection names an issuer this build will not authenticate against",
 	"control_plane_too_old":  "the connected control plane is too old to support connect; upgrade it and try again",
@@ -137,6 +149,16 @@ var connectFailureDescriptions = map[string]string{
 	"not_authorized":         "you are not authorized to connect this account",
 	"account_mismatch":       "the account does not match what this connect invocation expected",
 	"auth_failed":            "formae could not authenticate for this connect operation",
+	"provision_failed":       "formae could not provision the role with those credentials",
+	"role_collision":         "a role of the expected name exists that connect does not own; delete it or connect with an existing role ARN",
+	"provider_conflict":      "the account's OIDC provider exists but is not configured the way connect expects",
+	"sso_login_required":     "the SSO session for those credentials has expired; sign in again and retry",
+	"ambiguous_profile":      "more than one profile exists and none was named, so formae cannot tell which installation you meant",
+	"no_connection":          "this profile names no connection to work with",
+	"plugin_missing":         "a plugin this operation needs is not installed",
+	"login_failed":           "signing in failed",
+	"sync_incomplete":        "you are signed in, but formae could not bring the hosted profiles up to date",
+	"internal":               "formae could not complete this connect operation",
 }
 
 // connectFailureView is the envelope the producer emits on stdout when a
@@ -172,12 +194,15 @@ func decodeConnectFailure(stdout []byte, exitStatus int) error {
 	if v.SchemaVersion == nil || *v.SchemaVersion != connectFailureSchemaVersion {
 		return unreadable
 	}
-	desc, ok := connectFailureDescriptions[v.Code]
-	if !ok {
-		return unreadable
+	if desc, ok := connectFailureDescriptions[v.Code]; ok {
+		return errors.New(desc)
 	}
-
-	return errors.New(desc)
+	// An envelope this build has no prose for still names its code. The code is
+	// ours; the message is the producer's and never crosses.
+	if v.Code != "" {
+		return fmt.Errorf("formae connect failed (%s)", v.Code)
+	}
+	return unreadable
 }
 
 // describeConnectFailure renders a declared code as the MCP's own text. Every

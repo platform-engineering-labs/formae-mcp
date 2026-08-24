@@ -174,7 +174,7 @@ func TestRegisterCloudRole_DoesNotImplyAVerifiedStateIsComing(t *testing.T) {
 // A declared failure reaches the caller as something it can act on rather than
 // an exit code.
 func TestRunConnect_RendersADeclaredFailure(t *testing.T) {
-	env := `{"schemaVersion":2,"code":"control_plane_too_old","message":"raw"}`
+	env := `{"schemaVersion":1,"code":"control_plane_too_old","message":"raw"}`
 	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", env)))
 	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
 		tools.ConnectCloudAccountInput{Account: "123456789012"})
@@ -188,7 +188,7 @@ func TestRunConnect_RendersADeclaredFailure(t *testing.T) {
 // inline password.
 func TestRunConnect_NeverSurfacesProducerProse(t *testing.T) {
 	secret := "inline-password-from-a-source-line"
-	env := fmt.Sprintf(`{"schemaVersion":2,"code":"auth_failed","message":%q}`, secret)
+	env := fmt.Sprintf(`{"schemaVersion":1,"code":"auth_failed","message":%q}`, secret)
 	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", env)))
 	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
 		tools.ConnectCloudAccountInput{Account: "123456789012"})
@@ -302,7 +302,7 @@ func TestListCloudConnections_RefusedBelowTheVersionFloor(t *testing.T) {
 // pass by accident whenever the decoded message does not happen to use that
 // word, without the EOF check ever running.
 func TestRunConnect_RefusesTrailingContent(t *testing.T) {
-	env := `{"schemaVersion":2,"code":"auth_failed"}`
+	env := `{"schemaVersion":1,"code":"auth_failed"}`
 	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s}'\nexit 1\n", env)))
 	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
 		tools.ConnectCloudAccountInput{Account: "123456789012"})
@@ -341,5 +341,49 @@ func TestListCloudConnections_DecodesWhatTheProducerActuallyEmits(t *testing.T) 
 	}
 	if !strings.Contains(resultText(res), "123456789012") {
 		t.Errorf("the registered account is not named: %s", resultText(res))
+	}
+}
+
+// The failure envelope the CLI really emits, captured from a live run of
+// `connect aws --profile-aws` with no region resolvable.
+//
+// It is schemaVersion 1, not 2. The success documents are 2 and the envelope is
+// 1, and they version independently: printer.failureSchemaVersion is its own
+// constant. A decoder that assumes they match rejects every real failure and
+// falls back to the exit status, which is the behaviour decoding exists to
+// replace.
+const realConnectFailure = `{"schemaVersion":1,"code":"provision_failed",` +
+	`"message":"no region: pass --region or set one on the AWS profile"}`
+
+func TestRunConnect_DecodesTheEnvelopeTheCLIActuallyEmits(t *testing.T) {
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", realConnectFailure)))
+
+	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
+		tools.ConnectCloudAccountInput{Account: "123456789012"})
+
+	if !isError(res) {
+		t.Fatal("a failed connect reported success")
+	}
+	if strings.Contains(resultText(res), "exit 1") {
+		t.Errorf("the envelope was rejected and the exit status reported instead: %s", resultText(res))
+	}
+}
+
+// The code namespace is closed but it grows: the CLI declares nineteen codes and
+// adds more as the surface does. An envelope this build has no prose for still
+// names its code, because a code is our own closed vocabulary and telling the
+// caller which failure happened beats telling them a process exited.
+func TestRunConnect_NamesAnUnmappedCodeRatherThanTheExitStatus(t *testing.T) {
+	env := `{"schemaVersion":1,"code":"some_future_code","message":"raw"}`
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", env)))
+
+	res, _, _ := s.handleConnectCloudAccount(context.Background(), nil,
+		tools.ConnectCloudAccountInput{Account: "123456789012"})
+
+	if !strings.Contains(resultText(res), "some_future_code") {
+		t.Errorf("the code was dropped: %s", resultText(res))
+	}
+	if strings.Contains(resultText(res), "raw") {
+		t.Errorf("the producer's message crossed: %s", resultText(res))
 	}
 }
