@@ -195,11 +195,14 @@ actually a problem:
    - **The listing completed and came back empty.** No cloud account is
      registered yet. Say so, and offer to connect one.
 
+     **Offer to connect "a cloud account", and do not name a cloud.** Which
+     cloud is `/formae:connect`'s first question, and naming one here answers
+     it on the user's behalf: a model that has just been told which clouds work
+     will offer that one directly, and the choice never gets made.
+
      An affirmative answer is not enough to act on: do not hand off and stop
-     here. Continue straight into the `/formae:connect` flow, which opens by
-     asking which cloud (AWS is implemented; Azure and GCP are not, yet), then
-     for AWS offers local AWS profiles to provision from directly or, failing
-     that, the console-link path.
+     here. Continue straight into the `/formae:connect` flow and let it open
+     with its own first question.
 
 Close the journey in every outcome except the genuine cannot-determine one:
 once the step did not apply, or a cloud account is confirmed registered (found
