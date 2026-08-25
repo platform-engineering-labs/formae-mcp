@@ -309,6 +309,16 @@ func (s *Server) registerTools() {
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true)},
 	}, s.handleProvisionCloudRole)
 
+	// GCP is one tool, not three. The AWS trio exists because CloudFormation's
+	// quick-create URL splits the flow into emit-then-register with a console
+	// step in between; GCP has no console path at all, so provisioning and
+	// registering are a single call. DestructiveHint for the same reason
+	// provision_cloud_role carries it: the mutation happens immediately.
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "connect_gcp_project", Description: tools.ConnectGcpProjectDescription,
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true)},
+	}, s.handleConnectGcpProject)
+
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
 	}, s.handleListProfiles)
