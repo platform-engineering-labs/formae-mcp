@@ -63,12 +63,12 @@ func mcpPolicyType(agentType string) string {
 // fetchPolicies reads the agent's standalone policy inventory from the
 // active/default profile's agent (empty profile = active/default, matching the
 // server's per-call client resolution).
-func (s *Server) fetchPolicies() ([]policyInventoryItem, error) {
-	c, err := s.clientFor("")
+func (s *Server) fetchPolicies(ctx context.Context) ([]policyInventoryItem, error) {
+	c, err := s.clientFor(ctx, "")
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.ListPolicies()
+	body, err := c.ListPolicies(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list policies from agent: %w", err)
 	}
@@ -136,7 +136,7 @@ func validateStandalonePolicyFields(label, policyType string, ttlSeconds int64, 
 	return nil
 }
 
-func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.CreateStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.CreateStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
 	if err := validateStandalonePolicyFields(input.Label, input.PolicyType, input.TTLSeconds, input.OnDependents, input.IntervalSeconds); err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -153,7 +153,7 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	// state. The agent inventory is authoritative for what already exists, so
 	// check it first: a policy the agent already knows must not be re-declared,
 	// even if the current workspace source does not (yet) contain it.
-	if agentItems, err := s.fetchPolicies(); err == nil {
+	if agentItems, err := s.fetchPolicies(ctx); err == nil {
 		if _, known := findPolicyByLabel(agentItems, input.Label); known {
 			out := tools.CreateStandalonePolicyOutput{
 				Operation: "noop",
@@ -241,7 +241,7 @@ func (s *Server) handleCreateStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	return jsonResult(body), nil, nil
 }
 
-func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.AttachStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.AttachStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
 	if input.Stack == "" {
 		return errorResult(fmt.Errorf("stack is required")), nil, nil
 	}
@@ -263,7 +263,7 @@ func (s *Server) handleAttachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 	// before the first apply. Fall back to the workspace source in that case
 	// rather than refusing a documented flow.
 	var notes []string
-	items, fetchErr := s.fetchPolicies()
+	items, fetchErr := s.fetchPolicies(ctx)
 	if fetchErr != nil {
 		items = nil
 	}
@@ -429,7 +429,7 @@ func specFromInventoryItem(item policyInventoryItem) (StandalonePolicySpec, erro
 	}, nil
 }
 
-func (s *Server) handleDeleteStandalonePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.DeleteStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleDeleteStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.DeleteStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
 	if input.Label == "" {
 		return errorResult(fmt.Errorf("label is required")), nil, nil
 	}
@@ -437,7 +437,7 @@ func (s *Server) handleDeleteStandalonePolicy(_ context.Context, _ *mcp.CallTool
 		return errorResult(err), nil, nil
 	}
 
-	inventory, err := s.fetchPolicies()
+	inventory, err := s.fetchPolicies(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}

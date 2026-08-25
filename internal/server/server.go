@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/platform-engineering-labs/formae-mcp/internal/clientid"
+	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 	"github.com/platform-engineering-labs/formae-mcp/internal/formaebin"
@@ -31,12 +33,19 @@ func implementation() *mcp.Implementation {
 	}
 }
 
+// contextResolver is the seam server tests substitute. The concrete resolver
+// lives in execctx and its injection points are unexported there.
+type contextResolver interface {
+	Resolve(ctx context.Context, profileName string) (execctx.Context, error)
+	Bin() string
+}
+
 // Server wraps the MCP server and the formae API client.
 type Server struct {
 	mcpServer      *mcp.Server
 	hub            *HubClient
 	forcedEndpoint string             // when set, empty-profile calls use this (tests / explicit)
-	ctxResolver    *execctx.Resolver  // resolves per-call execution context
+	ctxResolver    contextResolver    // resolves per-call execution context
 	clientID       *clientid.Resolver // resolves the Client-ID header value
 }
 
@@ -65,49 +74,45 @@ func New(endpoint string) *Server {
 }
 
 // clientFor builds a FormaeClient for the given profile (empty = active/default).
-// A non-empty profile is version-gated and name-validated; endpoint resolution
-// hard-errors for an unresolvable requested/active profile.
-//
-// Handlers migrated to the execution-context pattern call resolveCtx +
-// newClientFromCtx directly; clientFor remains for handlers not yet migrated.
-func (s *Server) clientFor(profileName string) (*FormaeClient, error) {
-	if profileName != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, s.formaeBin()); err != nil {
-			return nil, err
-		}
-		if err := profile.ValidateName(profileName); err != nil {
-			return nil, err
-		}
-	}
-	ctx, err := s.resolveCtx(profileName)
+func (s *Server) clientFor(ctx context.Context, profileName string) (*FormaeClient, error) {
+	ec, err := s.resolveCtx(ctx, profileName)
 	if err != nil {
 		return nil, err
 	}
-	return newClientFromCtx(ctx), nil
+	return newClientFromCtx(ec)
 }
 
 // resolveCtx returns the immutable execution context for an optional profile.
-// Resolve once at the top of a handler; thread the result through eval and client
-// construction so both steps agree on the binary and endpoint.
+// Resolve once at the top of a handler; thread the result through eval and
+// client construction so both steps agree on the binary and the connection.
+//
+// The profile name is validated here — that check is pure and cheap. Version
+// gating is not: config.Resolve gates the CLI at 0.89.0, which already implies
+// every earlier floor, and gating twice would make one call decide the binary
+// twice.
 //
 // When a forcedEndpoint is configured and no profile is requested, it is used
 // directly (this path is exercised by tests that inject a mock agent URL).
-func (s *Server) resolveCtx(profileName string) (execctx.Context, error) {
+func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Context, error) {
+	if profileName != "" {
+		if err := profile.ValidateName(profileName); err != nil {
+			return execctx.Context{}, err
+		}
+	}
 	if profileName == "" && s.forcedEndpoint != "" {
 		return execctx.Context{
-			Mode:      formaebin.Classic,
-			URL:       s.forcedEndpoint,
-			FormaeBin: s.ctxResolver.BinFor(formaebin.Classic),
+			Conn:      config.Classic{URL: s.forcedEndpoint},
+			FormaeBin: s.ctxResolver.Bin(),
 		}, nil
 	}
-	return s.ctxResolver.Resolve(profileName)
+	return s.ctxResolver.Resolve(ctx, profileName)
 }
 
-// formaeBin returns the resolved classic formae binary path. Use this in
-// handlers that need a binary path for feature-gate checks but do not yet have
-// a full execution context.
+// formaeBin returns the resolved formae binary path. Use this only in handlers
+// that plan local file edits and never reach the agent; anything that resolves
+// an execution context takes the binary from there.
 func (s *Server) formaeBin() string {
-	return s.ctxResolver.BinFor(formaebin.Classic)
+	return s.ctxResolver.Bin()
 }
 
 // Run starts the MCP server with the given transport.
@@ -299,96 +304,107 @@ func (s *Server) registerTools() {
 
 // Tool handlers — read-only
 
-func (s *Server) handleListResources(_ context.Context, _ *mcp.CallToolRequest, input tools.ListResourcesInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleListResources(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListResourcesInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListResources(input.Query)
-	if err != nil {
-		return errorResult(err), nil, nil
-	}
-	return jsonResult(result), nil, nil
-}
-
-func (s *Server) handleListStacks(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
-	if err != nil {
-		return errorResult(err), nil, nil
-	}
-	result, err := c.ListStacks()
+	result, err := c.ListResources(ctx, input.Query)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListTargets(_ context.Context, _ *mcp.CallToolRequest, input tools.ListTargetsInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleListStacks(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListTargets(input.Query)
+	result, err := c.ListStacks(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleGetCommandStatus(_ context.Context, _ *mcp.CallToolRequest, input tools.GetCommandStatusInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListTargets(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListTargetsInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ListTargets(ctx, input.Query)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(result), nil, nil
+}
+
+func (s *Server) handleGetCommandStatus(ctx context.Context, _ *mcp.CallToolRequest, input tools.GetCommandStatusInput) (*mcp.CallToolResult, any, error) {
 	if input.CommandID == "" {
 		return errorResult(fmt.Errorf("command_id is required")), nil, nil
 	}
-	c, err := s.clientFor(input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.GetCommandStatus(input.CommandID, s.clientID.Resolve(s.formaeBin()))
+	c, err := newClientFromCtx(ec)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.GetCommandStatus(ctx, input.CommandID, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListCommands(_ context.Context, _ *mcp.CallToolRequest, input tools.ListCommandsInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleListCommands(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListCommandsInput) (*mcp.CallToolResult, any, error) {
 	maxResults := input.MaxResults
 	if maxResults == "" {
 		maxResults = "10"
 	}
-	c, err := s.clientFor(input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListCommands(input.Query, maxResults, s.clientID.Resolve(s.formaeBin()))
+	c, err := newClientFromCtx(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	return jsonResult(result), nil, nil
-}
-
-func (s *Server) handleGetAgentStats(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
-	if err != nil {
-		return errorResult(err), nil, nil
-	}
-	result, err := c.GetAgentStats()
+	result, err := c.ListCommands(ctx, input.Query, maxResults, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	ctx, err := s.resolveCtx(input.Profile)
+func (s *Server) handleGetAgentStats(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c := newClientFromCtx(ctx)
-	if err := c.CheckHealth(); err != nil {
+	result, err := c.GetAgentStats(ctx)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(result), nil, nil
+}
+
+func (s *Server) handleCheckHealth(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	ec, err := s.resolveCtx(ctx, input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	c, err := newClientFromCtx(ec)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	if err := c.CheckHealth(ctx); err != nil {
 		return errorResult(err), nil, nil
 	}
 	msg := "Formae agent is healthy and reachable."
-	if notice := s.buildSkewNotice(ctx.FormaeBin, c); notice != "" {
+	if notice := s.buildSkewNotice(ctx, ec.FormaeBin, c); notice != "" {
 		msg += "\n\n" + notice
 	}
 	return textResult(msg), nil, nil
@@ -398,8 +414,8 @@ func (s *Server) handleCheckHealth(_ context.Context, _ *mcp.CallToolRequest, in
 // returns a skew notice when they differ, or "" when skew cannot be determined.
 // It never returns an error — version-skew information is advisory only.
 // The caller passes formaeBin (already resolved) to avoid a redundant resolveCtx call.
-func (s *Server) buildSkewNotice(formaeBin string, c *FormaeClient) string {
-	statsJSON, err := c.GetAgentStats()
+func (s *Server) buildSkewNotice(ctx context.Context, formaeBin string, c *FormaeClient) string {
+	statsJSON, err := c.GetAgentStats(ctx)
 	if err != nil {
 		return ""
 	}
@@ -409,33 +425,33 @@ func (s *Server) buildSkewNotice(formaeBin string, c *FormaeClient) string {
 	if err := json.Unmarshal(statsJSON, &stats); err != nil || stats.Version == "" {
 		return ""
 	}
-	localVer, err := featuregate.Detect(formaeBin)
+	localVer, err := featuregate.DetectContext(ctx, formaeBin)
 	if err != nil {
 		return ""
 	}
 	return skewNotice(stats.Version, localVer)
 }
 
-func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleListPolicies(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListPolicies()
+	result, err := c.ListPolicies(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleListChangesSinceLastReconcile(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 
 	if input.Stack != "" {
-		result, err := c.ListChangesSinceLastReconcile(input.Stack)
+		result, err := c.ListChangesSinceLastReconcile(ctx, input.Stack)
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -443,7 +459,7 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	}
 
 	// No stack specified: fetch all stacks, then get drift for each
-	stacksJSON, err := c.ListStacks()
+	stacksJSON, err := c.ListStacks(ctx)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to list stacks: %w", err)), nil, nil
 	}
@@ -462,7 +478,7 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	var results []stackDrift
 
 	for _, stack := range stacks {
-		driftJSON, err := c.ListChangesSinceLastReconcile(stack.Label)
+		driftJSON, err := c.ListChangesSinceLastReconcile(ctx, stack.Label)
 		if err != nil {
 			return errorResult(fmt.Errorf("failed to get drift for stack %s: %w", stack.Label, err)), nil, nil
 		}
@@ -488,23 +504,14 @@ func (s *Server) handleListChangesSinceLastReconcile(_ context.Context, _ *mcp.C
 	return jsonResult(aggregated), nil, nil
 }
 
-func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolRequest, input tools.ExtractResourcesInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequest, input tools.ExtractResourcesInput) (*mcp.CallToolResult, any, error) {
 	if input.Query == "" {
 		return errorResult(fmt.Errorf("query is required")), nil, nil
 	}
-	ctx, err := s.resolveCtx(input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
-			return errorResult(err), nil, nil
-		}
-		if err := profile.ValidateName(input.Profile); err != nil {
-			return errorResult(err), nil, nil
-		}
-	}
-
 	tmpDir, err := os.MkdirTemp("", "formae-extract-*")
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to create temp directory: %w", err)), nil, nil
@@ -513,11 +520,14 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 
 	outFile := tmpDir + "/extracted.pkl"
 	args := []string{"extract", "--query", input.Query, "--yes"}
-	if input.Profile != "" {
-		args = append(args, "--profile", input.Profile)
+	// Pin the profile the context resolved, not the global active pointer: that
+	// pointer is shared with the user's CLI and other sessions and can move
+	// between the two invocations this call makes.
+	if ec.ProfileName != "" {
+		args = append(args, "--profile", ec.ProfileName)
 	}
 	args = append(args, outFile)
-	cmd := exec.Command(ctx.FormaeBin, args...)
+	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output))), nil, nil
 	}
@@ -527,7 +537,11 @@ func (s *Server) handleExtractResources(_ context.Context, _ *mcp.CallToolReques
 		return errorResult(fmt.Errorf("failed to read extracted file: %w", err)), nil, nil
 	}
 
-	return withNotice(textResult(string(content)), s.buildSkewNotice(ctx.FormaeBin, newClientFromCtx(ctx))), nil, nil
+	notice := ""
+	if c, cerr := newClientFromCtx(ec); cerr == nil {
+		notice = s.buildSkewNotice(ctx, ec.FormaeBin, c)
+	}
+	return withNotice(textResult(string(content)), notice), nil, nil
 }
 
 func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
@@ -592,7 +606,7 @@ func (s *Server) handleGetPluginExample(_ context.Context, _ *mcp.CallToolReques
 
 // Tool handlers — mutations
 
-func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, input tools.ApplyFormaInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, input tools.ApplyFormaInput) (*mcp.CallToolResult, any, error) {
 	if input.FilePath == "" {
 		return errorResult(fmt.Errorf("file_path is required")), nil, nil
 	}
@@ -602,129 +616,121 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	if input.Mode != "reconcile" && input.Mode != "patch" {
 		return errorResult(fmt.Errorf("mode must be 'reconcile' or 'patch', got '%s'", input.Mode)), nil, nil
 	}
-	ctx, err := s.resolveCtx(input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
-			return errorResult(err), nil, nil
-		}
-		if err := profile.ValidateName(input.Profile); err != nil {
-			return errorResult(err), nil, nil
-		}
-	}
-
-	formaJSON, err := evalFormaFile(ctx, input.FilePath)
+	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	c := newClientFromCtx(ctx)
-	result, err := c.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, s.clientID.Resolve(ctx.FormaeBin))
+	c, err := newClientFromCtx(ec)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	return withNotice(jsonResult(result), s.buildSkewNotice(ctx.FormaeBin, c)), nil, nil
+	result, err := c.SubmitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, s.clientID.Resolve(ec.FormaeBin))
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return withNotice(jsonResult(result), s.buildSkewNotice(ctx, ec.FormaeBin, c)), nil, nil
 }
 
-func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
 	if input.FilePath == "" && input.Query == "" {
 		return errorResult(fmt.Errorf("either file_path or query is required")), nil, nil
 	}
 	if input.FilePath != "" && input.Query != "" {
 		return errorResult(fmt.Errorf("file_path and query are mutually exclusive")), nil, nil
 	}
-	ctx, err := s.resolveCtx(input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if input.Profile != "" {
-		if err := featuregate.GuardFeature(featuregate.FeatureProfile, ctx.FormaeBin); err != nil {
-			return errorResult(err), nil, nil
-		}
-		if err := profile.ValidateName(input.Profile); err != nil {
-			return errorResult(err), nil, nil
-		}
+	c, err := newClientFromCtx(ec)
+	if err != nil {
+		return errorResult(err), nil, nil
 	}
 
-	c := newClientFromCtx(ctx)
-
 	if input.Query != "" {
-		result, err := c.DestroyByQuery(input.Query, input.Simulate, s.clientID.Resolve(ctx.FormaeBin))
+		result, err := c.DestroyByQuery(ctx, input.Query, input.Simulate, s.clientID.Resolve(ec.FormaeBin))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
 		return jsonResult(result), nil, nil
 	}
 
-	formaJSON, err := evalFormaFile(ctx, input.FilePath)
+	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
 	if err != nil {
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	result, err := c.SubmitCommand("destroy", "", input.Simulate, false, formaJSON, s.clientID.Resolve(ctx.FormaeBin))
+	result, err := c.SubmitCommand(ctx, "destroy", "", input.Simulate, false, formaJSON, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleCancelCommands(_ context.Context, _ *mcp.CallToolRequest, input tools.CancelCommandsInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleCancelCommands(ctx context.Context, _ *mcp.CallToolRequest, input tools.CancelCommandsInput) (*mcp.CallToolResult, any, error) {
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.CancelCommands(input.Query, s.clientID.Resolve(s.formaeBin()))
+	c, err := newClientFromCtx(ec)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.CancelCommands(ctx, input.Query, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleForceSync(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleForceSync(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := c.ForceSync(); err != nil {
+	if err := c.ForceSync(ctx); err != nil {
 		return errorResult(err), nil, nil
 	}
 	return textResult("Resource synchronization triggered successfully."), nil, nil
 }
 
-func (s *Server) handleForceDiscover(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleForceDiscover(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := c.ForceDiscover(); err != nil {
+	if err := c.ForceDiscover(ctx); err != nil {
 		return errorResult(err), nil, nil
 	}
 	return textResult("Resource discovery triggered successfully."), nil, nil
 }
 
-func (s *Server) handleForceCheckTTL(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(input.Profile)
+func (s *Server) handleForceCheckTTL(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ForceCheckTTL()
+	result, err := c.ForceCheckTTL(ctx)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
 	return jsonResult(result), nil, nil
 }
 
-func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolRequest, input tools.ForceReconcileStackInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleForceReconcileStack(ctx context.Context, _ *mcp.CallToolRequest, input tools.ForceReconcileStackInput) (*mcp.CallToolResult, any, error) {
 	if input.Stack == "" {
 		return errorResult(fmt.Errorf("stack is required")), nil, nil
 	}
-	c, err := s.clientFor(input.Profile)
+	c, err := s.clientFor(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	body, _, err := c.ForceReconcileStack(input.Stack)
+	body, _, err := c.ForceReconcileStack(ctx, input.Stack)
 	if err != nil {
 		if body != nil {
 			return errorResult(fmt.Errorf("%s: %s", err.Error(), string(body))), nil, nil
@@ -736,12 +742,18 @@ func (s *Server) handleForceReconcileStack(_ context.Context, _ *mcp.CallToolReq
 
 // Helpers
 
-func evalFormaFile(ctx execctx.Context, filePath string) ([]byte, error) {
+func evalFormaFile(ctx context.Context, ec execctx.Context, filePath string) ([]byte, error) {
 	if strings.HasSuffix(filePath, ".json") {
 		return os.ReadFile(filePath)
 	}
 
-	cmd := exec.Command(ctx.FormaeBin, "eval", filePath, "--output-schema", "json", "--output-consumer", "machine")
+	args := []string{"eval", filePath, "--output-schema", "json", "--output-consumer", "machine"}
+	// Same reason as extract: the active pointer can move between the two
+	// invocations one call makes, so name the profile the context resolved.
+	if ec.ProfileName != "" {
+		args = append(args, "--profile", ec.ProfileName)
+	}
+	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -751,6 +763,22 @@ func evalFormaFile(ctx execctx.Context, filePath string) ([]byte, error) {
 	}
 
 	return output, nil
+}
+
+// commandWithContext builds a subprocess bound to ctx, in its own process
+// group. Cancelling exec.CommandContext stops only the immediate child, and
+// formae spawns plugin children that hold the output pipe open, so the call
+// would go on waiting for them.
+func commandWithContext(ctx context.Context, bin string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return nil
+	}
+	return cmd
 }
 
 // withNotice appends notice as a separate text content block to res when notice

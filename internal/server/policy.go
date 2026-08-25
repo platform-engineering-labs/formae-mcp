@@ -23,7 +23,7 @@ func currentEvalFunc(bin string) EvalFunc {
 	return makeFormaeEval(bin)
 }
 
-func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.CreateInlinePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleCreateInlinePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.CreateInlinePolicyInput) (*mcp.CallToolResult, any, error) {
 	if err := validateCreateInlinePolicyInput(input); err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -51,7 +51,7 @@ func (s *Server) handleCreateInlinePolicy(_ context.Context, _ *mcp.CallToolRequ
 	// policies known from the agent" and the source check still runs.
 	var inventory []policyInventoryItem
 	if input.Operation == "set" {
-		if items, err := s.fetchPolicies(); err == nil {
+		if items, err := s.fetchPolicies(ctx); err == nil {
 			inventory = items
 		}
 		for _, item := range inventory {
