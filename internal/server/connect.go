@@ -214,14 +214,20 @@ func describeConnectFailure(code string) string {
 }
 
 // registeredDoc is what a registration reports.
+// registeredDoc is the producer's "registered" document. Each cloud carries
+// exactly its own trust coordinate and omits the others, so which field is
+// populated follows from Cloud rather than from whichever happens to be
+// non-empty.
 type registeredDoc struct {
-	SchemaVersion int      `json:"schemaVersion"`
-	Phase         string   `json:"phase"`
-	Status        string   `json:"status"`
-	Cloud         string   `json:"cloud"`
-	Account       string   `json:"account"`
-	RoleArn       string   `json:"roleArn"`
-	Warnings      []string `json:"warnings"`
+	SchemaVersion int    `json:"schemaVersion"`
+	Phase         string `json:"phase"`
+	Status        string `json:"status"`
+	Cloud         string `json:"cloud"`
+	Account       string `json:"account"`
+	RoleArn       string `json:"roleArn"`
+	// WorkloadIdentityProvider is the GCP coordinate.
+	WorkloadIdentityProvider string   `json:"workloadIdentityProvider"`
+	Warnings                 []string `json:"warnings"`
 }
 
 // handleRegisterCloudRole records the role an applied stack produced.
