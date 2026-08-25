@@ -159,6 +159,14 @@ var connectFailureDescriptions = map[string]string{
 	"login_failed":           "signing in failed",
 	"sync_incomplete":        "you are signed in, but formae could not bring the hosted profiles up to date",
 	"internal":               "formae could not complete this connect operation",
+
+	// GCP. credentials_required carries the command to run in its details, and
+	// a description that did not name it would leave the caller with a refusal
+	// and no remedy.
+	"credentials_required": "no usable Google Cloud credentials on this machine; run `gcloud auth application-default login` and try again",
+	"gcloud_missing":       "the gcloud CLI is needed to sign in to Google Cloud and is not installed; install it from https://cloud.google.com/sdk/docs/install and try again",
+	"project_unreachable":  "that GCP project could not be read with these credentials; check the project id, and that this account can see it. Signing in again will not help: it returns the same account",
+	"api_disabled":         "a Google API this connection needs is not enabled on that project; enable it and try again",
 }
 
 // connectFailureView is the envelope the producer emits on stdout when a
