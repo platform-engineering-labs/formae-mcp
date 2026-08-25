@@ -192,7 +192,8 @@ Queries use field:value pairs separated by spaces. Multiple pairs are AND-combin
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | id | string | Command ID | id:abc123 |
-| client | string | Client ID | client:me |
+| client | string | Client ID (this MCP server, not the human) | client:me |
+| user | string | User (human); 'me' resolves to the bearer token's subject, a UUID matches the subject id, anything else matches the display name | user:me |
 | command | string | Command type | command:apply |
 | status | string | Command state | status:in_progress |
 | stack | string | Stack name | stack:production |
@@ -204,6 +205,8 @@ Queries use field:value pairs separated by spaces. Multiple pairs are AND-combin
 - S3 buckets in production: type:AWS::S3::Bucket stack:production
 - Failed commands: status:failed
 - Running commands: status:in_progress
+- Commands sent by formae-mcp itself: client:me
+- Commands from the human on the other end of this session: user:me
 `
 
 const conceptsDoc = `# Formae Core Concepts

@@ -46,7 +46,8 @@ Use this tool when the user asks about running commands, recent deployments, com
 
 Query syntax uses field:value pairs. Supported fields:
 - id: filter by command ID
-- client: filter by client ('client:me' for this session's commands)
+- client: filter by client ('client:me' for this session's commands — this MCP server's own Client-ID, not the human)
+- user: filter by user ('user:me' for the human behind the request's bearer token; a UUID matches the subject id, anything else matches the display name)
 - command: filter by type ('command:apply' or 'command:destroy')
 - status: filter by state ('status:in_progress', 'status:completed', 'status:failed')
 - stack: filter by stack name
