@@ -138,3 +138,28 @@ func TestConnectGcpProject_RefusesADocumentItCannotIdentify(t *testing.T) {
 		t.Errorf("an unidentifiable document was rendered as success: %s", resultText(res))
 	}
 }
+
+// TestGcpFailureCodesCarryARemedy guards the map that translates producer
+// codes for the user.
+//
+// It exists because the integration test found the gap the hard way: the CLI
+// grew four GCP codes, this map did not, and a run with no credentials
+// reported "formae connect failed (credentials_required)" — a refusal with no
+// remedy, when the remedy is one command the producer already names.
+func TestGcpFailureCodesCarryARemedy(t *testing.T) {
+	for _, code := range []string{"credentials_required", "gcloud_missing", "project_unreachable", "api_disabled"} {
+		desc, ok := connectFailureDescriptions[code]
+		if !ok {
+			t.Errorf("%s has no description, so the user sees a bare code", code)
+			continue
+		}
+		if desc == "" {
+			t.Errorf("%s has an empty description", code)
+		}
+	}
+	// The one whose remedy is a command has to name it: that is the whole
+	// point of describing it rather than passing the code through.
+	if got := connectFailureDescriptions["credentials_required"]; !strings.Contains(got, "gcloud auth application-default login") {
+		t.Errorf("credentials_required does not name the command to run: %q", got)
+	}
+}
