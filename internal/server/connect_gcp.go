@@ -24,6 +24,16 @@ func (s *Server) handleConnectGcpProject(ctx context.Context, _ *mcp.CallToolReq
 	args := []string{
 		"connect", "gcp", "--project", input.Project,
 		"--no-input", "--output-consumer", "machine", "--output-schema", "json",
+		// The operator is sitting in front of this server: it runs on their
+		// own machine, started by their own agent session. So it opts into the
+		// Google sign-in, which opens a browser they can complete.
+		//
+		// --no-input still applies and still means what it says: no terminal
+		// prompt this server would have to answer. The two are separate
+		// questions, and without saying so explicitly the sign-in was
+		// unreachable from here and every operator was handed a command to run
+		// by hand.
+		"--allow-login",
 	}
 	// Register-only exists for an operator who provisioned federation
 	// themselves and will not hand a CLI provisioning rights. It validates the

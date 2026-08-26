@@ -56,6 +56,13 @@ func TestConnectGcpProject_ReportsTheProjectAndProvider(t *testing.T) {
 	if !strings.Contains(gotArgv, "--project") {
 		t.Errorf("argv does not carry --project: %s", gotArgv)
 	}
+	// The sign-in has to be reachable from here. Without the opt-in, machine
+	// output is read as "nobody is present" and the operator is handed a
+	// command to run by hand instead.
+	if !strings.Contains(gotArgv, "--allow-login") {
+		t.Errorf("argv does not carry --allow-login, so a missing credential would "+
+			"be reported instead of signed in: %s", gotArgv)
+	}
 	if strings.Contains(gotArgv, "--workload-identity-provider") {
 		t.Errorf("the default path passed --workload-identity-provider, so it registered "+
 			"instead of provisioning: %s", gotArgv)
