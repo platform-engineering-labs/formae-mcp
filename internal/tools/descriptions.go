@@ -335,6 +335,9 @@ const ConnectGcpProjectDescription = "Connect a GCP project to the active instal
 	"grants formae broad access to the project (editor plus the ability to manage the project's IAM), so make sure " +
 	"the user means this project before calling. If no usable Google credentials are on the machine, formae signs " +
 	"the user in first by running `gcloud auth application-default login`, which opens a browser; tell them to " +
-	"expect it. If gcloud is not installed the call fails saying so, and the user must install it. Ask the user " +
+	"expect it. If gcloud is not installed the call fails saying so; the user installs it and you call this tool " +
+	"again, and the sign-in happens then - do NOT tell them to run a gcloud login themselves, and do not offer to " +
+	"run one for them. If a freshly installed gcloud still reads as missing, their session needs restarting so the " +
+	"new PATH is seen. Ask the user " +
 	"for the project id and never infer it from gcloud's active configuration. Reporting that the project was " +
 	"already connected with the same federation is SUCCESS, not a conflict."
