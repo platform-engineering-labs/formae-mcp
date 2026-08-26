@@ -6,13 +6,40 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/clientid"
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 )
+
+// withClientIDFile points HOME at a temp dir holding a formae CLI client ID
+// file, so a test can assert that ID is the one threaded into the Client-ID
+// header. Returns the ID.
+func withClientIDFile(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	idDir := filepath.Join(dir, ".pel", "formae")
+	if err := os.MkdirAll(idDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const id = "2N3x8aQdLmVp0rGhTzYwBcKfJe1"
+	if err := os.WriteFile(filepath.Join(idDir, "cli_client_id"), []byte(id+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+	return id
+}
+
+// withoutClientIDFile points HOME at an empty temp dir, so a test can assert
+// the Client-ID header falls back to clientid.Fallback.
+func withoutClientIDFile(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+}
 
 // mockAgent creates a test HTTP server that simulates the formae agent.
 // The handler map keys are "METHOD /path" strings.
@@ -265,8 +292,11 @@ func TestGetAgentStats(t *testing.T) {
 }
 
 func TestGetCommandStatus(t *testing.T) {
+	wantID := withClientIDFile(t)
+	var gotClientID string
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/commands/status": func(w http.ResponseWriter, r *http.Request) {
+			gotClientID = r.Header.Get("Client-ID")
 			id := r.URL.Query().Get("id")
 			if id == "cmd-123" {
 				_, _ = fmt.Fprint(w, `{"id":"cmd-123","status":"completed"}`)
@@ -290,6 +320,9 @@ func TestGetCommandStatus(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("expected success, got error: %s", textContent(t, result))
 		}
+		if gotClientID != wantID {
+			t.Fatalf("Client-ID header = %q, want %q", gotClientID, wantID)
+		}
 	})
 
 	t.Run("missing command_id rejected by schema", func(t *testing.T) {
@@ -303,8 +336,11 @@ func TestGetCommandStatus(t *testing.T) {
 }
 
 func TestListCommands(t *testing.T) {
+	wantID := withClientIDFile(t)
+	var gotClientID string
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/commands/status": func(w http.ResponseWriter, r *http.Request) {
+			gotClientID = r.Header.Get("Client-ID")
 			_, _ = fmt.Fprint(w, `{"Commands":[{"id":"cmd-1","status":"completed"}]}`)
 		},
 	})
@@ -320,13 +356,49 @@ func TestListCommands(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("expected success, got error: %s", textContent(t, result))
 	}
+	if gotClientID != wantID {
+		t.Fatalf("Client-ID header = %q, want %q", gotClientID, wantID)
+	}
+}
+
+// TestListCommands_ClientIDFallsBackWithoutCLIFile covers all six call sites
+// via one representative endpoint: when the CLI hasn't written its client ID
+// file, the MCP still sends the historical "formae-mcp" literal rather than
+// failing the command.
+func TestListCommands_ClientIDFallsBackWithoutCLIFile(t *testing.T) {
+	withoutClientIDFile(t)
+	var gotClientID string
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/commands/status": func(w http.ResponseWriter, r *http.Request) {
+			gotClientID = r.Header.Get("Client-ID")
+			_, _ = fmt.Fprint(w, `{"Commands":[]}`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_commands",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	if gotClientID != clientid.Fallback {
+		t.Fatalf("Client-ID header = %q, want fallback %q", gotClientID, clientid.Fallback)
+	}
 }
 
 // --- Mutation tool tests ---
 
 func TestCancelCommands(t *testing.T) {
+	wantID := withClientIDFile(t)
+	var gotClientID string
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/commands/cancel": func(w http.ResponseWriter, r *http.Request) {
+			gotClientID = r.Header.Get("Client-ID")
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = fmt.Fprint(w, `{"CommandIds":["cmd-1"]}`)
 		},
@@ -342,6 +414,9 @@ func TestCancelCommands(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	if gotClientID != wantID {
+		t.Fatalf("Client-ID header = %q, want %q", gotClientID, wantID)
 	}
 }
 
@@ -517,8 +592,11 @@ func TestApplyForma_InvalidMode(t *testing.T) {
 }
 
 func TestApplyForma_JSONFile(t *testing.T) {
+	wantID := withClientIDFile(t)
+	var gotClientID string
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/commands": func(w http.ResponseWriter, r *http.Request) {
+			gotClientID = r.Header.Get("Client-ID")
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = fmt.Fprint(w, `{"id":"cmd-apply-1","status":"pending"}`)
 		},
@@ -545,6 +623,9 @@ func TestApplyForma_JSONFile(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	if gotClientID != wantID {
+		t.Fatalf("Client-ID header = %q, want %q", gotClientID, wantID)
 	}
 }
 
@@ -579,8 +660,11 @@ func TestDestroyForma_BothInputsProvided(t *testing.T) {
 }
 
 func TestDestroyForma_ByQuery(t *testing.T) {
+	wantID := withClientIDFile(t)
+	var gotClientID string
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"POST /api/v1/commands": func(w http.ResponseWriter, r *http.Request) {
+			gotClientID = r.Header.Get("Client-ID")
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = fmt.Fprint(w, `{"id":"cmd-destroy-1","status":"pending"}`)
 		},
@@ -600,6 +684,9 @@ func TestDestroyForma_ByQuery(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	if gotClientID != wantID {
+		t.Fatalf("Client-ID header = %q, want %q", gotClientID, wantID)
 	}
 }
 
