@@ -192,6 +192,14 @@ Ask for the directory to create the project in, proposing the current
 directory by name as the default — the same thing `git init`, `npm init`,
 and `cargo init` do.
 
+**Unless the current directory is `/` or the user's home directory itself.**
+Neither is a place to scatter a project's three files, and a harness that
+started in one chose it for the user rather than the user choosing it — which
+is what separates this from `git init`, where they cd'd there and typed the
+command. Propose `~/<label>` in that case, reusing the target label they gave
+a moment ago rather than asking a second naming question. They can still name
+any path instead.
+
 **If that directory already contains a `PklProject`, say so and stop.** This
 flow creates a fresh project; it does not merge into an existing one. Then go
 to step 7.
