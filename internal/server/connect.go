@@ -179,6 +179,44 @@ type connectFailureView struct {
 	// failure quotes profile source lines, which for a classic profile can hold
 	// an inline password.
 	Message string `json:"message"`
+	// Details are relayed, unlike Message, but only the keys a code declares in
+	// relayedFailureDetails. Each is a value the producer chose under a key it
+	// declared, which is what makes a named key from a named code safe where
+	// the whole message is not.
+	Details map[string]string `json:"details"`
+}
+
+// relayedFailureDetails names, per code, the detail keys this build passes
+// through to the caller, in the order they are shown.
+//
+// An allowlist rather than a passthrough. The producer may attach anything it
+// likes to any failure, and a blanket relay would make every future detail on
+// every future code a disclosure decision nobody made. Adding a key here is
+// that decision, taken once and reviewable.
+//
+// credentials_required is the case that forced this. Where a browser cannot be
+// opened, gcloud prints a sign-in URL and waits for a verification code on a
+// stdin that is /dev/null under this server, so the run fails having already
+// printed the only thing that would let the operator finish. Dropping it left
+// the caller with a canned instruction to run a command that fails the same
+// way.
+var relayedFailureDetails = map[string][]string{
+	"credentials_required": {"output"},
+	"gcloud_missing":       {"output"},
+}
+
+// withRelayedDetails appends a code's declared detail keys to its description.
+func withRelayedDetails(desc string, v connectFailureView) string {
+	var parts []string
+	for _, key := range relayedFailureDetails[v.Code] {
+		if val := strings.TrimSpace(v.Details[key]); val != "" {
+			parts = append(parts, val)
+		}
+	}
+	if len(parts) == 0 {
+		return desc
+	}
+	return desc + "\n\n" + strings.Join(parts, "\n\n")
 }
 
 // decodeConnectFailure turns a non-zero exit into an error the caller can act
@@ -203,7 +241,7 @@ func decodeConnectFailure(stdout []byte, exitStatus int) error {
 		return unreadable
 	}
 	if desc, ok := connectFailureDescriptions[v.Code]; ok {
-		return errors.New(desc)
+		return errors.New(withRelayedDetails(desc, v))
 	}
 	// An envelope this build has no prose for still names its code. The code is
 	// ours; the message is the producer's and never crosses.

@@ -170,3 +170,70 @@ func TestGcpFailureCodesCarryARemedy(t *testing.T) {
 		t.Errorf("credentials_required does not name the command to run: %q", got)
 	}
 }
+
+// A sign-in that could not finish must reach the caller with the URL gcloud
+// printed, because that is the only way to complete it.
+//
+// The producer's own message is withheld deliberately - it is built from
+// plugin error strings and a Pkl failure quotes profile source, which for a
+// classic profile can hold an inline password. Details are different: each is
+// a value the producer chose under a key it declared, so a named key from a
+// named code is safe to relay where the whole message is not.
+//
+// Without this the headless case is a dead end. formae runs gcloud, gcloud
+// cannot open a browser, so it prints a URL and waits for a code on a stdin
+// that is /dev/null; the run fails having printed the one thing that would
+// have let the operator finish, and this build then replaced it with a canned
+// line telling them to run the command they cannot complete either.
+func TestCredentialsRequiredCarriesTheSignInURL(t *testing.T) {
+	const url = "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=764086051850-x.apps.googleusercontent.com"
+	envelope := `{"schemaVersion":1,"code":"credentials_required",` +
+		`"message":"the Google Cloud sign-in did not complete; what gcloud reported is in the details",` +
+		`"details":{"command":"gcloud auth application-default login",` +
+		`"output":"Go to the following link in your browser:\n\n    ` + url + `\n"}}`
+
+	err := decodeConnectFailure([]byte(envelope), 1)
+	if err == nil {
+		t.Fatal("a failure envelope must produce an error")
+	}
+	got := err.Error()
+
+	if !strings.Contains(got, url) {
+		t.Errorf("the sign-in URL did not reach the caller:\n%s", got)
+	}
+	if !strings.Contains(got, "gcloud auth application-default login") {
+		t.Errorf("the remedy command was lost:\n%s", got)
+	}
+	// The producer's message stays withheld: relaying details is not a licence
+	// to relay prose.
+	if strings.Contains(got, "what gcloud reported is in the details") {
+		t.Errorf("the producer's message crossed, which it must never do:\n%s", got)
+	}
+}
+
+// Details are relayed by an allowlist, not wholesale. A code that declares no
+// safe keys carries none, so a producer that starts attaching something
+// sensitive to an unrelated failure cannot leak it through this path.
+func TestUnlistedDetailsAreNotRelayed(t *testing.T) {
+	envelope := `{"schemaVersion":1,"code":"auth_failed",` +
+		`"message":"whatever",` +
+		`"details":{"output":"tokens and other things nobody asked to see"}}`
+
+	got := decodeConnectFailure([]byte(envelope), 1).Error()
+	if strings.Contains(got, "nobody asked to see") {
+		t.Errorf("details crossed for a code that declares none:\n%s", got)
+	}
+	if got != connectFailureDescriptions["auth_failed"] {
+		t.Errorf("description changed: %q", got)
+	}
+}
+
+// An envelope with no details at all still reads as it always did, so the
+// common failure is not padded with an empty section.
+func TestFailureWithoutDetailsIsUnchanged(t *testing.T) {
+	envelope := `{"schemaVersion":1,"code":"credentials_required","message":"x"}`
+	got := decodeConnectFailure([]byte(envelope), 1).Error()
+	if got != connectFailureDescriptions["credentials_required"] {
+		t.Errorf("a detail-less failure changed shape: %q", got)
+	}
+}
