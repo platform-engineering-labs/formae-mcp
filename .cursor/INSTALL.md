@@ -4,8 +4,21 @@
 
 - Go 1.25+
 - Git
-- A running formae agent (`formae agent start`)
 - Cursor 2.4 or later, which is where Agent Skills arrived
+- **formae itself**, which this path does not install for you. The Claude Code
+  plugin provisions formae and the `oidc` auth plugin behind the scenes;
+  `go install` provides neither. Install formae from the package manager:
+
+  ```bash
+  bash -c "$(curl -fsSL https://hub.platform.engineering/get/setup.sh)" -- install --yes formae
+  ```
+
+  Add `oidc` the same way if you use hosted formae — a hosted sign-in has no
+  auth plugin to drive without it, and says so rather than failing obscurely:
+
+  ```bash
+  bash -c "$(curl -fsSL https://hub.platform.engineering/get/setup.sh)" -- install --yes oidc
+  ```
 
 ## Installation
 
@@ -49,11 +62,33 @@
 
    Cursor has no CLI for this; the file (or Settings) is the way in.
 
-   `formae-mcp` must be resolvable on your `PATH` (`go install` puts it in
-   `$(go env GOPATH)/bin`). Cursor is launched from a desktop session rather
-   than your shell, so its `PATH` is often narrower than the one you see in a
-   terminal — if the server fails to start, use the absolute path instead of
-   the bare name (run `go env GOPATH`, then point at `<gopath>/bin/formae-mcp`).
+   **Both paths matter, and they fail differently.** Cursor is launched from a
+   desktop session rather than your shell, so its `PATH` is usually narrower
+   than the one you see in a terminal.
+
+   `formae-mcp` not being found means the server never starts, which Cursor
+   shows plainly. Give it an absolute path (`go install` puts the binary in
+   `$(go env GOBIN)`, falling back to `$(go env GOPATH)/bin` — check both,
+   since a Go managed by a version manager often sets `GOBIN`).
+
+   `formae` not being found is the one that misleads, because it is not caught
+   at startup: the server registers, lists every tool, and looks healthy, and
+   then each tool call fails with `exec: "formae": executable file not found in
+   $PATH`. Resolution is lazy, per call. Name the binary explicitly so a narrow
+   `PATH` cannot reach it:
+
+   ```json
+   {
+     "mcpServers": {
+       "formae": {
+         "command": "/absolute/path/to/formae-mcp",
+         "env": {
+           "FORMAE_BIN": "/opt/pel/bin/formae"
+         }
+       }
+     }
+   }
+   ```
 
 5. Restart Cursor.
 
