@@ -57,6 +57,10 @@ See [.codex/INSTALL.md](.codex/INSTALL.md) for Codex-specific installation instr
 
 See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installation instructions.
 
+### Cursor
+
+See [.cursor/INSTALL.md](.cursor/INSTALL.md) for Cursor-specific installation instructions.
+
 ## Migration from `formae-mcp`
 
 The plugin was previously distributed under the name `formae-mcp`. If you installed it under that name, re-add it under the new name `formae`:
