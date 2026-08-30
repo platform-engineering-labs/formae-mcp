@@ -430,8 +430,8 @@ Then offer the next step:
 They can also do this from a terminal: `formae connect aws --account <id>` for
 the console-link path, `formae connect gcp --project <id>` for GCP, or
 `formae connect azure --subscription <id>` for Azure. All three walk the same
-flow interactively — and for Azure, `formae connect azure --tenant-id ...
---client-id ...` is the credential-less path named in step 2A.
+flow interactively — and for Azure, `formae connect azure --subscription <id>
+--tenant-id ... --client-id ...` is the credential-less path named in step 2A.
 
 **That command is for the user, never for you.** Do not run it, and do not
 offer to. It is interactive and it provisions real cloud trust; run from a

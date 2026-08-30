@@ -362,5 +362,5 @@ const ConnectAzureSubscriptionDescription = "Connect an Azure subscription to th
 	"subscription id and never infer it from ambient credentials or az's active configuration. Reporting that the " +
 	"subscription was already connected with the same identity is SUCCESS, not a conflict. There is no " +
 	"register-only path through this tool: an operator who will not give it provisioning credentials deploys the " +
-	"ARM template themselves and runs `formae connect azure --tenant-id ... --client-id ...` in their own " +
-	"terminal - that command is for the user, never for you."
+	"ARM template themselves and runs `formae connect azure --subscription ... --tenant-id ... --client-id ...` " +
+	"in their own terminal - that command is for the user, never for you."
