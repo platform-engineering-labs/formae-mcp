@@ -356,7 +356,12 @@ func decodeRegisteredDoc(out []byte) (registeredDoc, error) {
 	return doc, nil
 }
 
-// renderRegistered reports what the registration did.
+// renderRegisteredDoc reports what a registration did, worded for one cloud.
+// noun is what was connected ("account", "project", "subscription");
+// alreadyHas is what an idempotent re-run says it already shares ("the same
+// role", "the same federation", "the same identity"); coordinates are
+// pre-formatted "Label: value" lines — one for AWS and GCP, two for Azure,
+// because neither of its two identifies the trust on its own.
 //
 // It states the fact and stops. There is no verified state to be waiting for:
 // the declared-to-verified lifecycle was cut rather than deferred, and the
@@ -364,18 +369,26 @@ func decodeRegisteredDoc(out []byte) (registeredDoc, error) {
 // happens — a command that cannot assume the role fails loudly and the agent
 // logs say why — which tells the user everything a verified stamp would, at the
 // moment it matters.
-func renderRegistered(d registeredDoc) string {
+func renderRegisteredDoc(d registeredDoc, noun, alreadyHas string, coordinates ...string) string {
 	var b strings.Builder
 	if d.Status == statusAlreadyRegistered {
-		fmt.Fprintf(&b, "Account %s was already connected to this installation with the same role.\n", d.Account)
+		title := strings.ToUpper(noun[:1]) + noun[1:]
+		fmt.Fprintf(&b, "%s %s was already connected to this installation with %s.\n", title, d.Account, alreadyHas)
 	} else {
-		fmt.Fprintf(&b, "Connected account %s.\n", d.Account)
+		fmt.Fprintf(&b, "Connected %s %s.\n", noun, d.Account)
 	}
-	fmt.Fprintf(&b, "Role: %s\n", d.RoleArn)
-	for _, w := range d.Warnings {
-		fmt.Fprintf(&b, "\nWarning: %s\n", w)
+	for _, c := range coordinates {
+		fmt.Fprintf(&b, "%s\n", c)
+	}
+	for _, warning := range d.Warnings {
+		fmt.Fprintf(&b, "\nWarning: %s\n", warning)
 	}
 	return b.String()
+}
+
+// renderRegistered reports what an AWS registration did.
+func renderRegistered(d registeredDoc) string {
+	return renderRegisteredDoc(d, "account", "the same role", "Role: "+d.RoleArn)
 }
 
 // cloudConnection is one registered row in a connections listing. RoleArn is

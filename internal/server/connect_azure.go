@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -53,23 +51,10 @@ func (s *Server) handleConnectAzureSubscription(ctx context.Context, _ *mcp.Call
 	return textResult(renderAzureRegistered(doc)), nil, nil
 }
 
-// renderAzureRegistered reports what the registration did, naming the
-// coordinate Azure actually carries.
-//
-// renderRegistered cannot be reused: it prints "Role: <arn>", and an Azure
-// document has no role. Printing an empty one would invite the reader to
-// believe in a value that never existed.
+// renderAzureRegistered reports what the registration did, naming the two
+// coordinates Azure actually carries: it has no role, so renderRegistered's
+// wording cannot be reused as-is.
 func renderAzureRegistered(d registeredDoc) string {
-	var b strings.Builder
-	if d.Status == statusAlreadyRegistered {
-		fmt.Fprintf(&b, "Subscription %s was already connected to this installation with the same identity.\n", d.Account)
-	} else {
-		fmt.Fprintf(&b, "Connected subscription %s.\n", d.Account)
-	}
-	fmt.Fprintf(&b, "Tenant: %s\n", d.AzureTenantID)
-	fmt.Fprintf(&b, "Client id: %s\n", d.AzureClientID)
-	for _, w := range d.Warnings {
-		fmt.Fprintf(&b, "\nWarning: %s\n", w)
-	}
-	return b.String()
+	return renderRegisteredDoc(d, "subscription", "the same identity",
+		"Tenant: "+d.AzureTenantID, "Client id: "+d.AzureClientID)
 }
