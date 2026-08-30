@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -19,6 +20,11 @@ import (
 // rendered string alone would miss a schema-generation error the same way
 // checking an object built in memory would: the whole point is to catch a
 // class or field renamed out from under the template before a real user does.
+//
+// Needs two environment variables to actually run - see
+// resolveAzureTargetSchemaPaths - because the schema checkouts it evaluates
+// against are private, developer-machine state that must never be written
+// down as a path or a branch name in this public repo.
 
 // azureTargetVarsSpec is what the skill's Azure vars.pkl template fills in
 // from the registration and the user's own answers.
@@ -29,71 +35,124 @@ type azureTargetVarsSpec struct {
 	ClientID       string
 }
 
-// renderAzureTargetVarsPKL renders the vars.pkl content the skill instructs
-// the harness to write for an Azure target. Keep this byte-for-byte in step
-// with the Azure vars.pkl example in skills/formae-connect/SKILL.md's step 6
-// - if one changes, so must the other.
-func renderAzureTargetVarsPKL(spec azureTargetVarsSpec) string {
-	return fmt.Sprintf(`import "@formae/formae.pkl"
-import "@azure/azure.pkl"
-
-azureTarget: formae.Target = new formae.Target {
-  label = %q
-  discoverable = true
-  config = new azure.Config {
-    subscriptionId = %q
-    auth = new azure.OidcAuth {
-      tenantId = %q
-      clientId = %q
-    }
-  }
-}
-`, spec.Label, spec.SubscriptionID, spec.TenantID, spec.ClientID)
+// azureVarsPKLPlaceholders maps each field name the SKILL.md template
+// assigns a `"<...>"` placeholder to the spec value that replaces it.
+var azureVarsPKLPlaceholders = map[string]func(azureTargetVarsSpec) string{
+	"label":          func(s azureTargetVarsSpec) string { return s.Label },
+	"subscriptionId": func(s azureTargetVarsSpec) string { return s.SubscriptionID },
+	"tenantId":       func(s azureTargetVarsSpec) string { return s.TenantID },
+	"clientId":       func(s azureTargetVarsSpec) string { return s.ClientID },
 }
 
-// findAzureTargetSchemaCheckouts locates the local formae and formae-plugin-
-// azure checkouts this test evaluates the rendered template against,
-// following this org's documented "everything under ~/dev/pel" repo
-// topology. It skips rather than fails when they are not found: a machine
-// without both checkouts (most CI runners) cannot run the real schema check,
-// and that is an environmental precondition, not a test failure.
+// azureVarsPKLPlaceholder matches a `field = "<...>"` assignment in the
+// SKILL.md template, capturing the field name.
+var azureVarsPKLPlaceholder = regexp.MustCompile(`(\w+)\s*=\s*"<[^"]*>"`)
+
+// skillMDPath is relative to this package's directory, which is also `go
+// test`'s working directory.
+const skillMDPath = "../../skills/formae-connect/SKILL.md"
+
+// azureVarsPKLMarker is the prose immediately before the Azure vars.pkl
+// fenced block in SKILL.md's step 6. If this string stops matching, the
+// section was edited or renamed and this test's marker needs the same
+// update - a silent match against the wrong fence would defeat the point of
+// reading the shipped artifact instead of a hand copy.
+const azureVarsPKLMarker = "**Azure** declares the same target"
+
+// renderAzureTargetVarsPKL reads the Azure vars.pkl example straight out of
+// skills/formae-connect/SKILL.md and substitutes spec's values for its
+// `"<...>"` placeholders. This is the artifact the harness actually writes,
+// so this test guards against the SKILL.md text drifting from the real
+// schema - a hand-maintained copy in Go would instead let SKILL.md drift
+// while the test kept passing against the stale copy.
+func renderAzureTargetVarsPKL(t *testing.T, spec azureTargetVarsSpec) string {
+	t.Helper()
+
+	src, err := os.ReadFile(skillMDPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", skillMDPath, err)
+	}
+
+	markerIdx := strings.Index(string(src), azureVarsPKLMarker)
+	if markerIdx == -1 {
+		t.Fatalf("%s no longer contains %q; update this test's marker to match wherever the Azure vars.pkl example moved to",
+			skillMDPath, azureVarsPKLMarker)
+	}
+	rest := string(src)[markerIdx:]
+
+	const fence = "```pkl\n"
+	fenceStart := strings.Index(rest, fence)
+	if fenceStart == -1 {
+		t.Fatalf("no ```pkl fence found after %q in %s", azureVarsPKLMarker, skillMDPath)
+	}
+	rest = rest[fenceStart+len(fence):]
+
+	fenceEnd := strings.Index(rest, "```")
+	if fenceEnd == -1 {
+		t.Fatalf("unterminated ```pkl fence after %q in %s", azureVarsPKLMarker, skillMDPath)
+	}
+	block := rest[:fenceEnd]
+
+	return azureVarsPKLPlaceholder.ReplaceAllStringFunc(block, func(m string) string {
+		field := azureVarsPKLPlaceholder.FindStringSubmatch(m)[1]
+		fill, ok := azureVarsPKLPlaceholders[field]
+		if !ok {
+			t.Fatalf("%s's Azure vars.pkl example assigns a placeholder to unrecognized field %q; "+
+				"add it to azureVarsPKLPlaceholders", skillMDPath, field)
+		}
+		return fmt.Sprintf("%s = %q", field, fill(spec))
+	})
+}
+
+// Environment variables resolveAzureTargetSchemaPaths reads. Named rather
+// than hardcoded paths because this repository is public: a private
+// directory convention (this org's own dev machines keep everything under
+// ~/dev/pel) and an internal branch name (formae-plugin-azure's oidc-auth,
+// ahead of its merge to that plugin's main) are exactly the kind of thing
+// that must never be written down in it.
+const (
+	envFormaeSchemaPklProject = "FORMAE_SCHEMA_PKL_PROJECT"
+	envAzureSchemaPkl         = "FORMAE_AZURE_SCHEMA_PKL"
+)
+
+// resolveAzureTargetSchemaPaths reads the local schema checkouts this test
+// evaluates the rendered template against.
 //
-// The azure.pkl candidate list tries the plain checkout first, then the
-// oidc-auth branch worktree: once that branch's OidcAuth block reaches
-// formae-plugin-azure's main branch, the plain checkout picks it up with no
-// change needed here.
-func findAzureTargetSchemaCheckouts(t *testing.T) (formaePklProject, azurePkl string) {
+// Skips only when a variable is unset: a machine with neither checkout
+// configured (most CI runners today) cannot run the real schema check, and
+// that is an environmental precondition, not a test failure. Once a variable
+// IS set, a path that does not work is a hard failure rather than a skip - a
+// silent skip there would mean a green run stops proving anything the day the
+// path quietly breaks, and nobody would hear about it.
+func resolveAzureTargetSchemaPaths(t *testing.T) (formaePklProject, azurePkl string) {
 	t.Helper()
 
 	if _, err := exec.LookPath("pkl"); err != nil {
 		t.Skip("pkl binary not found on PATH; skipping the real schema round-trip check")
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("cannot resolve the home directory to locate local schema checkouts")
+	formaePklProject = os.Getenv(envFormaeSchemaPklProject)
+	azurePkl = os.Getenv(envAzureSchemaPkl)
+	if formaePklProject == "" || azurePkl == "" {
+		t.Skipf("%s and %s must both be set to run the real schema round-trip check "+
+			"(%s -> formae's schema/pkl/schema/PklProject, %s -> formae-plugin-azure's schema/pkl/azure.pkl "+
+			"with the OidcAuth block); skipping",
+			envFormaeSchemaPklProject, envAzureSchemaPkl, envFormaeSchemaPklProject, envAzureSchemaPkl)
 	}
 
-	formaePklProject = filepath.Join(home, "dev/pel/formae/internal/schema/pkl/schema/PklProject")
 	if _, err := os.Stat(formaePklProject); err != nil {
-		t.Skipf("no formae schema checkout at %s; skipping the real schema round-trip check", formaePklProject)
+		t.Fatalf("%s=%s is not usable: %v", envFormaeSchemaPklProject, formaePklProject, err)
+	}
+	azureSrc, err := os.ReadFile(azurePkl)
+	if err != nil {
+		t.Fatalf("%s=%s is not usable: %v", envAzureSchemaPkl, azurePkl, err)
+	}
+	if !strings.Contains(string(azureSrc), "OidcAuth") {
+		t.Fatalf("%s=%s does not declare OidcAuth; point it at the schema variant that carries it",
+			envAzureSchemaPkl, azurePkl)
 	}
 
-	for _, candidate := range []string{
-		filepath.Join(home, "dev/pel/formae-plugin-azure/schema/pkl/azure.pkl"),
-		filepath.Join(home, "dev/pel/formae-plugin-azure/.worktrees/oidc-auth/schema/pkl/azure.pkl"),
-	} {
-		src, err := os.ReadFile(candidate)
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(src), "OidcAuth") {
-			return formaePklProject, candidate
-		}
-	}
-	t.Skip("no local formae-plugin-azure checkout with the OidcAuth schema was found; " +
-		"skipping the real schema round-trip check")
-	return "", ""
+	return formaePklProject, azurePkl
 }
 
 // azureTargetEvalDoc is the shape pkl eval -f json produces for the rendered
@@ -125,7 +184,7 @@ type azureTargetEvalDoc struct {
 // own is to place a copy of it under a project declaring that dependency.
 func pklEvalAzureTarget(t *testing.T, spec azureTargetVarsSpec) azureTargetEvalDoc {
 	t.Helper()
-	formaePklProject, azurePkl := findAzureTargetSchemaCheckouts(t)
+	formaePklProject, azurePkl := resolveAzureTargetSchemaPaths(t)
 
 	dir := t.TempDir()
 	azurePkgDir := filepath.Join(dir, "azure-pkg")
@@ -154,7 +213,7 @@ func pklEvalAzureTarget(t *testing.T, spec azureTargetVarsSpec) azureTargetEvalD
 	}
 
 	varsPath := filepath.Join(dir, "vars.pkl")
-	if err := os.WriteFile(varsPath, []byte(renderAzureTargetVarsPKL(spec)), 0o644); err != nil {
+	if err := os.WriteFile(varsPath, []byte(renderAzureTargetVarsPKL(t, spec)), 0o644); err != nil {
 		t.Fatalf("write vars.pkl: %v", err)
 	}
 
@@ -213,5 +272,36 @@ func TestAzureTargetRoundTrips(t *testing.T) {
 	}
 	if !doc.AzureTarget.Discoverable {
 		t.Error("Discoverable: got false, want true - a target that discovers nothing produces no error to explain itself")
+	}
+}
+
+// TestRenderAzureTargetVarsPKL_FillsEveryPlaceholderFromTheRealSkillDoc
+// guards renderAzureTargetVarsPKL's extraction on its own, independent of
+// pkl being installed: it must read SKILL.md's actual Azure vars.pkl example
+// and leave no placeholder unfilled.
+func TestRenderAzureTargetVarsPKL_FillsEveryPlaceholderFromTheRealSkillDoc(t *testing.T) {
+	spec := azureTargetVarsSpec{
+		Label:          "my-label",
+		SubscriptionID: "sub-id",
+		TenantID:       "tenant-id",
+		ClientID:       "client-id",
+	}
+
+	got := renderAzureTargetVarsPKL(t, spec)
+
+	for _, want := range []string{
+		`import "@formae/formae.pkl"`,
+		`import "@azure/azure.pkl"`,
+		`label = "my-label"`,
+		`subscriptionId = "sub-id"`,
+		`tenantId = "tenant-id"`,
+		`clientId = "client-id"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered template does not contain %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "<") {
+		t.Errorf("a placeholder was left unfilled:\n%s", got)
 	}
 }
