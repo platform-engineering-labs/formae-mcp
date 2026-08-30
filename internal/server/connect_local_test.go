@@ -259,3 +259,35 @@ func TestConnectTools_AnnotationsMatchWhatEachToolDoes(t *testing.T) {
 		t.Errorf("provision_cloud_role is not marked DestructiveHint: %+v", provision.Annotations)
 	}
 }
+
+// The CLI's own remedy for an expired SSO session is one command the user can
+// paste, naming the exact profile - it has to reach the caller, the same way
+// Azure's az login command does for credentials_required. Drives the real
+// handler with a real CLI failure document (the shape classifySSO in
+// formae's sts.go actually emits), not just decodeConnectFailure in
+// isolation, for the same reason the Azure test does: a fix that only works
+// one decode level down and never reaches the tool's own result is not a fix.
+const realSsoLoginRequiredFailure = `{"schemaVersion":1,"code":"sso_login_required",` +
+	`"message":"the AWS SSO session for this profile has expired",` +
+	`"details":{"command":"aws sso login --profile blue-admin"}}`
+
+func TestProvisionCloudRole_CarriesTheSsoLoginCommand(t *testing.T) {
+	withFakeVersion(t, "0.89.0-dev.9")
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", realSsoLoginRequiredFailure)))
+
+	res, _, err := s.handleProvisionCloudRole(context.Background(), nil, tools.ProvisionCloudRoleInput{
+		Account:    "123456789012",
+		AwsProfile: "blue-admin",
+	})
+	if err != nil {
+		t.Fatalf("provision_cloud_role: %v", err)
+	}
+	if !isError(res) {
+		t.Fatalf("an expired SSO session was reported as success: %s", resultText(res))
+	}
+
+	got := resultText(res)
+	if !strings.Contains(got, "aws sso login --profile blue-admin") {
+		t.Errorf("the aws sso login command did not reach the caller:\n%s", got)
+	}
+}

@@ -211,9 +211,15 @@ type connectFailureView struct {
 // under this key rather than a transcript. GCP's own non-interactive path
 // carries the same key with its own static command, so this entry is not
 // azure-only.
+//
+// sso_login_required is the AWS shape of the same disclosure decision: a
+// named key on a named code, carrying a literal `aws sso login --profile <p>`
+// command rather than arbitrary prose. Leaving it out of the allowlist is the
+// exact defect this file exists to close, one cloud later.
 var relayedFailureDetails = map[string][]string{
 	"credentials_required": {"output", "command"},
 	"gcloud_missing":       {"output"},
+	"sso_login_required":   {"command"},
 }
 
 // withRelayedDetails appends a code's declared detail keys to its description.
