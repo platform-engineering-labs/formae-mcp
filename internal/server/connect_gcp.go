@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -56,22 +54,10 @@ func (s *Server) handleConnectGcpProject(ctx context.Context, _ *mcp.CallToolReq
 	return textResult(renderGcpRegistered(doc)), nil, nil
 }
 
-// renderGcpRegistered reports what the registration did, naming the coordinate
-// GCP actually carries.
-//
-// renderRegistered cannot be reused: it prints "Role: <arn>", and a GCP
-// document has no role. Printing an empty one would invite the reader to
-// believe in a value that never existed.
+// renderGcpRegistered reports what the registration did, naming the
+// coordinate GCP actually carries: it has no role, so renderRegistered's
+// wording cannot be reused as-is.
 func renderGcpRegistered(d registeredDoc) string {
-	var b strings.Builder
-	if d.Status == statusAlreadyRegistered {
-		fmt.Fprintf(&b, "Project %s was already connected to this installation with the same federation.\n", d.Account)
-	} else {
-		fmt.Fprintf(&b, "Connected project %s.\n", d.Account)
-	}
-	fmt.Fprintf(&b, "Workload identity provider: %s\n", d.WorkloadIdentityProvider)
-	for _, w := range d.Warnings {
-		fmt.Fprintf(&b, "\nWarning: %s\n", w)
-	}
-	return b.String()
+	return renderRegisteredDoc(d, "project", "the same federation",
+		"Workload identity provider: "+d.WorkloadIdentityProvider)
 }
