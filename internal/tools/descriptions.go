@@ -341,3 +341,26 @@ const ConnectGcpProjectDescription = "Connect a GCP project to the active instal
 	"new PATH is seen. Ask the user " +
 	"for the project id and never infer it from gcloud's active configuration. Reporting that the project was " +
 	"already connected with the same federation is SUCCESS, not a conflict."
+
+// ConnectAzureSubscriptionDescription is the connect_azure_subscription tool
+// description.
+//
+// Azure has one tool, like GCP, and for the same shape of reason: there is
+// one interactive path, so there is nothing to choose between. Unlike GCP,
+// formae never spawns a sign-in here - if there are no usable ambient
+// credentials the call fails naming the exact `az login` command to run, and
+// this tool must relay that command rather than tell the user to sign in
+// some other way.
+const ConnectAzureSubscriptionDescription = "Connect an Azure subscription to the active installation: create the " +
+	"managed identity formae authenticates through, grant it access to the subscription, and register the " +
+	"connection - in one call. This happens immediately and grants formae near-owner access to the subscription " +
+	"(Contributor plus User Access Administrator), so make sure the user means this subscription before calling. " +
+	"formae uses the operator's own ambient Azure credentials (environment variables, managed identity, an " +
+	"existing `az login` session); it never opens a browser or spawns a sign-in itself. If there are no usable " +
+	"credentials, the call fails naming the exact `az login` command to run - show that command to the user " +
+	"verbatim and wait for them to run it themselves, then call this tool again. Ask the user for the " +
+	"subscription id and never infer it from ambient credentials or az's active configuration. Reporting that the " +
+	"subscription was already connected with the same identity is SUCCESS, not a conflict. There is no " +
+	"register-only path through this tool: an operator who will not give it provisioning credentials deploys the " +
+	"ARM template themselves and runs `formae connect azure --tenant-id ... --client-id ...` in their own " +
+	"terminal - that command is for the user, never for you."
