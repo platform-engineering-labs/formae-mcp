@@ -133,3 +133,42 @@ func TestConnectAzureSubscription_RefusesADocumentItCannotIdentify(t *testing.T)
 		t.Errorf("an unidentifiable document was rendered as success: %s", resultText(res))
 	}
 }
+
+// The CLI never spawns an `az login`. When there are no usable credentials it
+// fails naming the exact command to run, and that command has to reach the
+// caller: this is the only way a headless operator (or an agent driving this
+// tool) can find out what to run.
+//
+// Drives the real handler with a real CLI failure document - not just
+// decodeConnectFailure in isolation - because a fix that only works one level
+// down and never reaches the tool's own result is the exact defect this
+// vertical has already shipped twice.
+const realAzureCredentialsRequiredFailure = `{"schemaVersion":1,"code":"credentials_required",` +
+	`"message":"no usable Azure credentials for this subscription; run the sign-in and re-run this command",` +
+	`"details":{"command":"az login --tenant 22222222-2222-2222-2222-222222222222"}}`
+
+func TestConnectAzureSubscription_CarriesTheLoginCommand(t *testing.T) {
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", realAzureCredentialsRequiredFailure)))
+
+	res, _, err := s.handleConnectAzureSubscription(context.Background(), nil, tools.ConnectAzureSubscriptionInput{
+		Subscription: testAzureSubscription,
+	})
+	if err != nil {
+		t.Fatalf("connect_azure_subscription: %v", err)
+	}
+	if !isError(res) {
+		t.Fatalf("a credential failure was reported as success: %s", resultText(res))
+	}
+
+	got := resultText(res)
+	if !strings.Contains(got, "az login --tenant 22222222-2222-2222-2222-222222222222") {
+		t.Errorf("the az login command did not reach the caller:\n%s", got)
+	}
+	// The description this code shares with GCP must not tell an Azure
+	// operator to run gcloud: the code is the same across clouds, so the
+	// static prose must be cloud-neutral, with the actual remedy carried
+	// entirely by the relayed command.
+	if strings.Contains(strings.ToLower(got), "gcloud") || strings.Contains(got, "Google") {
+		t.Errorf("a GCP-specific remedy leaked into an Azure failure:\n%s", got)
+	}
+}

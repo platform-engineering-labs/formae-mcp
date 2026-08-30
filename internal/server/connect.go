@@ -160,14 +160,17 @@ var connectFailureDescriptions = map[string]string{
 	"sync_incomplete":        "you are signed in, but formae could not bring the hosted profiles up to date",
 	"internal":               "formae could not complete this connect operation",
 
-	// GCP. credentials_required carries the command to run in its details, and
-	// a description that did not name it would leave the caller with a refusal
-	// and no remedy.
-	"credentials_required": "no usable Google Cloud credentials on this machine; run `gcloud auth application-default login` and try again. " +
-		"On a machine that cannot open a browser, run it in a terminal: gcloud falls back to printing a URL and reading a verification code typed back, " +
-		"which an unattended run has no way to supply",
-	"gcloud_missing":      "the gcloud CLI is needed to sign in to Google Cloud and is not installed; install it from https://cloud.google.com/sdk/docs/install and try again",
-	"project_unreachable": "that GCP project could not be read with these credentials; check the project id, and that this account can see it. Signing in again will not help: it returns the same account",
+	// credentials_required is shared across clouds - GCP and Azure both use it
+	// - so its description cannot name either one's sign-in tool. The actual
+	// remedy always rides the relayed details (a command, or a transcript
+	// containing a URL); the description only points at it.
+	"credentials_required": "no usable credentials for this connection; how to sign in is in the details below. " +
+		"On a machine that cannot open a browser, complete the sign-in from a terminal instead: a flow that needs " +
+		"a browser has no way to finish unattended",
+	"gcloud_missing": "the gcloud CLI is needed to sign in to Google Cloud and is not installed; install it from https://cloud.google.com/sdk/docs/install and try again",
+	// project_unreachable is also shared: GCP raises it for a project, Azure
+	// for a subscription, so the wording names neither.
+	"project_unreachable": "that account could not be reached with these credentials; check the id, and that this principal can see it. Signing in again will not help: it returns the same principal",
 	"api_disabled":        "a Google API this connection needs is not enabled on that project; enable it and try again",
 }
 
@@ -202,8 +205,14 @@ type connectFailureView struct {
 // printed the only thing that would let the operator finish. Dropping it left
 // the caller with a canned instruction to run a command that fails the same
 // way.
+//
+// "command" is the Azure shape of the same failure: the CLI never spawns an
+// `az login`, so credentials_required always carries the exact command to run
+// under this key rather than a transcript. GCP's own non-interactive path
+// carries the same key with its own static command, so this entry is not
+// azure-only.
 var relayedFailureDetails = map[string][]string{
-	"credentials_required": {"output"},
+	"credentials_required": {"output", "command"},
 	"gcloud_missing":       {"output"},
 }
 
