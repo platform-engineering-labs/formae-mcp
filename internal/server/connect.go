@@ -171,7 +171,19 @@ var connectFailureDescriptions = map[string]string{
 	// project_unreachable is also shared: GCP raises it for a project, Azure
 	// for a subscription, so the wording names neither.
 	"project_unreachable": "that account could not be reached with these credentials; check the id, and that this principal can see it. Signing in again will not help: it returns the same principal",
-	"api_disabled":        "a Google API this connection needs is not enabled on that project; enable it and try again",
+	// api_disabled is shared too: GCP raises it for a Google API, Azure for an
+	// unregistered resource provider. Which one is unavailable comes from the
+	// relayed "provider" detail, not this description.
+	"api_disabled": "a cloud API or resource provider this connection needs is not enabled; the relayed detail names it. Enable it and try again",
+	// orphaned_trust: provisioning succeeded and registration did not, so the
+	// subscription already grants a near-owner identity to an installation
+	// the control plane does not know about. There is no rollback - the
+	// relayed coordinates (resource group, identity, client id) are what a
+	// caller re-runs registration with, or cleans up by hand if it means to
+	// abandon the attempt instead.
+	"orphaned_trust": "provisioning succeeded but registration did not, so the identity below already has near-owner " +
+		"access to an installation the control plane does not know about. Re-run this command to finish " +
+		"registering it; there is no rollback",
 }
 
 // connectFailureView is the envelope the producer emits on stdout when a
@@ -216,10 +228,23 @@ type connectFailureView struct {
 // named key on a named code, carrying a literal `aws sso login --profile <p>`
 // command rather than arbitrary prose. Leaving it out of the allowlist is the
 // exact defect this file exists to close, one cloud later.
+//
+// api_disabled's "provider" names which API or resource provider is missing -
+// GCP's own API name, or the Azure resource provider notRegistered.Provider
+// names - so the caller learns what to enable rather than just that
+// something is.
+//
+// orphaned_trust's three keys are the whole reason that code carries details
+// at all: a review demanded automated callers be able to see and act on the
+// near-owner identity a failed registration leaves behind, and an allowlist
+// that dropped them would mean that requirement never reached the one caller
+// (this server) that speaks to automated callers at all.
 var relayedFailureDetails = map[string][]string{
 	"credentials_required": {"output", "command"},
 	"gcloud_missing":       {"output"},
 	"sso_login_required":   {"command"},
+	"api_disabled":         {"provider"},
+	"orphaned_trust":       {"resourceGroup", "identity", "clientId"},
 }
 
 // withRelayedDetails appends a code's declared detail keys to its description.
