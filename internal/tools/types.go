@@ -281,6 +281,27 @@ type ConnectGcpProjectInput struct {
 	WorkloadIdentityProvider string `json:"workload_identity_provider,omitempty" jsonschema:"Set ONLY when the user says they already created the workload identity pool and provider themselves (for example with Terraform). Leave empty in every other case: formae then provisions the federation, which is the normal path. When set, formae validates the name's shape and registers it without checking that it exists or grants access."`
 }
 
+// ConnectAzureSubscriptionInput connects one Azure subscription, provisioning
+// the trust and registering it in a single invocation.
+//
+// Azure has one interactive path, like GCP, so there is no link-then-register
+// pair and no second mode to choose between: formae obtains the operator's
+// ambient Azure credentials, provisions the connection, and registers it in
+// one call. The credential-less path (an operator who deploys the ARM
+// template themselves and supplies the resulting tenant and client id) is a
+// terminal command for the user, not an argument this tool accepts.
+type ConnectAzureSubscriptionInput struct {
+	// Subscription is always explicit and never inferred from ambient
+	// credentials, matching the AWS and GCP rule for the same reason:
+	// provisioning trust into the wrong subscription is not a mistake a
+	// default should be able to make.
+	Subscription string `json:"subscription" jsonschema:"The Azure subscription id to connect. Ask the user for it; never infer it from ambient credentials or az's active configuration."`
+	// Location and ResourceGroup both default on the CLI side, so leave them
+	// empty unless the user names one.
+	Location      string `json:"location,omitempty" jsonschema:"Optional Azure region for the managed identity's metadata record. Leave empty to use the CLI's default (eastus)."`
+	ResourceGroup string `json:"resource_group,omitempty" jsonschema:"Optional resource group the connection resources live in. Leave empty to use the CLI's default (formae-ai)."`
+}
+
 // ProvisionCloudRoleInput creates the connect role directly with the named
 // local AWS credentials and registers it, in one invocation. Both fields are
 // required: there is no ambient default for either, matching

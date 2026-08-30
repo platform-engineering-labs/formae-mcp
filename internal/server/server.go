@@ -319,6 +319,14 @@ func (s *Server) registerTools() {
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true)},
 	}, s.handleConnectGcpProject)
 
+	// Azure is one tool too, the same shape as GCP: one interactive path, so
+	// provisioning and registering are a single call. DestructiveHint for the
+	// same reason - the mutation happens immediately.
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "connect_azure_subscription", Description: tools.ConnectAzureSubscriptionDescription,
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true)},
+	}, s.handleConnectAzureSubscription)
+
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
 	}, s.handleListProfiles)

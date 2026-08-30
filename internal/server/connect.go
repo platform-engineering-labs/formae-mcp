@@ -274,8 +274,12 @@ type registeredDoc struct {
 	Account       string `json:"account"`
 	RoleArn       string `json:"roleArn"`
 	// WorkloadIdentityProvider is the GCP coordinate.
-	WorkloadIdentityProvider string   `json:"workloadIdentityProvider"`
-	Warnings                 []string `json:"warnings"`
+	WorkloadIdentityProvider string `json:"workloadIdentityProvider"`
+	// AzureTenantID and AzureClientID are the Azure coordinate: the
+	// subscription's Entra tenant and the managed identity's client id.
+	AzureTenantID string   `json:"azureTenantId"`
+	AzureClientID string   `json:"azureClientId"`
+	Warnings      []string `json:"warnings"`
 }
 
 // handleRegisterCloudRole records the role an applied stack produced.
