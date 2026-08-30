@@ -274,7 +274,7 @@ dependencies {
 
 ```pkl
   ["azure"] {
-    uri = "package://hub.platform.engineering/plugins/azure/schema/pkl/azure/azure@0.1.10"
+    uri = "package://hub.platform.engineering/plugins/azure/schema/pkl/azure/azure@0.1.11"
   }
 ```
 
