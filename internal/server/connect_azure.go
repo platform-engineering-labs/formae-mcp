@@ -29,13 +29,16 @@ func (s *Server) handleConnectAzureSubscription(ctx context.Context, _ *mcp.Call
 		"connect", "azure", "--subscription", input.Subscription,
 		"--no-input", "--output-consumer", "machine", "--output-schema", "json",
 	}
-	// Location and resource group both default on the CLI side, so they are
-	// forwarded only when the caller actually supplied one.
+	// Location, resource group, and tenant id all default on the CLI side, so
+	// they are forwarded only when the caller actually supplied one.
 	if input.Location != "" {
 		args = append(args, "--location", input.Location)
 	}
 	if input.ResourceGroup != "" {
 		args = append(args, "--resource-group", input.ResourceGroup)
+	}
+	if input.TenantID != "" {
+		args = append(args, "--tenant-id", input.TenantID)
 	}
 
 	out, err := s.runConnect(ctx, args)

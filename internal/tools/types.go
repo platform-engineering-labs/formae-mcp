@@ -300,6 +300,11 @@ type ConnectAzureSubscriptionInput struct {
 	// empty unless the user names one.
 	Location      string `json:"location,omitempty" jsonschema:"Optional Azure region for the managed identity's metadata record. Leave empty to use the CLI's default (eastus)."`
 	ResourceGroup string `json:"resource_group,omitempty" jsonschema:"Optional resource group the connection resources live in. Leave empty to use the CLI's default (formae-ai)."`
+	// TenantID is an authentication hint, not a placement coordinate: the CLI
+	// derives the tenant from the operator's credentials when this is absent,
+	// which is the normal path for most callers. Leave it empty unless the
+	// operator's account needs it to authenticate at all.
+	TenantID string `json:"tenant_id,omitempty" jsonschema:"Optional Entra tenant id for the subscription. Leave empty; the CLI derives it automatically for most accounts. Supply it when a sign-in attempt already failed reporting no subscriptions found, or when the user says their account is a guest in another directory or spans several tenants."`
 }
 
 // ProvisionCloudRoleInput creates the connect role directly with the named

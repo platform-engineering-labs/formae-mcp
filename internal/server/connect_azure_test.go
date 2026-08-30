@@ -64,16 +64,21 @@ func TestConnectAzureSubscription_ReportsTheSubscriptionTenantAndClient(t *testi
 	if strings.Contains(gotArgv, "--location") || strings.Contains(gotArgv, "--resource-group") {
 		t.Errorf("argv carries a default-only flag the caller did not ask for: %s", gotArgv)
 	}
-	// There is no register-only path through this tool: supplying a tenant or
-	// client id is not among its arguments, and the credential-less path is a
-	// terminal command for the user, never something this tool drives.
-	if strings.Contains(gotArgv, "--tenant-id") || strings.Contains(gotArgv, "--client-id") {
+	// Tenant id is an authentication hint the CLI derives automatically when
+	// absent, so it must not appear unless the caller supplied one. Client id
+	// is never among this tool's arguments at all: the credential-less
+	// register-only path is a terminal command for the user, never something
+	// this tool drives.
+	if strings.Contains(gotArgv, "--tenant-id") {
+		t.Errorf("argv carries --tenant-id when the caller did not supply one: %s", gotArgv)
+	}
+	if strings.Contains(gotArgv, "--client-id") {
 		t.Errorf("argv carries a register-only flag this tool must never pass: %s", gotArgv)
 	}
 }
 
-// location and resource_group both default on the CLI side, so the tool only
-// forwards them when the caller actually supplied one.
+// location, resource_group, and tenant_id all default on the CLI side, so the
+// tool only forwards them when the caller actually supplied one.
 func TestConnectAzureSubscription_PassesLocationAndResourceGroupWhenGiven(t *testing.T) {
 	argv := filepath.Join(t.TempDir(), "argv")
 	s := serverWithLoginBin(t, argvStub(t, argv, azureRegisteredJSON))
@@ -82,6 +87,7 @@ func TestConnectAzureSubscription_PassesLocationAndResourceGroupWhenGiven(t *tes
 		Subscription:  testAzureSubscription,
 		Location:      "westeurope",
 		ResourceGroup: "my-rg",
+		TenantID:      testAzureTenant,
 	})
 	if err != nil {
 		t.Fatalf("connect_azure_subscription: %v", err)
@@ -96,6 +102,9 @@ func TestConnectAzureSubscription_PassesLocationAndResourceGroupWhenGiven(t *tes
 	}
 	if !strings.Contains(got, "--resource-group my-rg") {
 		t.Errorf("argv does not carry --resource-group: %s", got)
+	}
+	if !strings.Contains(got, "--tenant-id "+testAzureTenant) {
+		t.Errorf("argv does not carry --tenant-id: %s", got)
 	}
 }
 

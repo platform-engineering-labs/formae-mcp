@@ -359,7 +359,10 @@ const ConnectAzureSubscriptionDescription = "Connect an Azure subscription to th
 	"existing `az login` session); it never opens a browser or spawns a sign-in itself. If there are no usable " +
 	"credentials, the call fails naming the exact `az login` command to run - show that command to the user " +
 	"verbatim and wait for them to run it themselves, then call this tool again. Ask the user for the " +
-	"subscription id and never infer it from ambient credentials or az's active configuration. Reporting that the " +
+	"subscription id and never infer it from ambient credentials or az's active configuration. The tenant id is " +
+	"normally derived automatically and should be left unset; only ask the user for it, and pass it as tenant_id, " +
+	"when a sign-in attempt already failed reporting no subscriptions found, or the user says their account is a " +
+	"guest in another directory or spans several tenants. Reporting that the " +
 	"subscription was already connected with the same identity is SUCCESS, not a conflict. There is no " +
 	"register-only path through this tool: an operator who will not give it provisioning credentials deploys the " +
 	"ARM template themselves and runs `formae connect azure --subscription ... --tenant-id ... --client-id ...` " +
