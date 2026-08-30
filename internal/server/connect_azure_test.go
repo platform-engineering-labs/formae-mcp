@@ -172,3 +172,79 @@ func TestConnectAzureSubscription_CarriesTheLoginCommand(t *testing.T) {
 		t.Errorf("a GCP-specific remedy leaked into an Azure failure:\n%s", got)
 	}
 }
+
+// orphaned_trust is the one failure where re-running does not simply retry a
+// no-op: provisioning succeeded and registration did not, so the subscription
+// already grants a near-owner identity to an installation the control plane
+// does not know about. The surviving coordinates (resource group, identity,
+// client id) exist specifically so an automated caller can find and finish
+// registering that identity - the review that added them to the CLI required
+// it. Drives the real handler with a real CLI failure document, the same
+// shape the other relay tests in this file use, because a fix that lands on
+// the CLI path and never reaches this tool's result is a defect this
+// vertical has now shipped more than once.
+const realAzureOrphanedTrustFailure = `{"schemaVersion":1,"code":"orphaned_trust",` +
+	`"message":"the subscription now grants access to an installation the control plane does not know about; ` +
+	`there is no rollback, and this identity holds near-owner access until it is registered. Re-run this command ` +
+	`to finish: registration failed",` +
+	`"details":{"resourceGroup":"formae-ai",` +
+	`"identity":"/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/formae-ai/providers/` +
+	`Microsoft.ManagedIdentity/userAssignedIdentities/formae-connect-2abc",` +
+	`"clientId":"44444444-4444-4444-4444-444444444444"}}`
+
+func TestConnectAzureSubscription_CarriesTheOrphanedTrustCoordinates(t *testing.T) {
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", realAzureOrphanedTrustFailure)))
+
+	res, _, err := s.handleConnectAzureSubscription(context.Background(), nil, tools.ConnectAzureSubscriptionInput{
+		Subscription: testAzureSubscription,
+	})
+	if err != nil {
+		t.Fatalf("connect_azure_subscription: %v", err)
+	}
+	if !isError(res) {
+		t.Fatalf("an orphaned identity was reported as success: %s", resultText(res))
+	}
+
+	got := resultText(res)
+	for _, want := range []string{
+		"formae-ai",
+		"/resourceGroups/formae-ai/providers/Microsoft.ManagedIdentity/userAssignedIdentities/formae-connect-2abc",
+		"44444444-4444-4444-4444-444444444444",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the surviving coordinate %q did not reach the caller:\n%s", want, got)
+		}
+	}
+}
+
+// api_disabled is shared with GCP, which raises it for an unenabled Google
+// API - the description this build showed for it named Google unconditionally,
+// so an Azure operator whose resource provider is not registered was told to
+// enable a Google API instead of being told which Azure provider to
+// register. The remedy is one command and formae will not run it uninvited,
+// so the provider name has to reach the caller.
+const realAzureApiDisabledFailure = `{"schemaVersion":1,"code":"api_disabled",` +
+	`"message":"the Microsoft.ContainerService resource provider is not registered on this subscription; register it and re-run",` +
+	`"details":{"provider":"Microsoft.ContainerService"}}`
+
+func TestConnectAzureSubscription_NamesTheUnregisteredProvider(t *testing.T) {
+	s := serverWithLoginBin(t, loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", realAzureApiDisabledFailure)))
+
+	res, _, err := s.handleConnectAzureSubscription(context.Background(), nil, tools.ConnectAzureSubscriptionInput{
+		Subscription: testAzureSubscription,
+	})
+	if err != nil {
+		t.Fatalf("connect_azure_subscription: %v", err)
+	}
+	if !isError(res) {
+		t.Fatalf("an unregistered provider was reported as success: %s", resultText(res))
+	}
+
+	got := resultText(res)
+	if !strings.Contains(got, "Microsoft.ContainerService") {
+		t.Errorf("the unregistered provider's name did not reach the caller:\n%s", got)
+	}
+	if strings.Contains(strings.ToLower(got), "google") {
+		t.Errorf("a GCP-specific remedy leaked into an Azure failure:\n%s", got)
+	}
+}
