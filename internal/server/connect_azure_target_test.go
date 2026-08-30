@@ -105,11 +105,9 @@ func renderAzureTargetVarsPKL(t *testing.T, spec azureTargetVarsSpec) string {
 }
 
 // Environment variables resolveAzureTargetSchemaPaths reads. Named rather
-// than hardcoded paths because this repository is public: a private
-// directory convention (this org's own dev machines keep everything under
-// ~/dev/pel) and an internal branch name (formae-plugin-azure's oidc-auth,
-// ahead of its merge to that plugin's main) are exactly the kind of thing
-// that must never be written down in it.
+// than hardcoded paths because this repository is public, and local
+// checkout paths and in-flight branch names are not things to write down
+// in it.
 const (
 	envFormaeSchemaPklProject = "FORMAE_SCHEMA_PKL_PROJECT"
 	envAzureSchemaPkl         = "FORMAE_AZURE_SCHEMA_PKL"
