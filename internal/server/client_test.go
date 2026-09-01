@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 )
 
 // newTestFormaeClient creates a FormaeClient pointed at the given httptest.Server.
@@ -191,5 +193,82 @@ func TestDestroyByQueryRejectsOtherStatus(t *testing.T) {
 	_, err := c.DestroyByQuery(context.Background(), "stack=default", false, "client-1")
 	if err == nil {
 		t.Fatal("DestroyByQuery: expected error for 500, got nil")
+	}
+}
+
+func TestListPluginsRequestsInstalledScope(t *testing.T) {
+	const respBody = `{"plugins":[
+		{"name":"aws","kind":"plugin","type":"resource","installedVersion":"0.1.17-dev.8","localPath":"/opt/pel/plugins/aws/PklProject"},
+		{"name":"auth-basic","kind":"plugin","type":"auth","installedVersion":"0.1.0"},
+		{"name":"standard","kind":"metapackage","type":"resource","installedVersion":"0.2.0"}
+	]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/plugins" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("scope"); got != "installed" {
+			t.Errorf("scope: want %q, got %q", "installed", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(respBody))
+	}))
+	defer srv.Close()
+
+	got, err := newTestFormaeClient(srv).ListPlugins(context.Background())
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("want 3 plugins, got %d", len(got))
+	}
+	if got[0].Name != "aws" || got[0].Kind != "plugin" || got[0].Type != "resource" ||
+		got[0].InstalledVersion != "0.1.17-dev.8" {
+		t.Errorf("first entry decoded wrong: %+v", got[0])
+	}
+	if got[2].Kind != "metapackage" {
+		t.Errorf("metapackage kind: want %q, got %q", "metapackage", got[2].Kind)
+	}
+}
+
+func TestListPluginsClassic404IsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	got, err := newTestFormaeClient(srv).ListPlugins(context.Background())
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("want no plugins, got %d", len(got))
+	}
+}
+
+func TestListPluginsHosted404IsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := newTestHostedClientAt(srv, "token", func(context.Context) (execctx.Context, error) {
+		return execctx.Context{}, nil
+	})
+	if _, err := c.ListPlugins(context.Background()); err == nil {
+		t.Fatal("want an error for a hosted 404, got nil")
+	}
+}
+
+func TestListPluginsNon200IsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("boom"))
+	}))
+	defer srv.Close()
+
+	if _, err := newTestFormaeClient(srv).ListPlugins(context.Background()); err == nil {
+		t.Fatal("want an error for a 500, got nil")
 	}
 }
