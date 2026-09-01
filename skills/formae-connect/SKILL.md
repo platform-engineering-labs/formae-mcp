@@ -419,20 +419,11 @@ one example prompt for each:
 - Discovery is already running against it. They can come back shortly and
   ask what it found — e.g. `"What unmanaged resources do you see in
   <label>?"`
-- They can start creating infrastructure against it now. **Name something
-  the cloud they just connected actually has**, because the example is a
-  prompt they are meant to be able to paste:
-  - **AWS:** `"Create an S3 bucket in <label>."`
-  - **GCP:** `"Create a storage bucket in <label>."`
-  - **Azure:** `"Create a blob container in <label>."` The container is
-    the thing an Azure user recognises as the bucket, so it is what the
-    example names — even though it needs a storage account, which needs a
-    resource group. Do not trim the prompt down to the storage account to
-    save resources: declaring the recognisable thing and letting formae
-    bring its parents along is the point, not a cost. Mind the storage
-    account's name when you author it: 3 to 24 characters, lowercase
-    letters and digits only, and globally unique across Azure, so a label
-    with a hyphen in it is not a usable name.
+- They can start creating infrastructure against it now — e.g. `"Create an
+  S3 bucket in <label>."` for AWS, `"Create a storage bucket in <label>."`
+  for GCP, `"Create a blob container in <label>."` for Azure. Name the one
+  belonging to the cloud they just connected: the example exists to be
+  pasted, and the other two clouds do not have that resource.
 
 If no target was created, skip the above — this step needs nothing extra for
 that case.
