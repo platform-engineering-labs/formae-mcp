@@ -168,6 +168,16 @@ var connectFailureDescriptions = map[string]string{
 		"On a machine that cannot open a browser, complete the sign-in from a terminal instead: a flow that needs " +
 		"a browser has no way to finish unattended",
 	"gcloud_missing": "the gcloud CLI is needed to sign in to Google Cloud and is not installed; install it from https://cloud.google.com/sdk/docs/install and try again",
+	// az_missing is Azure's counterpart to gcloud_missing, but unlike GCP it has
+	// a second remedy that needs nothing on this machine at all: the ARM trust
+	// template deploys from the user's own portal or pipeline. A machine without
+	// az is therefore not blocked, and both have to appear here - the install is
+	// not always something the caller can do, and the template path is invisible
+	// to anyone who only sees the code.
+	"az_missing": "the az CLI is needed to sign in to Azure and is not installed; install it from " +
+		"https://learn.microsoft.com/cli/azure/install-azure-cli and try again. Or take the template path, which " +
+		"needs no CLI and no credential on this machine: the user runs `formae connect azure template` themselves, " +
+		"deploys it in their own portal or pipeline, and registers the tenant id and client id it prints",
 	// project_unreachable is also shared: GCP raises it for a project, Azure
 	// for a subscription, so the wording names neither.
 	"project_unreachable": "that account could not be reached with these credentials; check the id, and that this principal can see it. Signing in again will not help: it returns the same principal",
