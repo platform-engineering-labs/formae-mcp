@@ -7,6 +7,14 @@ description: "Use when the user wants to add support for a new resource type to 
 
 Add support for a new resource type to an existing formae resource plugin, following the plugin SDK tutorial and using TDD.
 
+## Step 0 — Is this a hosted installation?
+
+Call `list_agent_plugins` with an explicit `profile` and read the mode it reports.
+
+If the connection is **hosted formae**, say so plainly before starting: a hosted installation cannot install the updated plugin this produces, because plugins ride the agent image and there is no on-demand install. The work is still worth doing — for a self-hosted agent, or as a candidate for the curated cloud plugin set — but it will not become usable on their installation at the end of this session. Ask for explicit confirmation before continuing, and if they decline, stop here rather than building something they cannot use.
+
+If the connection is a self-hosted agent, continue.
+
 ## MANDATORY RULE: Install Before Testing
 
 After ANY code changes to the plugin, you MUST run `make install` before running tests. Integration tests and conformance tests run against the INSTALLED plugin binary, not the source code. Skipping this step means you're testing stale code.
