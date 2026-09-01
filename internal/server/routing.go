@@ -195,15 +195,6 @@ func (r *hostedRoute) scrub(body []byte) []byte {
 	return body
 }
 
-// withEndpoint returns a copy addressing a different origin. It exists for
-// tests, which need the validated hosted routing behaviour aimed at a local
-// server rather than at the real edge.
-func (r *hostedRoute) withEndpoint(endpoint string) *hostedRoute {
-	copied := *r
-	copied.endpoint = endpoint
-	return &copied
-}
-
 var errConnectionMoved = errors.New(
 	"the connection changed while this request was in flight, so it was abandoned rather than " +
 		"retried against a different installation")
