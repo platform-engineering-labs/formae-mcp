@@ -328,6 +328,18 @@ func (s *Server) registerTools() {
 	}, s.handleConnectAzureSubscription)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "register_azure_trust", Description: tools.RegisterAzureTrustDescription,
+		// Not destructive: it provisions nothing and grants nothing. The access
+		// already exists, created by whoever deployed the template.
+	}, s.handleRegisterAzureTrust)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "get_azure_trust_template", Description: tools.GetAzureTrustTemplateDescription,
+		// A read: it renders a link and provisions nothing.
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, s.handleGetAzureTrustTemplate)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
 	}, s.handleListProfiles)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
@@ -507,7 +519,23 @@ func (s *Server) handleGetCommandStatus(ctx context.Context, _ *mcp.CallToolRequ
 	if err != nil {
 		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
-	result, err := c.GetCommandStatus(ctx, input.CommandID, s.clientID.Resolve(ec.FormaeBin))
+	fetch := func(ctx context.Context) (json.RawMessage, error) {
+		return c.GetCommandStatus(ctx, input.CommandID, s.clientID.Resolve(ec.FormaeBin))
+	}
+
+	if !input.Wait {
+		result, err := fetch(ctx)
+		if err != nil {
+			return attribute(reached(ec, c), errorResult(err)), nil, nil
+		}
+		return attribute(reached(ec, c), jsonResult(result)), nil, nil
+	}
+
+	// The wait belongs here rather than in the caller. A caller polling from
+	// outside has to invent a delay, and the only delay available to an agent
+	// is a shell sleep, which is slower than this loop and puts commands in
+	// front of the user that have nothing to do with their work.
+	result, _, err := waitForCommand(ctx, resolveWaitTimeout(input.TimeoutSeconds), fetch)
 	if err != nil {
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
