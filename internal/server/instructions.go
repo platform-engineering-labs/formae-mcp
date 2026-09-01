@@ -58,7 +58,7 @@ A **profile** is a named formae config (endpoint + targets) selecting which agen
 
 - **Targeting your work** → pass ` + "`profile`" + ` on each call. Never call ` + "`use_profile`" + ` just to prepare a session.
 - **` + "`use_profile`" + ` (switching the active profile)** → only when the user **explicitly** asks to change their default environment/agent (e.g. "make prod my default"). It is not a per-session setup step.
-- **Which tools accept ` + "`profile`" + `**: the agent-touching tools — apply_forma, destroy_forma, cancel_commands, force_sync, force_discover, force_check_ttl, force_reconcile_stack, list_resources, list_stacks, list_targets, list_policies, list_commands, get_command_status, get_agent_stats, check_health, list_changes_since_last_reconcile, extract_resources, list_agent_plugins. **Do not pass ` + "`profile`" + ` to** the plugin-hub tools (search_hub_plugins, get_hub_plugin, list_plugin_examples, get_plugin_example) or create_inline_policy — they do not support it and the call will be rejected.
+- **Which tools accept ` + "`profile`" + `**: the agent-touching tools — apply_forma, destroy_forma, cancel_commands, force_sync, force_discover, force_check_ttl, force_reconcile_stack, list_resources, list_stacks, list_targets, list_policies, list_generators, list_commands, get_command_status, get_agent_stats, check_health, list_changes_since_last_reconcile, extract_resources, list_agent_plugins. **Do not pass ` + "`profile`" + ` to** the plugin-hub tools (search_hub_plugins, get_hub_plugin, list_plugin_examples, get_plugin_example) or create_inline_policy — they do not support it and the call will be rejected.
 
 ## Query Syntax
 

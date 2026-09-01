@@ -255,6 +255,12 @@ func (s *Server) registerTools() {
 	}, s.handleListPolicies)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "list_generators",
+		Description: tools.ListGeneratorsDescription,
+		Annotations: readOnly,
+	}, s.handleListGenerators)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "list_changes_since_last_reconcile",
 		Description: tools.ListChangesSinceLastReconcileDescription,
 		Annotations: readOnly,
@@ -633,6 +639,22 @@ func (s *Server) handleListPolicies(ctx context.Context, _ *mcp.CallToolRequest,
 		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.ListPolicies(ctx)
+	if err != nil {
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
+	}
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
+}
+
+func (s *Server) handleListGenerators(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	ec, err := s.resolveCtx(ctx, input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
+	}
+	result, err := c.ListGenerators(ctx)
 	if err != nil {
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}

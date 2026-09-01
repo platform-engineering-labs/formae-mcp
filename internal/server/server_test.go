@@ -207,6 +207,63 @@ func TestListPolicies(t *testing.T) {
 	}
 }
 
+func TestListGenerators(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/generators": func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `[{"Label":"db-password-gen","Stack":"prod","Type":"password","EverySeconds":7776000,"LastRotatedAt":"2026-08-31T02:32:22Z","GenerationID":"gen-7","Destinations":[{"ResourceLabel":"db-password","StackLabel":"prod"}]}]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_generators",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "db-password-gen") {
+		t.Errorf("expected response to contain the generator label, got: %s", text)
+	}
+	// The cadence and the destination are the two things a caller opens this
+	// tool for; a projection that dropped either would still contain the label.
+	if !strings.Contains(text, "7776000") {
+		t.Errorf("expected response to carry the rotation interval, got: %s", text)
+	}
+	if !strings.Contains(text, "db-password") {
+		t.Errorf("expected response to name the bound destination, got: %s", text)
+	}
+}
+
+// An agent predating generators has none, so the tool reports none rather than
+// failing: 404 is an empty collection, matching every other list tool.
+func TestListGeneratorsEmpty(t *testing.T) {
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/generators": func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_generators",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success on 404, got error: %s", textContent(t, result))
+	}
+	if text := textContent(t, result); text != "[]" {
+		t.Errorf("expected empty array, got: %s", text)
+	}
+}
+
 func TestListPoliciesEmpty(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/policies": func(w http.ResponseWriter, r *http.Request) {

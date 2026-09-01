@@ -83,6 +83,8 @@ Then hand off to the `formae-stack-design` skill to decide how resources are gro
 
 **Policy needs** — if the user wants TTL, auto-reconcile, or other lifecycle policies on a stack, hand off to the `formae-policy` skill.
 
+**Generated or rotating credentials** — if any credential in the design should be drawn by formae rather than written into the forma, or should turn over on a schedule, hand off to the `formae-generators` skill. Reach for it whenever authoring is about to produce a hardcoded secret, a `random.password` seed pinned with `setOnce`, or a credential the user says must be rotated. It is a distinct concern from `formae-policy`: a policy governs a stack, whereas a generator is referenced by the properties that take its value.
+
 **Simulate then apply** — hand off to the `formae-apply` skill for the simulate-then-apply workflow.
 
 ---
