@@ -347,6 +347,9 @@ func (s *Server) registerTools() {
 	}, s.handleWriteProfile)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "list_agent_plugins", Description: tools.ListAgentPluginsDescription, Annotations: readOnly,
+	}, s.handleListAgentPlugins)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "search_hub_plugins",
 		Description: tools.SearchHubPluginsDescription,
 		Annotations: readOnly,
@@ -477,6 +480,35 @@ func (s *Server) handleListStacks(ctx context.Context, _ *mcp.CallToolRequest, i
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
 	return attribute(reached(ec, c), jsonResult(result)), nil, nil
+}
+
+// handleListAgentPlugins reports the installation's plugin set and what the
+// connection type means for it.
+//
+// The two modes fail differently on purpose. Hosted treats the listing as the
+// whole catalogue, so a listing it could not read is an error: continuing would
+// mean inventing a set or falling back to a hub catalogue full of plugins the
+// installation cannot install. Classic loses one fact and nothing else, so it
+// says so and carries on.
+func (s *Server) handleListAgentPlugins(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	ec, err := s.resolveCtx(ctx, input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	_, hosted := ec.Conn.(config.Hosted)
+
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
+	}
+	plugins, err := c.ListPlugins(ctx)
+	if err != nil {
+		if hosted {
+			return attribute(reached(ec, c), errorResult(err)), nil, nil
+		}
+		return attribute(reached(ec, c), textResult(renderClassicListingUnavailable(err))), nil, nil
+	}
+	return attribute(reached(ec, c), textResult(renderAgentPlugins(hosted, plugins))), nil, nil
 }
 
 func (s *Server) handleListTargets(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListTargetsInput) (*mcp.CallToolResult, any, error) {
