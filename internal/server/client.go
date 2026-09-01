@@ -160,6 +160,62 @@ func (c *FormaeClient) ListPolicies(ctx context.Context) (json.RawMessage, error
 	return body, nil
 }
 
+// agentPlugin is the narrow view of the agent's plugin listing that this
+// server uses.
+//
+// The wire type carries a dozen more fields, among them an absolute path
+// inside the agent's own filesystem, free-form nested metadata, and two fields
+// (managedBy, loadStatus) that formae declares but never populates. Decoding
+// only what is rendered keeps all of that out of a model's context and stops a
+// later change from surfacing it by accident.
+type agentPlugin struct {
+	Name             string `json:"name"`
+	Kind             string `json:"kind"`
+	Type             string `json:"type"`
+	InstalledVersion string `json:"installedVersion"`
+}
+
+// ListPlugins asks the agent which plugins it has installed.
+//
+// The installed scope is served from the agent's in-process registry plus a
+// filesystem scan, so it answers even where the package store is root-owned and
+// the agent runs unprivileged. The available scope needs orbital and would fail
+// there, so it is never requested.
+//
+// A 404 is left to the routing: a self-hosted agent that does not answer this
+// route has no plugins to report, while the shared hosted edge answers 404 for
+// an installation it cannot route, and reporting that as "no plugins" would
+// hide it.
+func (c *FormaeClient) ListPlugins(ctx context.Context) ([]agentPlugin, error) {
+	q := url.Values{}
+	q.Set("scope", "installed")
+
+	body, status, err := c.get(ctx, "/api/v1/plugins", q, retryOnce)
+	if err != nil {
+		return nil, err
+	}
+	if status == http.StatusNotFound {
+		if _, err := c.route.collectionMiss(json.RawMessage(`{"plugins":[]}`)); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
+	}
+
+	var doc struct {
+		Plugins []agentPlugin `json:"plugins"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, fmt.Errorf("decode the agent's plugin listing: %w", err)
+	}
+	return doc.Plugins, nil
+}
+
 // ListTargets queries the agent for targets matching the given query string.
 func (c *FormaeClient) ListTargets(ctx context.Context, query string) (json.RawMessage, error) {
 	q := url.Values{}
