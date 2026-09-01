@@ -1106,6 +1106,10 @@ If you import ` + "`@aws/s3/bucket.pkl`" + ` but haven't declared the ` + "`@aws
 - **Plugin install on the agent** — needed at runtime so the agent can perform CRUD
   operations against the cloud. Requires root on the agent machine; installed via
   ` + "`formae plugin install`" + `.
+- **On hosted formae there is no third option.** Plugins ride the agent image and
+  cannot be installed on demand, so ` + "`formae plugin install`" + ` is a self-hosted
+  answer only. ` + "`list_agent_plugins`" + ` reports which plugins that installation
+  has, and on hosted that set is closed.
 
 You need both. Forgetting the agent-side install produces a ` + "`plugin not found`" + ` error
 at apply time even though your PKL compiles fine.

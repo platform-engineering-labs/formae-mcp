@@ -58,7 +58,7 @@ A **profile** is a named formae config (endpoint + targets) selecting which agen
 
 - **Targeting your work** → pass ` + "`profile`" + ` on each call. Never call ` + "`use_profile`" + ` just to prepare a session.
 - **` + "`use_profile`" + ` (switching the active profile)** → only when the user **explicitly** asks to change their default environment/agent (e.g. "make prod my default"). It is not a per-session setup step.
-- **Which tools accept ` + "`profile`" + `**: the agent-touching tools — apply_forma, destroy_forma, cancel_commands, force_sync, force_discover, force_check_ttl, force_reconcile_stack, list_resources, list_stacks, list_targets, list_policies, list_commands, get_command_status, get_agent_stats, check_health, list_changes_since_last_reconcile, extract_resources. **Do not pass ` + "`profile`" + ` to** the plugin-hub tools (search_hub_plugins, get_hub_plugin, list_plugin_examples, get_plugin_example) or create_inline_policy — they do not support it and the call will be rejected.
+- **Which tools accept ` + "`profile`" + `**: the agent-touching tools — apply_forma, destroy_forma, cancel_commands, force_sync, force_discover, force_check_ttl, force_reconcile_stack, list_resources, list_stacks, list_targets, list_policies, list_commands, get_command_status, get_agent_stats, check_health, list_changes_since_last_reconcile, extract_resources, list_agent_plugins. **Do not pass ` + "`profile`" + ` to** the plugin-hub tools (search_hub_plugins, get_hub_plugin, list_plugin_examples, get_plugin_example) or create_inline_policy — they do not support it and the call will be rejected.
 
 ## Query Syntax
 
@@ -72,6 +72,7 @@ For common error messages and what they mean: formae://docs/troubleshooting.
 
 Use these tools when helping a user write or scaffold a new plugin or forma project:
 
+- **list_agent_plugins** — what the connected installation actually has installed, and whether it is hosted formae or a self-hosted agent. Call this FIRST: on hosted formae plugins ride the agent image and cannot be installed on demand, so the reported set is closed and the hub catalogue below lists plugins that installation cannot use.
 - **search_hub_plugins** — full-text search across published hub plugins by keyword.
 - **get_hub_plugin** — fetch the full manifest and metadata for a specific hub plugin.
 - **list_plugin_examples** — list bundled code examples for a plugin (returns named examples with a likelyTemplateStub flag plus version-match and originator trust info).
@@ -83,7 +84,7 @@ Key docs for authoring:
 - Browsable example index: formae://docs/examples
 - Common authoring mistakes to avoid: formae://docs/authoring-pitfalls
 
-**Schema vs agent rule**: when authoring a new plugin, the assistant only needs to add the plugin's PKL schema package as a PklProject dependency (no root dependency needed). Resource plugins are compiled Go shared objects installed on the agent machine — the assistant provides guidance only and never installs or builds them. Note: ` + "`formae project init --include <name>`" + ` (non-` + "`@local`" + `) resolves that plugin's version from the agent, so the named plugin must be installed on the agent at init time — or use ` + "`--include <name>@local --plugin-dir <dir>`" + ` to resolve from disk.
+**Schema vs agent rule**: when authoring a new plugin, the assistant only needs to add the plugin's PKL schema package as a PklProject dependency (no root dependency needed). Resource plugins are compiled Go shared objects installed on the agent machine — the assistant provides guidance only and never installs or builds them. Note: ` + "`formae project init --include <name>`" + ` (non-` + "`@local`" + `) resolves that plugin's version from the agent, so the named plugin must be installed on the agent at init time — or use ` + "`--include <name>@local --plugin-dir <dir>`" + ` to resolve from disk. That resolution writes the agent's version verbatim, so on an agent running a prerelease build the scaffolded pin can name a schema coordinate that was never published — compare what init wrote against the version list_agent_plugins names, and correct it.
 
 ## Authoritative Documentation
 
