@@ -20,7 +20,7 @@ If either is found, **stop**. Tell the user a formae project already exists here
 
 **First call `list_agent_plugins` with an explicit `profile`.** On **hosted formae**, take the plugin set from what it reports rather than from intent alone: a dependency on a plugin the installation does not have produces a project that evaluates locally and can never apply. On a self-hosted agent, infer from intent as below; the reported set is useful context, not a limit.
 
-**On hosted formae, stop here**: the set `list_agent_plugins` reported is the catalogue, and the steps below do not apply. Confirm the subset that matches the intent with the user, and if the intent needs something the installation does not report, say it is not reported as installed on this installation and that hosted formae cannot install plugins on demand. Do not run the hub lookup or the trust gate: both would offer plugins that can never be applied there.
+**On hosted formae, dependency discovery stops here**: the set `list_agent_plugins` reported is the catalogue, and the steps below do not apply. Confirm the subset that matches the intent with the user, and if the intent needs something the installation does not report, say it is not reported as installed on this installation and that hosted formae cannot install plugins on demand. Do not run the hub lookup or the trust gate: both would offer plugins that can never be applied there.
 
 **On a self-hosted agent**, use `search_hub_plugins` to identify the schema packages needed. Map the user's intent to plugin names — for example:
 
@@ -112,4 +112,4 @@ Once the scaffold is in place:
 - **Never write the flat forma form.** Do not write `stack = ...`, `targets = ...`, `resources = ...` at the top level. Always use the `forma {}` block pattern.
 - **Always use `formae eval --output-consumer machine`.** Never use `pkl eval` — forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` produces parseable output.
 - **Never overwrite existing user files.** Always preflight; always stop and ask if a collision is detected.
-- **Never silently depend on unverified plugins.** Surface `originatorVerified: false` to the user and get explicit confirmation.
+- **Never silently depend on unverified plugins** (self-hosted). Surface `originatorVerified: false` to the user and get explicit confirmation. On hosted formae the question does not arise: the set is first-party and already installed.
