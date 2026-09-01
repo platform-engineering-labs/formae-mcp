@@ -174,10 +174,11 @@ var connectFailureDescriptions = map[string]string{
 	// az is therefore not blocked, and both have to appear here - the install is
 	// not always something the caller can do, and the template path is invisible
 	// to anyone who only sees the code.
-	"az_missing": "the az CLI is needed to sign in to Azure and is not installed; install it from " +
-		"https://learn.microsoft.com/cli/azure/install-azure-cli and try again. Or take the template path, which " +
-		"needs no CLI and no credential on this machine: the user runs `formae connect azure template` themselves, " +
-		"deploys it in their own portal or pipeline, and registers the tenant id and client id it prints",
+	"az_missing": "the az CLI is needed to sign in to Azure and is not installed; the user can install it from " +
+		"https://learn.microsoft.com/cli/azure/install-azure-cli and you retry. Or take the template path, which " +
+		"needs no CLI and no credential on this machine at all: call get_azure_trust_template for a portal link to " +
+		"show them, then register_azure_trust with the tenant id and client id their deployment outputs. Never tell " +
+		"them to run a formae command: they have no reason to know that binary exists and it is usually not on their PATH",
 	// project_unreachable is also shared: GCP raises it for a project, Azure
 	// for a subscription, so the wording names neither.
 	"project_unreachable": "that account could not be reached with these credentials; check the id, and that this principal can see it. Signing in again will not help: it returns the same principal",

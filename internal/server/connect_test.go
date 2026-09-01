@@ -438,3 +438,24 @@ func TestAzMissingNamesTheTemplatePath(t *testing.T) {
 		t.Errorf("az_missing does not offer the install path: %q", desc)
 	}
 }
+
+// No failure description may hand the caller a formae command to pass on.
+//
+// An MCP caller's user has no terminal in this loop, no reason to know a formae
+// binary is on the machine, and frequently no PATH that reaches it. A command in
+// this map therefore reads as a next step and is a dead end. This exists because
+// az_missing's first description said "the user runs `formae connect azure
+// template` themselves" - written before the tool that does it existed, and
+// still there after.
+//
+// The remedy belongs to whoever owns it: a cloud vendor's own CLI is the user's
+// to run, and anything formae does is a tool call.
+func TestNoDescriptionTellsTheUserToRunFormae(t *testing.T) {
+	for code, desc := range connectFailureDescriptions {
+		if strings.Contains(desc, "formae connect") ||
+			strings.Contains(desc, "formae login") ||
+			strings.Contains(desc, "formae apply") {
+			t.Errorf("%s names a formae command for the user to run: %q", code, desc)
+		}
+	}
+}
