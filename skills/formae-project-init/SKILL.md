@@ -20,15 +20,9 @@ If either is found, **stop**. Tell the user a formae project already exists here
 
 **First call `list_agent_plugins` with an explicit `profile`.** On **hosted formae**, take the plugin set from what it reports rather than from intent alone: a dependency on a plugin the installation does not have produces a project that evaluates locally and can never apply. On a self-hosted agent, infer from intent as below; the reported set is useful context, not a limit.
 
-**Then check the pins init wrote.** `formae project init --include <name>` resolves each version from the agent and writes it verbatim, so an agent running a prerelease build leaves a dependency URI that does not resolve — a `-dev.N` build publishes its schema over the canonical `X.Y.Z`, so `aws@0.1.17-dev.8` names a package that has never existed. After running init, compare each pin in `PklProject` against the schema coordinate `list_agent_plugins` named:
+**On hosted formae, stop here**: the set `list_agent_plugins` reported is the catalogue, and the steps below do not apply. Confirm the subset that matches the intent with the user, and if the intent needs something the installation does not report, say it is not reported as installed on this installation and that hosted formae cannot install plugins on demand. Do not run the hub lookup or the trust gate: both would offer plugins that can never be applied there.
 
-- They agree: nothing to do.
-- They differ (init wrote `aws@0.1.17-dev.8` where the tool named `aws@0.1.17`): correct the `PklProject` entry to the tool's coordinate, then re-run `pkl project resolve` so `PklProject.deps.json` matches. That file is what evaluation actually uses, so leaving it stale is the same bug one step further along.
-- The tool named no schema version for that plugin: stop and ask rather than choosing a coordinate yourself.
-
-
-
-Use `search_hub_plugins` to identify the schema packages needed. Map the user's intent to plugin names — for example:
+**On a self-hosted agent**, use `search_hub_plugins` to identify the schema packages needed. Map the user's intent to plugin names — for example:
 
 - "EKS on AWS" → search for `aws`, `k8s`
 - "Azure storage" → search for `azure`
@@ -38,7 +32,7 @@ Present the inferred set to the user and ask them to confirm or adjust before pr
 
 Make clear: these are **schema packages only** — they provide PKL types and IDE completion. They do not install resource plugins on the agent, and they do not add a formae root.
 
-**Trust gate.** For each inferred plugin, check the `originatorVerified` field from `search_hub_plugins`. If any plugin returns `originatorVerified: false`, surface the originator domain explicitly to the user and ask for confirmation before including it as a dependency. Do not silently depend on unverified packages.
+**Trust gate (self-hosted only).** For each inferred plugin, check the `originatorVerified` field from `search_hub_plugins`. If any plugin returns `originatorVerified: false`, surface the originator domain explicitly to the user and ask for confirmation before including it as a dependency. Do not silently depend on unverified packages.
 
 ## Step 3 — Preflight the target directory (collision safety)
 
@@ -71,6 +65,12 @@ Flags (from `formae project init --help`): `--include <name>` (repeatable, short
 - use a local schema instead: `--include <name>@local --plugin-dir <dir>` (resolves from disk, no agent query).
 
 Show the exact command to the user before running it; wait for confirmation, then run it.
+
+**Then check the pins init wrote.** Init resolves each version from the agent and writes it verbatim, so an agent running a prerelease build leaves a dependency URI that does not resolve: a `-dev.N` build publishes its schema over the canonical `X.Y.Z`, so `aws@0.1.17-dev.8` names a package that has never existed. Compare each pin in the new `PklProject` against the schema coordinate `list_agent_plugins` named in Step 2:
+
+- They agree: nothing to do.
+- They differ (init wrote `aws@0.1.17-dev.8` where the tool named `aws@0.1.17`): correct the `PklProject` entry to the tool's coordinate, then re-run `pkl project resolve` so `PklProject.deps.json` matches. That file is what evaluation actually uses, so leaving it stale is the same bug one step further along.
+- The tool named no schema version for that plugin: stop and ask rather than choosing a coordinate yourself.
 
 ## Step 5 — Scaffold the project structure
 
