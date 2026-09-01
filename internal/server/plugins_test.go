@@ -1,8 +1,18 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/platform-engineering-labs/formae-mcp/internal/config"
+	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
+	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
 
 // A -dev build publishes its schema package over the canonical X.Y.Z
@@ -184,5 +194,106 @@ func TestRenderAgentPluginsClassicEmptyIsAFact(t *testing.T) {
 	}
 	if !strings.Contains(out, "no plugins") {
 		t.Errorf("an empty classic listing should say so plainly:\n%s", out)
+	}
+}
+
+// The hosted branch fails closed: a listing that could not be read is not an
+// empty set, and a caller that treated it as one would refuse work the
+// installation can do.
+func TestHandleListAgentPluginsHostedFailsClosed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	s, _ := hostedServerFor(t, srv)
+	res, _, err := s.handleListAgentPlugins(context.Background(), nil, tools.ProfileInput{})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("a hosted listing failure must be an error result, got: %v", blocks(t, res))
+	}
+}
+
+// A self-hosted conversation loses one fact and nothing else: the hub is still
+// the catalogue and authoring needs only schemas, so the call reports the gap
+// rather than failing.
+func TestHandleListAgentPluginsClassicCarriesOn(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	s := serverWithStubResolver(t, execctx.Context{
+		ProfileName: "local",
+		Conn:        config.Classic{URL: srv.URL},
+		FormaeBin:   "/usr/bin/formae",
+	})
+	s.newClient = func(execctx.Context) (*FormaeClient, error) {
+		return newTestFormaeClient(srv), nil
+	}
+
+	res, _, err := s.handleListAgentPlugins(context.Background(), nil, tools.ProfileInput{})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("a classic listing failure must not be an error result: %v", blocks(t, res))
+	}
+	text := strings.Join(blocks(t, res), "\n")
+	if !strings.Contains(text, "could not be read") || !strings.Contains(text, "search_hub_plugins") {
+		t.Errorf("classic should say the listing could not be read and still point at the "+
+			"catalogue:\n%s", text)
+	}
+}
+
+// A handler test proves the branch but not that anyone can reach it: it would
+// pass with the tool unregistered, misnamed, or wired to another description.
+func TestListAgentPluginsIsRegistered(t *testing.T) {
+	session := connectTestServer(t, "http://localhost:1")
+	result, err := session.ListTools(context.Background(), &mcp.ListToolsParams{})
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+
+	var tool *mcp.Tool
+	for _, candidate := range result.Tools {
+		if candidate.Name == "list_agent_plugins" {
+			tool = candidate
+			break
+		}
+	}
+	if tool == nil {
+		t.Fatal("list_agent_plugins is not registered")
+	}
+	if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint {
+		t.Errorf("list_agent_plugins must be annotated read-only: %+v", tool.Annotations)
+	}
+	schema, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatalf("marshalling the input schema: %v", err)
+	}
+	if !strings.Contains(string(schema), `"profile"`) {
+		t.Errorf("list_agent_plugins must accept a per-call profile: %s", schema)
+	}
+}
+
+// The two branches must not drift into the same wording: a successful hosted
+// call carries the closed-set framing and the canonical schema coordinate.
+func TestHandleListAgentPluginsHostedRendersTheClosedSet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"plugins":[{"name":"aws","kind":"plugin","type":"resource","installedVersion":"0.1.17-dev.8"}]}`))
+	}))
+	defer srv.Close()
+
+	s, _ := hostedServerFor(t, srv)
+	res, _, err := s.handleListAgentPlugins(context.Background(), nil, tools.ProfileInput{})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	text := strings.Join(blocks(t, res), "\n")
+	if !strings.Contains(text, "cannot be installed on demand") || !strings.Contains(text, "aws@0.1.17") {
+		t.Errorf("hosted rendering missing from the result:\n%s", text)
 	}
 }

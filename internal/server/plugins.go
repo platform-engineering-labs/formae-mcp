@@ -163,3 +163,14 @@ func joinNameVersions(ps []agentPlugin) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// renderClassicListingUnavailable is the classic answer to a listing that could
+// not be read. It is not an error: the mode is already known, the hub is the
+// catalogue, and authoring needs only schemas, so the conversation continues
+// with one fact fewer.
+func renderClassicListingUnavailable(err error) string {
+	return fmt.Sprintf("This is a self-hosted agent, and its installed plugin set could not be "+
+		"read (%v). Nothing depends on it: authoring and simulate need only schema packages, "+
+		"and search_hub_plugins is the catalogue. Continue, and if an apply later fails for a "+
+		"missing plugin, the apply error names it.\n", err)
+}
