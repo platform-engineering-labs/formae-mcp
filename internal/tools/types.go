@@ -24,7 +24,12 @@ type ListTargetsInput struct {
 // GetCommandStatusInput is the input for the get_command_status tool.
 type GetCommandStatusInput struct {
 	CommandID string `json:"command_id" jsonschema:"required,The ID of the command to check status for."`
-	Profile   string `json:"profile,omitempty" jsonschema:"Preferred way to target a named formae environment/agent for THIS call only, without changing global state. Use this in preference to use_profile for per-session targeting: the active profile is global and shared with the user's CLI and any other concurrent sessions, so switching it can hijack work elsewhere. Leave empty to use the active profile. See list_profiles for names. Requires formae >= 0.87.0."`
+	// Wait moves the polling to this server. Without it a caller that needs the
+	// outcome has to sleep between calls, which is slower, noisier, and shows
+	// the user a series of commands that are not about their work.
+	Wait           bool   `json:"wait,omitempty" jsonschema:"Block until the command finishes instead of returning its current state. Prefer this over calling repeatedly with your own delay. Returns the final status on completion, or the latest status if the wait budget runs out - a budget overrun is not an error, so call again to keep waiting."`
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty" jsonschema:"How long to wait, in seconds, when wait is set. Defaults to 300 and is capped at 900. Ignored unless wait is set."`
+	Profile        string `json:"profile,omitempty" jsonschema:"Preferred way to target a named formae environment/agent for THIS call only, without changing global state. Use this in preference to use_profile for per-session targeting: the active profile is global and shared with the user's CLI and any other concurrent sessions, so switching it can hijack work elsewhere. Leave empty to use the active profile. See list_profiles for names. Requires formae >= 0.87.0."`
 }
 
 // ListCommandsInput is the input for the list_commands tool.
@@ -324,3 +329,28 @@ type ProvisionCloudRoleInput struct {
 	// defaulted.
 	AwsProfile string `json:"aws_profile" jsonschema:"The local AWS profile name to provision the role with, as shown by list_aws_profiles. Ask the user to pick one; never guess or default it."`
 }
+
+// RegisterAzureTrustInput registers trust an operator established themselves by
+// deploying the ARM template, rather than having formae provision it.
+//
+// This is a separate tool and not three more optional fields on
+// ConnectAzureSubscriptionInput, because the two paths are not variants of one
+// operation: this one provisions nothing, needs no Azure credential on the
+// machine, and its coordinates are outputs the operator already holds. Folding
+// them together would make "which fields may coexist" a rule in prose, and the
+// tool would accept a client id with no tenant id -- a combination the CLI
+// rejects outright.
+type RegisterAzureTrustInput struct {
+	Subscription string `json:"subscription" jsonschema:"The Azure subscription the deployed template established trust in."`
+	// Both coordinates come from the deployment's outputs, named there exactly
+	// as they are here. Neither is inferable: the identity was created outside
+	// formae, so nothing on this machine knows it exists.
+	TenantID string `json:"tenant_id" jsonschema:"The Entra tenant id, from the template deployment's tenantId output."`
+	ClientID string `json:"client_id" jsonschema:"The managed identity's client id, from the template deployment's clientId output."`
+}
+
+// GetAzureTrustTemplateInput takes nothing: the template's coordinates are
+// properties of the signed-in installation, not something a caller supplies,
+// and the subscription is not among them -- the same template establishes trust
+// for whichever subscription it is deployed into.
+type GetAzureTrustTemplateInput struct{}
