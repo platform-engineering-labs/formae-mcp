@@ -7,6 +7,16 @@ description: "Use when the user wants to add or remove a plugin schema dependenc
 
 Use this skill to add or remove plugin schema dependencies in an existing formae project's `PklProject` file. This is **authoring-only** — schema packages provide PKL types and IDE completion. They do not install resource plugins on the agent and do not make infrastructure changes.
 
+## Step 0 — Check the plugin is available at all
+
+Call `list_agent_plugins` with an explicit `profile`. It reports the installation's plugin set and whether the connection is hosted formae or a self-hosted agent.
+
+On **hosted formae**, refuse to add a schema dependency for a plugin the installation does not report. The types would evaluate locally and the apply would then fail on the agent, which is a worse outcome than the refusal: say the plugin is not reported as installed on this installation, that hosted formae cannot install plugins on demand, and offer what the available set can do instead. For a plugin it does report, take the version from the schema coordinate the tool names rather than from the hub's latest stable, so the project pins what the installation actually runs.
+
+On a **self-hosted agent**, this is advisory only. Adding a schema dependency for a plugin the agent does not have yet is legitimate: authoring and simulate need only the schema, and the user can install the plugin before applying. Mention it, do not block on it.
+
+**If the plugin is present but `list_agent_plugins` names no schema version for it**, stop and ask. That happens when the installed build is a prerelease with no published-schema convention, and the dependency URI cannot be guessed: writing one names a package that may not exist. Say which plugin, say the installed version, and let the user choose the coordinate.
+
 ## Step 1 — Locate the project's `PklProject`
 
 Find the `PklProject` file in the current working directory or the path stated by the user. If it cannot be found, tell the user and stop — this skill requires an existing formae project. (If they need to create one from scratch, the `formae-project-init` skill applies.)

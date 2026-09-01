@@ -18,6 +18,16 @@ If either is found, **stop**. Tell the user a formae project already exists here
 
 ## Step 2 — Infer schema plugin dependencies from intent
 
+**First call `list_agent_plugins` with an explicit `profile`.** On **hosted formae**, take the plugin set from what it reports rather than from intent alone: a dependency on a plugin the installation does not have produces a project that evaluates locally and can never apply. On a self-hosted agent, infer from intent as below; the reported set is useful context, not a limit.
+
+**Then check the pins init wrote.** `formae project init --include <name>` resolves each version from the agent and writes it verbatim, so an agent running a prerelease build leaves a dependency URI that does not resolve — a `-dev.N` build publishes its schema over the canonical `X.Y.Z`, so `aws@0.1.17-dev.8` names a package that has never existed. After running init, compare each pin in `PklProject` against the schema coordinate `list_agent_plugins` named:
+
+- They agree: nothing to do.
+- They differ (init wrote `aws@0.1.17-dev.8` where the tool named `aws@0.1.17`): correct the `PklProject` entry to the tool's coordinate, then re-run `pkl project resolve` so `PklProject.deps.json` matches. That file is what evaluation actually uses, so leaving it stale is the same bug one step further along.
+- The tool named no schema version for that plugin: stop and ask rather than choosing a coordinate yourself.
+
+
+
 Use `search_hub_plugins` to identify the schema packages needed. Map the user's intent to plugin names — for example:
 
 - "EKS on AWS" → search for `aws`, `k8s`
