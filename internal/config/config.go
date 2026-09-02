@@ -66,6 +66,39 @@ func AgentEndpoint(profileName string) (url, port string, err error) {
 	return url, port, nil
 }
 
+// AgentCredentials resolves the HTTP basic credentials for an optional profile,
+// following the same profile precedence as AgentEndpoint: an explicit profile
+// if given, else the active pointer.
+//
+// Absent credentials are not an error. Most agents are reachable over the
+// tailnet with no auth at all, so an empty result simply means "send no
+// Authorization header". Only a profile that cannot be read is an error, and
+// an environment with no profile configured yields nothing rather than failing.
+func AgentCredentials(profileName string) (username, password string, err error) {
+	name := profileName
+	if name == "" {
+		active, aerr := profile.ActiveProfile()
+		if aerr != nil {
+			if errors.Is(aerr, profile.ErrNotInitialized) {
+				return "", "", nil
+			}
+			return "", "", aerr
+		}
+		name = active
+	}
+
+	path, err := profile.ProfilePath(name)
+	if err != nil {
+		return "", "", err
+	}
+	data, rerr := os.ReadFile(path)
+	if rerr != nil {
+		return "", "", fmt.Errorf("profile %q not found: %w", name, rerr)
+	}
+	username, password = parseCliAuth(string(data))
+	return username, password, nil
+}
+
 // endpointFromProfile reads a profile's PKL and extracts its cli.api endpoint.
 // A profile that exists but yields neither url nor port is a hard error.
 func endpointFromProfile(name string) (url, port string, err error) {
@@ -170,4 +203,104 @@ func parseCliAPI(content string) (url, port string) {
 	}
 
 	return url, port
+}
+
+var (
+	usernamePattern = regexp.MustCompile(`username\s*=\s*"([^"]*)"`)
+	passwordPattern = regexp.MustCompile(`password\s*=\s*"([^"]*)"`)
+)
+
+// opensBlock reports whether the line opens a block named name, as a whole
+// identifier. Matches both `name {` and `name = new Something {`, which is how
+// a profile writes `auth = new AuthBasic.CliConfig {`.
+func opensBlock(line, name string) bool {
+	idx := strings.Index(line, name)
+	if idx < 0 || !strings.Contains(line[idx:], "{") {
+		return false
+	}
+	isIdentChar := func(b byte) bool {
+		return b == '_' ||
+			(b >= 'a' && b <= 'z') ||
+			(b >= 'A' && b <= 'Z') ||
+			(b >= '0' && b <= '9')
+	}
+	if idx > 0 && isIdentChar(line[idx-1]) {
+		return false
+	}
+	if end := idx + len(name); end < len(line) && isIdentChar(line[end]) {
+		return false
+	}
+	return true
+}
+
+// parseCliAuth extracts HTTP basic-auth credentials from the cli block of a
+// profile's PKL. It accepts them wherever they sit under `cli` — today's
+// `cli.auth = new AuthBasic.CliConfig { ... }` and the `cli.connection`
+// nesting the CLI is deprecating towards — because both spell the credentials
+// the same way and only their position differs.
+//
+// Credentials outside `cli` are deliberately ignored: the agent block carries
+// the server side of the same plugin, and sending that as client credentials
+// would be wrong.
+//
+// Like parseCliAPI this is brace-depth text parsing, not a PKL evaluator, so a
+// profile that computes its credentials rather than writing them literally
+// yields nothing and the caller falls back to an unauthenticated client.
+func parseCliAuth(content string) (username, password string) {
+	inCli := false
+	inAuth := false
+	cliDepth := 0
+	authDepth := 0
+
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+
+		if !inCli && opensBlock(trimmed, "cli") {
+			inCli = true
+			cliDepth = 0
+		}
+		if inCli && !inAuth && opensBlock(trimmed, "auth") {
+			inAuth = true
+			authDepth = 0
+		}
+
+		if inCli && inAuth {
+			if m := usernamePattern.FindStringSubmatch(trimmed); len(m) > 1 {
+				username = m[1]
+			}
+			if m := passwordPattern.FindStringSubmatch(trimmed); len(m) > 1 {
+				password = m[1]
+			}
+		}
+
+		for _, ch := range trimmed {
+			switch ch {
+			case '{':
+				if inCli {
+					cliDepth++
+				}
+				if inAuth {
+					authDepth++
+				}
+			case '}':
+				if inAuth {
+					authDepth--
+					if authDepth == 0 {
+						inAuth = false
+					}
+				}
+				if inCli {
+					cliDepth--
+					if cliDepth == 0 {
+						inCli = false
+					}
+				}
+			}
+		}
+	}
+
+	return username, password
 }

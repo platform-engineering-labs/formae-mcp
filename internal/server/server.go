@@ -70,13 +70,21 @@ func (s *Server) clientFor(profileName string) (*FormaeClient, error) {
 			return nil, err
 		}
 	} else if s.forcedEndpoint != "" {
-		return NewFormaeClient(s.forcedEndpoint), nil
+		return NewFormaeClient(s.forcedEndpoint, nil), nil
 	}
 	url, port, err := config.AgentEndpoint(profileName)
 	if err != nil {
 		return nil, err
 	}
-	return NewFormaeClient(url + ":" + port), nil
+	username, password, err := config.AgentCredentials(profileName)
+	if err != nil {
+		return nil, err
+	}
+	var creds *BasicAuth
+	if username != "" {
+		creds = &BasicAuth{Username: username, Password: password}
+	}
+	return NewFormaeClient(url+":"+port, creds), nil
 }
 
 // Run starts the MCP server with the given transport.

@@ -11,19 +11,56 @@ import (
 	"time"
 )
 
+// BasicAuth carries the HTTP basic credentials a profile declares for its
+// agent. A nil *BasicAuth means the agent is unauthenticated, which is the
+// case for every tailnet-only agent.
+type BasicAuth struct {
+	Username string
+	Password string
+}
+
 // FormaeClient is a lightweight HTTP client for the formae agent REST API.
 type FormaeClient struct {
 	endpoint   string
+	creds      *BasicAuth
 	httpClient *http.Client
 }
 
-func NewFormaeClient(endpoint string) *FormaeClient {
+func NewFormaeClient(endpoint string, creds *BasicAuth) *FormaeClient {
 	return &FormaeClient{
 		endpoint: endpoint,
+		creds:    creds,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// do applies the profile's credentials, if any, and performs the request. Every
+// request the client makes goes through here, so an agent behind basic auth is
+// reachable from all of them rather than only the ones someone remembered.
+func (c *FormaeClient) do(req *http.Request) (*http.Response, error) {
+	if c.creds != nil {
+		req.SetBasicAuth(c.creds.Username, c.creds.Password)
+	}
+	return c.httpClient.Do(req)
+}
+
+// doRead performs the request and reads the whole body, which is what every
+// caller of get/post wants.
+func (c *FormaeClient) doRead(req *http.Request) ([]byte, int, error) {
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	return body, resp.StatusCode, nil
 }
 
 func (c *FormaeClient) get(path string, query url.Values) ([]byte, int, error) {
@@ -32,18 +69,11 @@ func (c *FormaeClient) get(path string, query url.Values) ([]byte, int, error) {
 		u += "?" + query.Encode()
 	}
 
-	resp, err := c.httpClient.Get(u)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return nil, 0, fmt.Errorf("request failed: %w", err)
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	return body, resp.StatusCode, nil
+	return c.doRead(req)
 }
 
 func (c *FormaeClient) post(path string, query url.Values) ([]byte, int, error) {
@@ -52,18 +82,12 @@ func (c *FormaeClient) post(path string, query url.Values) ([]byte, int, error) 
 		u += "?" + query.Encode()
 	}
 
-	resp, err := c.httpClient.Post(u, "application/json", nil)
+	req, err := http.NewRequest(http.MethodPost, u, nil)
 	if err != nil {
-		return nil, 0, fmt.Errorf("request failed: %w", err)
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	return body, resp.StatusCode, nil
+	req.Header.Set("Content-Type", "application/json")
+	return c.doRead(req)
 }
 
 // ListResources queries the agent for resources matching the given query string.
@@ -151,7 +175,7 @@ func (c *FormaeClient) GetCommandStatus(commandID string, clientID string) (json
 	}
 	req.Header.Set("Client-ID", clientID)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -188,7 +212,7 @@ func (c *FormaeClient) ListCommands(query string, maxResults string, clientID st
 	}
 	req.Header.Set("Client-ID", clientID)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -306,7 +330,7 @@ func (c *FormaeClient) CancelCommands(query string, clientID string) (json.RawMe
 	}
 	req.Header.Set("Client-ID", clientID)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -432,7 +456,7 @@ func (c *FormaeClient) postMultipartWithHeaders(path string, query url.Values, f
 		req.Header.Set(k, v)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("request failed: %w", err)
 	}

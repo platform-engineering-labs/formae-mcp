@@ -405,3 +405,169 @@ agent {
 		t.Errorf("expected port '8080' (not agent.api.port 12345), got %q", port)
 	}
 }
+
+func TestParseCliAuth_BasicCredentials(t *testing.T) {
+	content := `amends "formae:/Config.pkl"
+
+import "plugins:/AuthBasic.pkl" as AuthBasic
+
+cli {
+    api {
+        url = "http://fleet.example.com"
+        port = 8080
+    }
+    auth = new AuthBasic.CliConfig {
+        username = "formae"
+        password = "s3cr3t"
+    }
+    disableUsageReporting = true
+}
+`
+	username, password := parseCliAuth(content)
+	if username != "formae" {
+		t.Errorf("expected username 'formae', got '%s'", username)
+	}
+	if password != "s3cr3t" {
+		t.Errorf("expected password 's3cr3t', got '%s'", password)
+	}
+}
+
+func TestParseCliAuth_InsideConnectionBlock(t *testing.T) {
+	// The CLI deprecates `cli.auth` in favour of auth nested under
+	// `cli.connection`; credentials must be found in either position.
+	content := `amends "formae:/Config.pkl"
+
+cli {
+    connection = new Classic {
+        url = "http://fleet.example.com"
+        port = 8080
+        auth {
+            username = "formae"
+            password = "s3cr3t"
+        }
+    }
+}
+`
+	username, password := parseCliAuth(content)
+	if username != "formae" {
+		t.Errorf("expected username 'formae', got '%s'", username)
+	}
+	if password != "s3cr3t" {
+		t.Errorf("expected password 's3cr3t', got '%s'", password)
+	}
+}
+
+func TestParseCliAuth_NoAuthBlock(t *testing.T) {
+	content := `amends "formae:/Config.pkl"
+
+cli {
+    api {
+        url = "http://agent.example.com"
+        port = 8080
+    }
+}
+`
+	username, password := parseCliAuth(content)
+	if username != "" || password != "" {
+		t.Errorf("expected no credentials, got '%s'/'%s'", username, password)
+	}
+}
+
+func TestParseCliAuth_IgnoresCredentialsOutsideCli(t *testing.T) {
+	// The agent block declares its own auth plugin config; that is the
+	// agent's server-side setting and must never be sent as CLI credentials.
+	content := `amends "formae:/Config.pkl"
+
+agent {
+    auth {
+        username = "agent-side"
+        password = "not-ours"
+    }
+}
+
+cli {
+    api {
+        url = "http://agent.example.com"
+        port = 8080
+    }
+}
+`
+	username, password := parseCliAuth(content)
+	if username != "" || password != "" {
+		t.Errorf("expected no credentials from the agent block, got '%s'/'%s'", username, password)
+	}
+}
+
+const sampleAuthProfile = `amends "formae:/Config.pkl"
+
+import "plugins:/AuthBasic.pkl" as AuthBasic
+
+cli {
+    api {
+        url = "http://fleet.example.com"
+        port = 8080
+    }
+    auth = new AuthBasic.CliConfig {
+        username = "formae"
+        password = "s3cr3t"
+    }
+}
+`
+
+func TestAgentCredentials_FromExplicitProfile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	writeProfile(t, dir, "fleet", sampleAuthProfile)
+
+	username, password, err := AgentCredentials("fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if username != "formae" || password != "s3cr3t" {
+		t.Errorf("expected formae/s3cr3t, got %s/%s", username, password)
+	}
+}
+
+func TestAgentCredentials_ProfileWithoutAuthYieldsNone(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	writeProfile(t, dir, "prod", sampleProfile)
+
+	username, password, err := AgentCredentials("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if username != "" || password != "" {
+		t.Errorf("expected no credentials, got %s/%s", username, password)
+	}
+}
+
+func TestAgentCredentials_FollowsActiveProfile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir)
+	writeProfile(t, dir, "fleet", sampleAuthProfile)
+	if err := os.WriteFile(filepath.Join(dir, "active"), []byte("fleet\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	username, password, err := AgentCredentials("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if username != "formae" || password != "s3cr3t" {
+		t.Errorf("expected the active profile's credentials, got %s/%s", username, password)
+	}
+}
+
+func TestAgentCredentials_NoProfileConfiguredYieldsNone(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FORMAE_CONFIG_DIR", dir) // empty, no active
+
+	username, password, err := AgentCredentials("")
+	if err != nil {
+		t.Fatalf("an unconfigured environment must not be an error: %v", err)
+	}
+	if username != "" || password != "" {
+		t.Errorf("expected no credentials, got %s/%s", username, password)
+	}
+}
