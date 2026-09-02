@@ -69,21 +69,26 @@ Then collect both in `forma { ... }`.
 
 **Every destination must be in the same apply.** A generator that draws must reach all of its destinations in one command, or the apply is refused naming the ones it cannot reach. This is not a limitation to work around: the drawn value exists only for the duration of that command, so a destination left out can never be caught up without drawing again and putting its siblings behind. If a generator feeds resources on two stacks, apply both together.
 
-**The cadence floor is one minute.** Anything shorter is refused at evaluation. A credential that must turn over faster than that wants short-lived credentials issued per use, not a scheduler revisiting a long-lived one.
+**The cadence floor is one minute, and the provider's ceiling is lower than you think.** Anything shorter than a minute is refused at evaluation, and a credential that must turn over faster wants short-lived credentials issued per use, not a scheduler revisiting a long-lived one. But the floor is not a recommendation: AWS Secrets Manager retains every version from the last 24 hours against a non-adjustable quota of 100 versions per secret and advises against sustained writes more often than once per 10 minutes, so a one-minute cadence exhausts the quota in under two hours and every rotation after that fails. Treat minutes-scale cadences as drill settings, never as a steady state; a sustained cadence should be 15 minutes at the absolute fastest.
 
 **A field the schema does not mark opaque will store the value in cleartext.** Bind generators to fields that are declared as secret-bearing. If a plugin's field takes a generator output, it is opaque by construction.
 
-**Rotation refuses on a drifted stack.** Rotation is an ordinary update, so it will not overwrite an out-of-band change. A stack carrying an auto-reconcile policy is the standing opt-in to overwrite drift, and there rotation proceeds.
+**Rotation refuses on drift, and it sees the consumers too.** Rotation is an ordinary update, so it will not overwrite an out-of-band change — and because it plans the resources consuming the rotated credential as well as its destinations, a drifted *consumer* also stops it. A stack carrying an auto-reconcile policy is the standing opt-in to overwrite drift, and there rotation proceeds.
 
 **Destroying a stack whose generator is referenced elsewhere** aborts, naming the referencing resources, unless `--on-dependents=cascade` is given.
 
-## Know this before promising rotation to a user
+## The window, and the contract to state for consumers
 
-A resource that takes its value from a generator-fed secret **by reference** — the consuming side of `secret.res.secretValue` — does not currently follow a rotation. The secret is updated; the referencing resource is not, until the next ordinary apply.
+A rotation moves everything downstream of the credential in one command: the generator's destinations (the secret) and, transitively, the resources that consume them by reference (the database role whose password is the secret's value, and the database owned by that role). This needs formae 0.89.0 or newer; on an older agent only the destinations move, and a resource consuming them by reference stays on the old value until the next ordinary apply — check with `check_health` and say so before promising rotation.
 
-The practical consequence, and it is worth saying out loud rather than discovering: rotating a database password updates the stored secret while the database still expects the old one, so anything that reads the secret to authenticate will be rejected until someone re-applies.
+What no rotation removes is the **window** between the two writes. No transaction spans the secret store and the system that accepts the credential, so for a moment the secret advertises a password the engine does not yet accept — and for up to a consumer's own cache lifetime afterwards, a cached reader keeps presenting one the engine no longer accepts. With a single credential no write ordering avoids this; only overlapping validity (two alternating users) removes it, and formae does not orchestrate that today.
 
-So when a user asks for rotation on a credential that something else consumes by reference, say what will and will not follow. A generator feeding a single destination that is itself the authority is unaffected.
+So when a user asks for rotation on a credential that something reads to authenticate, state the consumer contract out loud:
+
+- **The consumer must re-read the credential** at least once per rotation period — per connection, or on a bounded cache TTL. A consumer that reads it once at startup breaks on the first rotation and stays broken until restarted.
+- **The consumer must tolerate transient authentication failures around a rotation**, for up to its own cache lifetime, by retrying or reconnecting. The failures end on their own when its cache expires.
+
+The formae agent is itself a worked example of the contract: pointing `datastore.postgres.passwordSecretArn` at the secret makes it resolve its own database password per new connection, and it rides out a rotation of that credential without a restart.
 
 ## Simulate first
 
