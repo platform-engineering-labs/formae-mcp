@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [Unreleased]
+
+### Fixed
+
+- The MCP now sends the HTTP basic credentials a profile declares, so agents
+  behind auth are reachable. Previously only `cli.api`'s `url` and `port` were
+  read out of a profile and no `Authorization` header was ever set, so every
+  tool call against an authenticated agent came back `401 unauthorized` even
+  though the credentials were sitting in the profile the whole time. This made
+  the entire hosted fleet invisible to the MCP. Credentials are picked up from
+  `cli.auth` and from auth nested under `cli.connection`, and are applied to
+  every request the client makes rather than only some of them.
+
 ## [0.8.0]
 
 ### Changed

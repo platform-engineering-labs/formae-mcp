@@ -9,7 +9,7 @@ import (
 
 // newTestFormaeClient creates a FormaeClient pointed at the given httptest.Server.
 func newTestFormaeClient(srv *httptest.Server) *FormaeClient {
-	c := NewFormaeClient(srv.URL)
+	c := NewFormaeClient(srv.URL, nil)
 	c.httpClient = srv.Client()
 	return c
 }
@@ -190,5 +190,66 @@ func TestDestroyByQueryRejectsOtherStatus(t *testing.T) {
 	_, err := c.DestroyByQuery("stack=default", false, "client-1")
 	if err == nil {
 		t.Fatal("DestroyByQuery: expected error for 500, got nil")
+	}
+}
+
+func TestFormaeClient_SendsBasicAuthWhenCredentialsPresent(t *testing.T) {
+	var gotUser, gotPass string
+	var gotOK bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser, gotPass, gotOK = r.BasicAuth()
+		_, _ = w.Write([]byte(`{"Resources":[]}`))
+	}))
+	defer srv.Close()
+
+	c := NewFormaeClient(srv.URL, &BasicAuth{Username: "formae", Password: "s3cr3t"})
+	c.httpClient = srv.Client()
+
+	if _, err := c.ListResources(""); err != nil {
+		t.Fatalf("ListResources: %v", err)
+	}
+	if !gotOK {
+		t.Fatal("expected an Authorization header carrying basic credentials, got none")
+	}
+	if gotUser != "formae" || gotPass != "s3cr3t" {
+		t.Errorf("expected formae/s3cr3t, got %s/%s", gotUser, gotPass)
+	}
+}
+
+func TestFormaeClient_SendsNoAuthHeaderWithoutCredentials(t *testing.T) {
+	var sawAuthHeader bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuthHeader = r.Header.Get("Authorization") != ""
+		_, _ = w.Write([]byte(`{"Resources":[]}`))
+	}))
+	defer srv.Close()
+
+	c := NewFormaeClient(srv.URL, nil)
+	c.httpClient = srv.Client()
+
+	if _, err := c.ListResources(""); err != nil {
+		t.Fatalf("ListResources: %v", err)
+	}
+	if sawAuthHeader {
+		t.Error("expected no Authorization header when the profile carries no credentials")
+	}
+}
+
+func TestFormaeClient_SendsBasicAuthOnPost(t *testing.T) {
+	var gotOK bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _, gotOK = r.BasicAuth()
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	c := NewFormaeClient(srv.URL, &BasicAuth{Username: "formae", Password: "s3cr3t"})
+	c.httpClient = srv.Client()
+
+	if _, _, err := c.post("/api/v1/anything", nil); err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if !gotOK {
+		t.Error("expected basic credentials on a POST as well as a GET")
 	}
 }
