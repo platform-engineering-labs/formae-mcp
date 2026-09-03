@@ -374,6 +374,10 @@ const ConnectAzureSubscriptionDescription = "Connect an Azure subscription to th
 	"ARM template themselves and runs `formae connect azure --subscription ... --tenant-id ... --client-id ...` " +
 	"in their own terminal - that command is for the user, never for you."
 
+const RegisterAzureTrustDescription = `Register an Azure subscription whose trust was established by deploying the ARM template, instead of having formae provision it. Use this for an operator who will not put provisioning credentials on this machine: they deploy the template in their own portal or pipeline, and this registers the tenant id and client id it outputs. Needs no Azure credential and no az CLI. This validates the coordinates' shape only: it does not check the identity exists, trusts the formae issuer, or grants access.`
+
+const GetAzureTrustTemplateDescription = `Get the one-click Azure portal link that establishes trust without any credential on this machine. Use this when connect_azure_subscription reports no usable Azure credentials, or when the user will not put provisioning credentials here. Returns a portal deep link to show the user: it opens the ARM template with this installation's coordinates already filled in, so there is nothing to paste and no CLI to install. When they report the deployment finished, call register_azure_trust with the tenantId and clientId from its outputs.`
+
 // ListAgentPluginsDescription is the list_agent_plugins tool description.
 const ListAgentPluginsDescription = `Report the resource plugins the connected formae installation has installed, and what that implies for authoring.
 
