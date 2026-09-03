@@ -387,3 +387,75 @@ func TestRunConnect_NamesAnUnmappedCodeRatherThanTheExitStatus(t *testing.T) {
 		t.Errorf("the producer's message crossed: %s", resultText(res))
 	}
 }
+
+// TestEveryProducerCodeCarriesARemedy guards the description map against the
+// whole set of codes the CLI can emit, not one cloud's subset.
+//
+// A per-cloud list cannot catch the omission it is meant to catch. GCP's guard
+// was written after four GCP codes went missing, and it froze those four; when
+// Azure later added az_missing nothing failed, and a machine without the az CLI
+// got "formae connect failed (az_missing)" — a bare code, while the producer's
+// own message named both the install link and the template path that needs no
+// CLI at all.
+//
+// The list mirrors the Code constants in the CLI's internal/cli/printer
+// package, which this module cannot import. Adding a code there means adding it
+// here; that is the point, and a missing row fails loudly instead of degrading
+// a user's error into a string only we can read.
+func TestEveryProducerCodeCarriesARemedy(t *testing.T) {
+	producerCodes := []string{
+		"account_mismatch", "ambiguous_profile", "api_disabled", "auth_failed",
+		"az_missing", "control_plane_too_old", "credentials_required",
+		"gcloud_missing", "hosted_required", "installation_not_ready",
+		"internal", "login_failed", "no_connection", "not_authorized",
+		"orphaned_trust", "plugin_missing", "project_unreachable",
+		"provider_conflict", "provision_failed", "registration_conflict",
+		"role_collision", "sso_login_required", "sync_incomplete",
+		"unsupported_partition", "untrusted_issuer",
+	}
+	for _, code := range producerCodes {
+		desc, ok := connectFailureDescriptions[code]
+		if !ok {
+			t.Errorf("%s has no description, so the user sees a bare code", code)
+			continue
+		}
+		if desc == "" {
+			t.Errorf("%s has an empty description", code)
+		}
+	}
+}
+
+// A machine with no az CLI is not a dead end for Azure the way it is for GCP:
+// the ARM trust template deploys from the portal and needs no CLI and no
+// credential locally. The description has to say so, or the only remedy a
+// caller sees is an install it may not be able to perform.
+func TestAzMissingNamesTheTemplatePath(t *testing.T) {
+	desc := connectFailureDescriptions["az_missing"]
+	if !strings.Contains(desc, "template") {
+		t.Errorf("az_missing does not offer the template path: %q", desc)
+	}
+	if !strings.Contains(desc, "install") {
+		t.Errorf("az_missing does not offer the install path: %q", desc)
+	}
+}
+
+// No failure description may hand the caller a formae command to pass on.
+//
+// An MCP caller's user has no terminal in this loop, no reason to know a formae
+// binary is on the machine, and frequently no PATH that reaches it. A command in
+// this map therefore reads as a next step and is a dead end. This exists because
+// az_missing's first description said "the user runs `formae connect azure
+// template` themselves" - written before the tool that does it existed, and
+// still there after.
+//
+// The remedy belongs to whoever owns it: a cloud vendor's own CLI is the user's
+// to run, and anything formae does is a tool call.
+func TestNoDescriptionTellsTheUserToRunFormae(t *testing.T) {
+	for code, desc := range connectFailureDescriptions {
+		if strings.Contains(desc, "formae connect") ||
+			strings.Contains(desc, "formae login") ||
+			strings.Contains(desc, "formae apply") {
+			t.Errorf("%s names a formae command for the user to run: %q", code, desc)
+		}
+	}
+}

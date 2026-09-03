@@ -57,11 +57,14 @@ softening it.
 Then go to step 6: registration is already complete, in this one call, and
 steps 3-5 are AWS's own continuation.
 
-## Step 2A — Azure: one call
+## Step 2A — Azure: credentials, or the template
 
-Azure has no console path either, for the same reason as GCP: there is
-nothing like CloudFormation's quick-create URL to hand the user, so
-provisioning and registering are one call.
+Azure has a credential-less path, unlike GCP: the portal accepts a
+subscription-scoped ARM template from a URL, which is the nearest thing to
+CloudFormation's quick-create link. So there are two ways in, and which one
+applies is a fact about this machine rather than a preference to survey the
+user about — with usable Azure credentials it is one call, and without them
+it is the template.
 
 Ask for the **subscription id**. Never infer it from az's active
 configuration: provisioning trust into the wrong subscription is not a
@@ -82,18 +85,30 @@ Then say what is about to happen, before calling anything:
 
 Then call `connect_azure_subscription` with the subscription id.
 
-**If the user will not give the agent provisioning credentials at all**, this
-tool is not the path: there is no register-only argument on it. They deploy
-the embedded ARM template themselves — `formae connect azure template` prints
-it, to run in their own console or pipeline, under their own admin session —
-and it establishes the trust without formae ever holding a provisioning
-credential. Once applied, it prints a tenant id and a client id; they run
-`formae connect azure --subscription <id> --tenant-id <id> --client-id <id>`
-themselves in their own terminal to register those. **That command is for the
-user, never for you** — same as the terminal commands named in step 7. This
-path validates the coordinate's shape and nothing else: it does not check the
-identity exists, trusts the formae issuer, or grants access, and the CLI's own
-warning says so.
+**If this machine has no usable Azure credentials** — the tool fails saying
+so, naming both remedies — the template is the path, and it is a better one
+than it sounds: it asks nothing of this machine at all.
+
+Call **`get_azure_trust_template`**. It returns a portal deep link that opens
+the template already loaded, with this installation's coordinates filled in as
+defaults. Show the user that link. There is nothing for them to paste, no CLI
+to install, and no credential to put anywhere; they pick a region and deploy
+under their own admin session, so formae never holds a provisioning
+credential.
+
+When they say the deployment finished, its Outputs tab carries a `tenantId`
+and a `clientId`. Register those with **`register_azure_trust`**, together
+with the subscription id.
+
+Do not print a formae command for the user to run at any point in this path.
+An MCP-native user has no reason to know a formae binary is on this machine,
+it is frequently not on PATH, and running it is the harness's job — the same
+binary this server already runs for every other connect. A command handed to
+the user is a dead end wearing the costume of a next step.
+
+This path validates the coordinates' shape and nothing else: it does not check
+the identity exists, trusts the formae issuer, or grants access. Say so, in
+those terms, rather than reporting a verified connection.
 
 Then go to step 6: registration is already complete, in this one call, and
 steps 3-5 are AWS's own continuation.
@@ -405,7 +420,10 @@ one example prompt for each:
   ask what it found — e.g. `"What unmanaged resources do you see in
   <label>?"`
 - They can start creating infrastructure against it now — e.g. `"Create an
-  S3 bucket in <label>."`
+  S3 bucket in <label>."` for AWS, `"Create a storage bucket in <label>."`
+  for GCP, `"Create a blob container in <label>."` for Azure. Name the one
+  belonging to the cloud they just connected: the example exists to be
+  pasted, and the other two clouds do not have that resource.
 
 If no target was created, skip the above — this step needs nothing extra for
 that case.
@@ -430,8 +448,9 @@ Then offer the next step:
 They can also do this from a terminal: `formae connect aws --account <id>` for
 the console-link path, `formae connect gcp --project <id>` for GCP, or
 `formae connect azure --subscription <id>` for Azure. All three walk the same
-flow interactively — and for Azure, `formae connect azure --subscription <id>
---tenant-id ... --client-id ...` is the credential-less path named in step 2A.
+flow interactively. Azure's credential-less registration is not on that list:
+`register_azure_trust` does it here, and step 2A says why a formae command is
+not something to hand an MCP-native user.
 
 **That command is for the user, never for you.** Do not run it, and do not
 offer to. It is interactive and it provisions real cloud trust; run from a
