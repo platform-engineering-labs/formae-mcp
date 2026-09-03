@@ -257,3 +257,100 @@ func TestConnectAzureSubscription_NamesTheUnregisteredProvider(t *testing.T) {
 		t.Errorf("a GCP-specific remedy leaked into an Azure failure:\n%s", got)
 	}
 }
+
+// An MCP-native caller has no terminal and no reason to know a formae binary
+// exists, so the credential-less path cannot end in a command for the user to
+// run. Registration after a self-deployed ARM template is the harness's work:
+// it already runs the binary for every other connect, and on a machine where
+// that binary is not even on PATH a printed command is unfollowable advice.
+func TestRegisterAzureTrust_DrivesTheRegisterOnlyPath(t *testing.T) {
+	argv := filepath.Join(t.TempDir(), "argv")
+	s := serverWithLoginBin(t, argvStub(t, argv, azureRegisteredJSON))
+
+	res, _, err := s.handleRegisterAzureTrust(context.Background(), nil, tools.RegisterAzureTrustInput{
+		Subscription: testAzureSubscription,
+		TenantID:     testAzureTenant,
+		ClientID:     testAzureClient,
+	})
+	if err != nil {
+		t.Fatalf("register_azure_trust: %v", err)
+	}
+	if isError(res) {
+		t.Fatalf("unexpected error result: %s", resultText(res))
+	}
+
+	// --client-id is the CLI's register-only signal and --tenant-id is required
+	// alongside it; either one missing turns this into a provisioning attempt,
+	// which is the one thing this path exists to avoid.
+	gotArgv := readFile(t, argv)
+	for _, want := range []string{
+		"--subscription " + testAzureSubscription,
+		"--tenant-id " + testAzureTenant,
+		"--client-id " + testAzureClient,
+	} {
+		if !strings.Contains(gotArgv, want) {
+			t.Errorf("argv does not carry %q: %s", want, gotArgv)
+		}
+	}
+
+	got := resultText(res)
+	for _, want := range []string{testAzureSubscription, testAzureTenant, testAzureClient} {
+		if !strings.Contains(got, want) {
+			t.Errorf("result does not carry %q:\n%s", want, got)
+		}
+	}
+}
+
+const azureTemplateJSON = `{"schemaVersion":2,"phase":"template","cloud":"azure",` +
+	`"installation":"3IjUFLA75bBkM4DmUp2c6TgHeu9","formaeTenantId":"default",` +
+	`"deepLink":"https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fconsole.formae.ai%2Fazure%2Ftrust.json",` +
+	`"templateUrl":"https://console.formae.ai/azure/trust.json?installation=3IjUFLA75bBkM4DmUp2c6TgHeu9",` +
+	`"template":{"$schema":"https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#"}}`
+
+// The deep link is the credential-less path's whole value: it opens the portal
+// with the template already fetched and its parameters filled in, so it asks
+// nothing of the machine the user is talking to us from. It has to reach the
+// caller as a link to show, exactly as AWS's quick-create URL does.
+func TestGetAzureTrustTemplate_ShowsTheDeepLink(t *testing.T) {
+	argv := filepath.Join(t.TempDir(), "argv")
+	s := serverWithLoginBin(t, argvStub(t, argv, azureTemplateJSON))
+
+	res, _, err := s.handleGetAzureTrustTemplate(context.Background(), nil, tools.GetAzureTrustTemplateInput{})
+	if err != nil {
+		t.Fatalf("get_azure_trust_template: %v", err)
+	}
+	if isError(res) {
+		t.Fatalf("unexpected error result: %s", resultText(res))
+	}
+
+	got := resultText(res)
+	if !strings.Contains(got, "portal.azure.com") {
+		t.Errorf("result does not carry the deep link:\n%s", got)
+	}
+	// The follow-up is a tool call, never a command for the user to run: they
+	// have no terminal in this flow and no reason to know the binary exists.
+	if !strings.Contains(got, "register_azure_trust") {
+		t.Errorf("result does not name the tool that finishes the flow:\n%s", got)
+	}
+
+	gotArgv := readFile(t, argv)
+	for _, want := range []string{"connect", "azure", "template", "--output-consumer machine"} {
+		if !strings.Contains(gotArgv, want) {
+			t.Errorf("argv does not carry %q: %s", want, gotArgv)
+		}
+	}
+}
+
+// A document that is not the template phase means this build and the producer
+// disagree about the protocol, which must not be rendered as if understood.
+func TestGetAzureTrustTemplate_RejectsAnUnidentifiableDocument(t *testing.T) {
+	s := serverWithLoginBin(t, argvStub(t, filepath.Join(t.TempDir(), "argv"), azureRegisteredJSON))
+
+	res, _, err := s.handleGetAzureTrustTemplate(context.Background(), nil, tools.GetAzureTrustTemplateInput{})
+	if err != nil {
+		t.Fatalf("get_azure_trust_template: %v", err)
+	}
+	if !isError(res) {
+		t.Errorf("a registered document was rendered as a template: %s", resultText(res))
+	}
+}
