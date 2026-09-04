@@ -124,6 +124,21 @@ run_case "user-local install off PATH is found" \
     'stub_bin "$HOME/.local/bin/formae"' \
     0 0 '$HOME/.local/bin/formae'
 
+# A symlink into a probed location pointing back at the managed copy is still
+# the managed copy. Compared as strings the two paths differ, and calling it the
+# user's own would hand /formae:upgrade a binary it then refuses to touch.
+run_case "a symlink to the managed copy is still managed" \
+    'stub_bin "$managed"; mkdir -p "$HOME/.local/bin"; ln -s "$managed" "$HOME/.local/bin/formae"' \
+    1 1 '$managed'
+
+# FORMAE_BIN is the binary's own location, not the name it was reached by. The
+# launcher puts the directory of FORMAE_BIN on PATH so formae can find the pkl
+# beside it; a symlink's directory holds no pkl, and plugin manifests then fail
+# to evaluate.
+run_case "a symlinked own install resolves to its target" \
+    'stub_bin "$HOME/real/formae"; ln -s "$HOME/real/formae" "$fakepath/formae"' \
+    0 0 '$HOME/real/formae'
+
 # The cases above inject their own probe list, so nothing there pins the list
 # that actually ships. Check the defaults directly: dropping a location here is
 # how a machine ends up with a second formae beside one it already had.
