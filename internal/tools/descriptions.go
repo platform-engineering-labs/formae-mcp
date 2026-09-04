@@ -320,3 +320,24 @@ const ProvisionCloudRoleDescription = "Create the AWS IAM role formae will assum
 	"the user the profile and its account, and the user picked it. Reporting that the account was already " +
 	"connected with the same role is SUCCESS, not a conflict. A registered connection is complete: there is no " +
 	"verification step to wait for and nothing to poll."
+
+// ConnectGcpProjectDescription is the connect_gcp_project tool description.
+//
+// GCP has one tool where AWS has three, and the description says why: there is
+// no console link to hand anyone, so provisioning and registering are a single
+// call. It carries the same DestructiveHint as provision_cloud_role for the
+// same reason - the mutation happens immediately, with nothing for the user to
+// apply themselves.
+const ConnectGcpProjectDescription = "Connect a GCP project to the active installation: create the workload " +
+	"identity federation formae authenticates through, grant it access to the project, and register the " +
+	"connection - in one call. Unlike AWS there is no console link and no stack for the user to apply: GCP has no " +
+	"equivalent, so formae does the work with the operator's own Google credentials. This happens immediately and " +
+	"grants formae broad access to the project (editor plus the ability to manage the project's IAM), so make sure " +
+	"the user means this project before calling. If no usable Google credentials are on the machine, formae signs " +
+	"the user in first by running `gcloud auth application-default login`, which opens a browser; tell them to " +
+	"expect it. If gcloud is not installed the call fails saying so; the user installs it and you call this tool " +
+	"again, and the sign-in happens then - do NOT tell them to run a gcloud login themselves, and do not offer to " +
+	"run one for them. If a freshly installed gcloud still reads as missing, their session needs restarting so the " +
+	"new PATH is seen. Ask the user " +
+	"for the project id and never infer it from gcloud's active configuration. Reporting that the project was " +
+	"already connected with the same federation is SUCCESS, not a conflict."

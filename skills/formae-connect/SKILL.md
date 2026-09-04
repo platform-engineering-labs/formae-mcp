@@ -6,20 +6,58 @@ description: "Use when the user wants to connect a cloud account to their hosted
 # Connect a cloud account
 
 Gives a hosted formae installation permission to manage resources in a cloud
-account. For AWS there are two ways to get there now: provisioning directly
-from local AWS credentials in one step, or having the user apply a small
-CloudFormation stack themselves. Neither path exists yet for Azure or GCP.
+account. AWS has two ways to get there: provisioning directly from local AWS
+credentials in one step, or having the user apply a small CloudFormation stack
+themselves. GCP has one, because it has no console equivalent to offer.
+Azure has none yet.
 
 ## Step 1 — Which cloud?
 
-Ask AWS, Azure, or GCP. Offer all three even though only AWS works today —
-that keeps the shape of the product visible rather than looking AWS-only by
-accident.
+Ask AWS, Azure, or GCP. Offer all three: AWS and GCP both work, and offering
+Azure keeps the shape of the product visible rather than looking like it has
+two clouds by accident.
 
-**Azure or GCP:** say plainly that support is not built yet. Do not promise a
-date; there is not one to promise.
+**Azure:** say plainly that support is not built yet. Do not promise a date;
+there is not one to promise.
 
 **AWS:** go to step 2.
+
+**GCP:** go to step 2G.
+
+## Step 2G — GCP: one call
+
+GCP has no console path. CloudFormation's quick-create URL is what makes the
+AWS link path possible, and GCP retired its only console-deployable template
+service, so there is nothing to hand the user. Do not go looking for an
+equivalent and do not offer one.
+
+Ask for the **project id**. Never infer it from gcloud's active configuration:
+provisioning trust into the wrong project is not a mistake a default should be
+able to make.
+
+Then say what is about to happen, before calling anything:
+
+- formae will create a workload identity pool and provider in that project and
+  grant itself access to it. The access is broad — editor, plus the ability to
+  manage the project's IAM. Say that in those words; it is what the agent needs
+  to manage arbitrary infrastructure, and the user is entitled to know before
+  it happens rather than after.
+- If the machine has no usable Google credentials, formae signs them in by
+  running `gcloud auth application-default login`, which opens a browser. Warn
+  them so the browser is expected rather than alarming. If gcloud is not
+  installed the call fails saying so, and they will need to install it.
+
+Then call `connect_gcp_project` with the project id. It provisions and
+registers in one call; there is no second step to wait for.
+
+**Only if the user says they already set up the federation themselves** — with
+Terraform, say, because they will not give a CLI provisioning rights — pass
+`workload_identity_provider` as well. That path validates the name's shape and
+nothing else: it does not check the provider exists, trusts the formae issuer,
+or grants access. The tool's own warning says so; pass it on rather than
+softening it.
+
+Then go to step 3.
 
 ## Step 2 — AWS: local credentials, or the console link?
 
@@ -142,13 +180,25 @@ small project the user owns, and the target is the first thing declared in it.
 
 **AWS:** ask for a **region** and a **label** for the target.
 
-**Azure or GCP:** say plainly that support is not built yet, in the same
-voice as the cloud menu in step 1. Do not promise a date. Then go to step 7 —
-there is no target to create yet.
+**GCP:** ask for a **region** and a **label** too. The target config differs —
+it names the project and authenticates through the workload identity provider
+rather than a role — but the questions are the same.
+
+**Azure:** say plainly that support is not built yet, in the same voice as the
+cloud menu in step 1. Do not promise a date. Then go to step 7 — there is no
+target to create yet.
 
 Ask for the directory to create the project in, proposing the current
 directory by name as the default — the same thing `git init`, `npm init`,
 and `cargo init` do.
+
+**Unless the current directory is `/` or the user's home directory itself.**
+Neither is a place to scatter a project's three files, and a harness that
+started in one chose it for the user rather than the user choosing it — which
+is what separates this from `git init`, where they cd'd there and typed the
+command. Propose `~/<label>` in that case, reusing the target label they gave
+a moment ago rather than asking a second naming question. They can still name
+any path instead.
 
 **If that directory already contains a `PklProject`, say so and stop.** This
 flow creates a fresh project; it does not merge into an existing one. Then go
@@ -156,8 +206,8 @@ to step 7.
 
 Otherwise, write three files with the harness's own file tools.
 
-`PklProject`, pinning `formae` and the `aws` plugin schema by canonical
-semver:
+`PklProject`, pinning `formae` and the cloud's plugin schema by canonical
+semver. **AWS:**
 
 ```pkl
 amends "pkl:Project"
@@ -172,13 +222,21 @@ dependencies {
 }
 ```
 
+**GCP** is the same file with the gcp plugin in place of aws:
+
+```pkl
+  ["gcp"] {
+    uri = "package://hub.platform.engineering/plugins/gcp/schema/pkl/gcp/gcp@0.1.13"
+  }
+```
+
 **Never pin a `-dev.N` suffix.** A dev build overwrites the schema published
 at its canonical coordinate; the coordinates above are the ones that
 actually exist to resolve.
 
 `vars.pkl`, holding the definition. **The imports are not optional** —
-without them `formae.Target`, `aws.Config`, and `aws.OidcAuth` are unresolved
-and evaluation fails:
+without them `formae.Target` and the plugin's `Config` and `OidcAuth` are
+unresolved and evaluation fails. **AWS:**
 
 ```pkl
 import "@formae/formae.pkl"
@@ -194,16 +252,38 @@ awsTarget: formae.Target = new formae.Target {
 }
 ```
 
+**GCP** declares the same target with the project and the provider in place of
+region and role:
+
+```pkl
+import "@formae/formae.pkl"
+import "@gcp/gcp.pkl"
+
+gcpTarget: formae.Target = new formae.Target {
+  label = "<the label they gave>"
+  discoverable = true
+  config = new gcp.Config {
+    project = "<the project id they gave>"
+    region = "<the region they gave>"
+    auth = new gcp.OidcAuth {
+      workloadIdentityProvider = "<from the registration>"
+    }
+  }
+}
+```
+
 **`discoverable` defaults to `false`.** Leave it off and the target exists,
 discovers nothing, and the user comes back later to an empty inventory with
 no error to explain it. Set it to `true`, and say why when you show them
 this file.
 
-**The role ARN comes from the registration, not the user.** Whichever path
-reached here, `provision_cloud_role` or `register_cloud_role` already
-returned it — asking the user to retype it invites a typo the target would
-silently carry, the same reasoning that governs the account id on the
-local-credentials path in step 3.
+**The trust coordinate comes from the registration, not the user.** Whichever
+path reached here — `provision_cloud_role`, `register_cloud_role`, or
+`connect_gcp_project` — already returned it, as a role ARN for AWS or a
+workload identity provider for GCP. Asking the user to retype it invites a typo
+the target would silently carry, the same reasoning that governs the account id
+on the local-credentials path in step 3. It is long and easy to mistype, which
+makes copying it rather than retyping it worth insisting on.
 
 `targets.pkl`, the file that gets applied:
 
@@ -215,6 +295,8 @@ forma {
   vars.awsTarget
 }
 ```
+
+For GCP, spread `vars.gcpTarget` instead.
 
 Apply `targets.pkl` the way `/formae:apply` does, because this is the user's
 first apply and it should look like every one after it: call `apply_forma` with
@@ -265,10 +347,16 @@ Then offer the next step:
   feature. If they ask, say why: both installations would discover the same
   global resources and compete to manage them. The tool warns about it and
   that warning is the honest answer.
-- **Azure or GCP** does not exist yet. Do not imply it is coming.
+- **Azure** does not exist yet. Do not imply it is coming.
+- **The same GCP project on a second installation** is worth one extra
+  sentence beyond the AWS answer above: installations connected to one project
+  share a trust domain, because each is granted enough access to rewrite the
+  project's IAM, including the other's. The tool warns about it; that warning
+  is the honest answer.
 
-They can also do the console-link path from a terminal with
-`formae connect aws --account <id>`, which walks the same flow interactively.
+They can also do this from a terminal: `formae connect aws --account <id>` for
+the console-link path, or `formae connect gcp --project <id>` for GCP. Both
+walk the same flow interactively.
 
 **That command is for the user, never for you.** Do not run it, and do not
 offer to. It is interactive and it provisions real cloud trust; run from a

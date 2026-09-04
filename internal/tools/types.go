@@ -263,6 +263,24 @@ type RegisterCloudRoleInput struct {
 	RoleArn string `json:"role_arn" jsonschema:"The role ARN the applied CloudFormation stack produced. Use the expected ARN from connect_cloud_account unless the user says the applied role differs."`
 }
 
+// ConnectGcpProjectInput connects one GCP project, provisioning the federation
+// and registering it in a single invocation.
+//
+// There is no console-link variant to choose between, so this input asks for
+// the project and nothing else. The optional provider is not a second mode the
+// caller picks freely: supplying it means the operator already stood the
+// federation up themselves, which is the only case where formae has nothing to
+// provision.
+type ConnectGcpProjectInput struct {
+	// Project is always explicit and never inferred from ambient credentials,
+	// matching the AWS rule for the same reason: provisioning trust into the
+	// wrong project is not a mistake a default should be able to make.
+	Project string `json:"project" jsonschema:"The GCP project id to connect. Ask the user for it; never infer it from ambient credentials or from gcloud's active configuration."`
+	// WorkloadIdentityProvider is set only when the operator provisioned the
+	// federation themselves.
+	WorkloadIdentityProvider string `json:"workload_identity_provider,omitempty" jsonschema:"Set ONLY when the user says they already created the workload identity pool and provider themselves (for example with Terraform). Leave empty in every other case: formae then provisions the federation, which is the normal path. When set, formae validates the name's shape and registers it without checking that it exists or grants access."`
+}
+
 // ProvisionCloudRoleInput creates the connect role directly with the named
 // local AWS credentials and registers it, in one invocation. Both fields are
 // required: there is no ambient default for either, matching
