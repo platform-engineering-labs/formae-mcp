@@ -46,6 +46,14 @@ const FeatureAutoReconcilePolicy Feature = "auto-reconcile-policy"
 // rather than a silent downgrade.
 const FeatureConnectionOracle Feature = "connection-oracle"
 
+// FeatureCloudConnectionList gates `formae connect list`, the command
+// list_cloud_connections shells out to. It has its own constant rather than
+// reusing FeatureConnectionOracle, which is consulted on every configuration
+// resolution (internal/config/oracle.go): pinning that one to this command's
+// floor would raise the CLI version required for every tool in this server,
+// not just this one.
+const FeatureCloudConnectionList Feature = "cloud-connection-list"
+
 // detectTimeout applies when the caller supplies no deadline of its own, so
 // version detection is bounded even on the context-free path.
 const detectTimeout = 10 * time.Second
@@ -56,6 +64,15 @@ var registry = map[Feature]string{
 	FeatureProfile:             "0.87.0",
 	FeatureStandalonePolicy:    "0.82.0",
 	FeatureAutoReconcilePolicy: "0.88.0",
+	// `formae connect list` ships in the 0.89.0 line, alongside the connection
+	// oracle above. The two share a floor today and are separate constants
+	// because they are separate capabilities: one can move without the other.
+	//
+	// A dev build satisfies this. parseParts splits on "." and discards what it
+	// cannot read, so 0.89.0-dev.9 parses as 0.89.0 rather than sorting below it
+	// the way semver would. That is what lets the floor above accept the dev
+	// tags this work is tested against.
+	FeatureCloudConnectionList: "0.89.0",
 }
 
 type result struct {

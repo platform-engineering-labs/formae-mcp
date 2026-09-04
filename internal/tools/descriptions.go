@@ -257,3 +257,66 @@ profiles formae wrote for the installations their grants cover, and which profil
 is now active.
 
 Calling it without a preceding login tool call is an error, not a no-op.`
+
+// ConnectCloudAccountDescription is the connect_cloud_account tool description.
+//
+// The last line is load-bearing. The CLI's own resume command is for a human at
+// a terminal, and a model handed a command reads it as an instruction: it will
+// run an interactive OAuth or CloudFormation flow in a terminal it cannot drive,
+// and burn real state doing so.
+const ConnectCloudAccountDescription = "Compute the CloudFormation console link that connects one AWS account to " +
+	"the active formae installation. Returns a quick-create URL, the role ARN the stack will produce, and any " +
+	"warnings — surface warnings to the user verbatim. This tool changes nothing by itself: the user applies the " +
+	"stack in their own browser under their own admin session. Show them the link, wait until they say the stack " +
+	"reached CREATE_COMPLETE, then call register_cloud_role. Ask the user for the account id; never infer it from " +
+	"ambient credentials. Do NOT run any formae command yourself to do this."
+
+// ListCloudConnectionsDescription is the list_cloud_connections tool
+// description.
+//
+// The "registered" wording is deliberate and matches the tool's own output:
+// this reports what the control plane has on file, not whether formae has
+// used the role successfully.
+const ListCloudConnectionsDescription = "List the cloud accounts this installation has registered. Use this to " +
+	"decide whether to offer connect_cloud_account, before starting that flow. An account here is REGISTERED, " +
+	"not verified: this does not confirm formae can use the role. If the result says the listing could not be " +
+	"determined, treat that as unknown, never as \"no account is registered\": do not send a caller who may " +
+	"already have a working connection through the connect flow on that basis."
+
+// RegisterCloudRoleDescription is the register_cloud_role tool description.
+//
+// It names already_registered as success on purpose: a model that reads the
+// idempotent case as a conflict will start trying to repair a connection that is
+// already correct.
+const RegisterCloudRoleDescription = "Record the role an applied CloudFormation stack produced, completing a cloud " +
+	"connection started with connect_cloud_account. Use the expected role ARN that tool reported, unless the user " +
+	"says the applied role differs, in which case use theirs. Reporting that the account was already connected with " +
+	"the same role is SUCCESS, not a conflict — it is what makes re-running the flow safe. A registered connection " +
+	"is complete: there is no verification step to wait for and nothing to poll."
+
+// ListAwsProfilesDescription is the list_aws_profiles tool description.
+//
+// Showing the account beside the name is the point of this tool: the user is
+// picking credentials, not an account, so seeing where each profile resolves
+// to is what makes the pick an informed choice about where trust gets
+// provisioned. That is why both kinds of row matter and neither is dropped.
+const ListAwsProfilesDescription = "List the user's local AWS profiles, each with the account it resolves to, so " +
+	"they can pick one to provision a cloud connection with provision_cloud_role. Show every profile: one that " +
+	"resolved names its account; one that could not (e.g. an expired SSO session) names the reason instead — that " +
+	"is not an error, and it is something the user can act on. Always offer 'none of these' as an option alongside " +
+	"the list, which falls back to connect_cloud_account. An empty list is a normal result, not a failure: it means " +
+	"connect_cloud_account is the only path available."
+
+// ProvisionCloudRoleDescription is the provision_cloud_role tool description.
+//
+// The description states plainly what happens and when, matching the
+// DestructiveHint annotation this tool carries: unlike connect_cloud_account,
+// there is no console step and no user-applied stack standing between this
+// call and the mutation.
+const ProvisionCloudRoleDescription = "Create the AWS IAM role formae will assume, and register it, using the " +
+	"named local AWS profile's credentials — in one call. This happens immediately: it creates a real IAM role, " +
+	"and possibly the account-global OIDC identity provider if this account does not have one yet, with no " +
+	"console step and nothing for the user to apply themselves. Only call this after list_aws_profiles has shown " +
+	"the user the profile and its account, and the user picked it. Reporting that the account was already " +
+	"connected with the same role is SUCCESS, not a conflict. A registered connection is complete: there is no " +
+	"verification step to wait for and nothing to poll."
