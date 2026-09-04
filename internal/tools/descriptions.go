@@ -341,3 +341,33 @@ const ConnectGcpProjectDescription = "Connect a GCP project to the active instal
 	"new PATH is seen. Ask the user " +
 	"for the project id and never infer it from gcloud's active configuration. Reporting that the project was " +
 	"already connected with the same federation is SUCCESS, not a conflict."
+
+// ConnectAzureSubscriptionDescription is the connect_azure_subscription tool
+// description.
+//
+// Azure has one tool, like GCP, and for the same shape of reason: there is
+// one interactive path, so there is nothing to choose between. Unlike GCP,
+// formae never spawns a sign-in here - if there are no usable ambient
+// credentials the call fails naming the exact `az login` command to run, and
+// this tool must relay that command rather than tell the user to sign in
+// some other way.
+const ConnectAzureSubscriptionDescription = "Connect an Azure subscription to the active installation: create the " +
+	"managed identity formae authenticates through, grant it access to the subscription, and register the " +
+	"connection - in one call. This happens immediately and grants formae near-owner access to the subscription " +
+	"(Contributor plus User Access Administrator), so make sure the user means this subscription before calling. " +
+	"formae uses the operator's own ambient Azure credentials (environment variables, managed identity, an " +
+	"existing `az login` session); it never opens a browser or spawns a sign-in itself. If there are no usable " +
+	"credentials, the call fails naming the exact `az login` command to run - show that command to the user " +
+	"verbatim and wait for them to run it themselves, then call this tool again. Ask the user for the " +
+	"subscription id and never infer it from ambient credentials or az's active configuration. The tenant id is " +
+	"normally derived automatically and should be left unset; only ask the user for it, and pass it as tenant_id, " +
+	"when a sign-in attempt already failed reporting no subscriptions found, or the user says their account is a " +
+	"guest in another directory or spans several tenants. Reporting that the " +
+	"subscription was already connected with the same identity is SUCCESS, not a conflict. There is no " +
+	"register-only path through this tool: an operator who will not give it provisioning credentials deploys the " +
+	"ARM template themselves and runs `formae connect azure --subscription ... --tenant-id ... --client-id ...` " +
+	"in their own terminal - that command is for the user, never for you."
+
+const RegisterAzureTrustDescription = `Register an Azure subscription whose trust was established by deploying the ARM template, instead of having formae provision it. Use this for an operator who will not put provisioning credentials on this machine: they deploy the template in their own portal or pipeline, and this registers the tenant id and client id it outputs. Needs no Azure credential and no az CLI. This validates the coordinates' shape only: it does not check the identity exists, trusts the formae issuer, or grants access.`
+
+const GetAzureTrustTemplateDescription = `Get the one-click Azure portal link that establishes trust without any credential on this machine. Use this when connect_azure_subscription reports no usable Azure credentials, or when the user will not put provisioning credentials here. Returns a portal deep link to show the user: it opens the ARM template with this installation's coordinates already filled in, so there is nothing to paste and no CLI to install. When they report the deployment finished, call register_azure_trust with the tenantId and clientId from its outputs.`
