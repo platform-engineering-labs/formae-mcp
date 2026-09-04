@@ -10,9 +10,8 @@ import (
 
 func testBin() formaebin.BinResolver {
 	return formaebin.BinResolver{
-		BundledPath: "/bundle/formae",
-		LookPath:    func(string) (string, error) { return "/usr/bin/formae", nil },
-		Exists:      func(string) bool { return false },
+		Getenv:   func(string) string { return "" },
+		LookPath: func(string) (string, error) { return "/usr/bin/formae", nil },
 	}
 }
 

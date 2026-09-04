@@ -792,6 +792,7 @@ func withFakeVersion(t *testing.T, v string) {
 type stubResolver struct {
 	ec         execctx.Context
 	err        error
+	managed    bool
 	sawProfile string
 }
 
@@ -801,6 +802,8 @@ func (r *stubResolver) Resolve(_ context.Context, profileName string) (execctx.C
 }
 
 func (r *stubResolver) Bin() string { return r.ec.FormaeBin }
+
+func (r *stubResolver) Managed() bool { return r.managed }
 
 // An explicit profile argument must reach the resolver. Without this the other
 // cases would pass even if every call resolved the active profile.
@@ -885,5 +888,59 @@ func TestClientFor_ForcedEndpointIsClassicWithoutAPort(t *testing.T) {
 	}
 	if c.endpoint != "http://forced:1" {
 		t.Errorf("endpoint = %q, want the forced endpoint", c.endpoint)
+	}
+}
+
+// A formae below the floor fails resolution before any skew notice can be
+// produced, so without this the upgrade flow sees no signal at all and reports
+// that there is nothing to upgrade — dead-ending exactly the users who need it.
+func TestResolveCtx_ExplainsAnInstallBelowTheFloor(t *testing.T) {
+	tooOld := fmt.Errorf("%w: requires formae >= 0.89.0 (connected: 0.88.1)", featuregate.ErrTooOld)
+
+	t.Run("managed", func(t *testing.T) {
+		s := New("")
+		s.ctxResolver = &stubResolver{
+			ec:      execctx.Context{FormaeBin: "/home/u/.formae-ai/opt/bin/formae"},
+			err:     tooOld,
+			managed: true,
+		}
+		_, err := s.resolveCtx(context.Background(), "")
+		if err == nil {
+			t.Fatal("expected the floor refusal to surface")
+		}
+		if !strings.Contains(err.Error(), "/formae:upgrade") {
+			t.Errorf("managed install should be pointed at the sudo-free upgrade: %v", err)
+		}
+		if !strings.Contains(err.Error(), "0.89.0") {
+			t.Errorf("error should still name the requirement: %v", err)
+		}
+	})
+
+	t.Run("the user's own", func(t *testing.T) {
+		s := New("")
+		s.ctxResolver = &stubResolver{
+			ec:  execctx.Context{FormaeBin: "/opt/pel/bin/formae"},
+			err: tooOld,
+		}
+		_, err := s.resolveCtx(context.Background(), "")
+		if err == nil {
+			t.Fatal("expected the floor refusal to surface")
+		}
+		if !strings.Contains(err.Error(), "/opt/pel/bin/formae") {
+			t.Errorf("error should name the binary that is too old: %v", err)
+		}
+		if !strings.Contains(err.Error(), "will not change it") {
+			t.Errorf("error should say we do not touch the user's own install: %v", err)
+		}
+	})
+}
+
+// Every other resolution failure passes through untouched.
+func TestResolveCtx_LeavesOtherFailuresAlone(t *testing.T) {
+	s := New("")
+	s.ctxResolver = &stubResolver{err: fmt.Errorf("profile %q not found", "nope")}
+	_, err := s.resolveCtx(context.Background(), "")
+	if err == nil || strings.Contains(err.Error(), "/formae:upgrade") {
+		t.Fatalf("unrelated failure should not be dressed as an upgrade prompt: %v", err)
 	}
 }
