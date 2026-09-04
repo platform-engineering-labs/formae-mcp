@@ -29,6 +29,10 @@ var collectionCalls = map[string]struct {
 		call:      func(ctx context.Context, c *FormaeClient) (json.RawMessage, error) { return c.ListPolicies(ctx) },
 		wantEmpty: "[]",
 	},
+	"ListGenerators": {
+		call:      func(ctx context.Context, c *FormaeClient) (json.RawMessage, error) { return c.ListGenerators(ctx) },
+		wantEmpty: "[]",
+	},
 	"ListTargets": {
 		call:      func(ctx context.Context, c *FormaeClient) (json.RawMessage, error) { return c.ListTargets(ctx, "") },
 		wantEmpty: "[]",
@@ -151,6 +155,7 @@ func TestEveryCallExplainsAGoneInstallation(t *testing.T) {
 		"ListStacks":     func() error { _, e := c.ListStacks(ctx); return e },
 		"ListTargets":    func() error { _, e := c.ListTargets(ctx, ""); return e },
 		"ListPolicies":   func() error { _, e := c.ListPolicies(ctx); return e },
+		"ListGenerators": func() error { _, e := c.ListGenerators(ctx); return e },
 		"ListPlugins":    func() error { _, e := c.ListPlugins(ctx); return e },
 		"ListCommands":   func() error { _, e := c.ListCommands(ctx, "", "10", "cid"); return e },
 		"CancelCommands": func() error { _, e := c.CancelCommands(ctx, "", "cid"); return e },
