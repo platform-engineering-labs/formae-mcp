@@ -53,6 +53,36 @@ provision_pkg() {
     fi
 }
 
+# canonical_path <path>
+#   Prints <path> with symlinks resolved, in the link itself and in every
+#   directory leading to it.
+#
+#   Two spellings of the same binary have to compare equal or resolve_formae
+#   disowns its own install: a link at ~/.local/bin/formae pointing into the
+#   managed tree is not a second formae, and a home directory that is itself a
+#   symlink makes even the managed path arrive spelled two ways. Either one sets
+#   FORMAE_BIN_MANAGED=0, and /formae:upgrade then refuses to upgrade a binary
+#   that was ours all along.
+#
+#   Done by hand because readlink -f and realpath are both shorter and neither
+#   ships on a stock macOS. There is no loop guard: callers walk a path that
+#   `test -x` has already accepted, and -x is false for a symlink cycle.
+canonical_path() {
+    _cppath="$1"
+    while [ -L "$_cppath" ]; do
+        _cplink="$(readlink -- "$_cppath")" || break
+        case "$_cplink" in
+            /*) _cppath="$_cplink" ;;
+            *)  _cppath="$(dirname -- "$_cppath")/$_cplink" ;;
+        esac
+    done
+    if _cpdir="$(CDPATH= cd -P -- "$(dirname -- "$_cppath")" 2>/dev/null && pwd -P)"; then
+        printf '%s/%s\n' "$_cpdir" "$(basename -- "$_cppath")"
+    else
+        printf '%s\n' "$_cppath"
+    fi
+}
+
 # resolve_formae <channel>
 #   Decides which formae this machine runs, provisioning one only when it has
 #   none. Sets FORMAE_BIN (absolute path) and FORMAE_BIN_MANAGED (1 when that
@@ -69,6 +99,7 @@ provision_pkg() {
 resolve_formae() {
     _rchan="$1"
     _rmanaged="$HOME/.formae-ai/opt/bin/formae"
+    _rmanagedreal="$(canonical_path "$_rmanaged")"
     # Test seam: the fixed locations probed after PATH. Overridden only by
     # test/resolve-formae.sh, so a machine that really has formae installed
     # cannot reach into the clean-machine cases.
@@ -88,7 +119,13 @@ resolve_formae() {
     # have a minimal PATH that omits them.
     # shellcheck disable=SC2086 # _rlocations is a space-separated candidate list.
     for _rcand in "$(command -v formae 2>/dev/null || true)" $_rlocations; do
-        if [ -n "$_rcand" ] && [ -x "$_rcand" ] && [ "$_rcand" != "$_rmanaged" ]; then
+        [ -n "$_rcand" ] && [ -x "$_rcand" ] || continue
+        # Resolved before the comparison, and kept resolved: FORMAE_BIN is the
+        # binary's own location, not the name it was reached by. The launcher
+        # puts the directory of FORMAE_BIN on PATH so formae finds the pkl
+        # beside it, and a symlink's directory holds no pkl.
+        _rcand="$(canonical_path "$_rcand")"
+        if [ "$_rcand" != "$_rmanagedreal" ]; then
             FORMAE_BIN="$_rcand"
             FORMAE_BIN_MANAGED=0
             echo "resolve_formae: using your formae at $FORMAE_BIN" >&2
