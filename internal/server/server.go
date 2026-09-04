@@ -18,6 +18,7 @@ import (
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 	"github.com/platform-engineering-labs/formae-mcp/internal/formaebin"
 	"github.com/platform-engineering-labs/formae-mcp/internal/profile"
+	"github.com/platform-engineering-labs/formae-mcp/internal/secret"
 	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 	"github.com/platform-engineering-labs/formae-mcp/internal/version"
 )
@@ -37,7 +38,10 @@ func implementation() *mcp.Implementation {
 // contextResolver is the seam server tests substitute. The concrete resolver
 // lives in execctx and its injection points are unexported there.
 type contextResolver interface {
-	Resolve(ctx context.Context, profileName string) (execctx.Context, error)
+	// Resolve produces the frozen context for a call. forceRefresh is for the
+	// 401 path, which re-resolves with a fresh credential and then checks that
+	// the target did not move.
+	Resolve(ctx context.Context, profileName string, forceRefresh bool) (execctx.Context, error)
 	Bin() string
 	// Managed reports whether the resolved formae is the copy we provisioned,
 	// which decides whether an upgrade needs sudo.
@@ -51,6 +55,11 @@ type Server struct {
 	forcedEndpoint string             // when set, empty-profile calls use this (tests / explicit)
 	ctxResolver    contextResolver    // resolves per-call execution context
 	clientID       *clientid.Resolver // resolves the Client-ID header value
+	// newClient builds the agent client for a resolved context. It is a field
+	// for the same reason ctxResolver is: the hosted arm validates its endpoint
+	// against a compile-time origin, so without a seam no test can exercise a
+	// hosted handler at all. Production never replaces it.
+	newClient func(execctx.Context) (*FormaeClient, error)
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -69,6 +78,7 @@ func New(endpoint string) *Server {
 		ctxResolver:    execctx.NewResolver(formaebin.NewBinResolver()),
 		clientID:       clientid.NewResolver(),
 	}
+	s.newClient = s.clientFrom
 
 	s.registerTools()
 	s.registerResources()
@@ -83,7 +93,29 @@ func (s *Server) clientFor(ctx context.Context, profileName string) (*FormaeClie
 	if err != nil {
 		return nil, err
 	}
-	return newClientFromCtx(ec)
+	return s.newClient(ec)
+}
+
+// clientFrom builds the client for an already-resolved context.
+//
+// This is the one place that pairs a context with its refresher, so a 401 on
+// any call re-resolves through the same seam the first resolution used rather
+// than reaching past it. Handlers that resolve their own context call this
+// instead of constructing a client directly.
+func (s *Server) clientFrom(ec execctx.Context) (*FormaeClient, error) {
+	return newClientFromCtx(ec, s.refresherFor(ec))
+}
+
+// refresherFor re-resolves the same profile with the credential refreshed.
+//
+// It closes over the effective profile name from the original snapshot, not
+// over whatever the active pointer says at refresh time: re-resolving "whatever
+// is active now" is exactly the skew that resolving configuration and
+// credentials together exists to prevent.
+func (s *Server) refresherFor(ec execctx.Context) refresher {
+	return func(ctx context.Context) (execctx.Context, error) {
+		return s.ctxResolver.Resolve(ctx, ec.ProfileName, true)
+	}
 }
 
 // resolveCtx returns the immutable execution context for an optional profile.
@@ -109,7 +141,7 @@ func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Co
 			FormaeBin: s.ctxResolver.Bin(),
 		}, nil
 	}
-	ec, err := s.ctxResolver.Resolve(ctx, profileName)
+	ec, err := s.ctxResolver.Resolve(ctx, profileName, false)
 	if err != nil {
 		return execctx.Context{}, s.explainIfTooOld(err)
 	}
@@ -329,39 +361,51 @@ func (s *Server) registerTools() {
 // Tool handlers — read-only
 
 func (s *Server) handleListResources(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListResourcesInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.ListResources(ctx, input.Query)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleListStacks(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.ListStacks(ctx)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleListTargets(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListTargetsInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.ListTargets(ctx, input.Query)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleGetCommandStatus(ctx context.Context, _ *mcp.CallToolRequest, input tools.GetCommandStatusInput) (*mcp.CallToolResult, any, error) {
@@ -372,15 +416,15 @@ func (s *Server) handleGetCommandStatus(ctx context.Context, _ *mcp.CallToolRequ
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.newClient(ec)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.GetCommandStatus(ctx, input.CommandID, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleListCommands(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListCommandsInput) (*mcp.CallToolResult, any, error) {
@@ -392,27 +436,31 @@ func (s *Server) handleListCommands(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.newClient(ec)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.ListCommands(ctx, input.Query, maxResults, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleGetAgentStats(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.GetAgentStats(ctx)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleCheckHealth(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
@@ -420,18 +468,18 @@ func (s *Server) handleCheckHealth(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.newClient(ec)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	if err := c.CheckHealth(ctx); err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
 	msg := "Formae agent is healthy and reachable."
 	if notice := s.buildSkewNotice(ctx, ec.FormaeBin, c); notice != "" {
 		msg += "\n\n" + notice
 	}
-	return textResult(msg), nil, nil
+	return attribute(reached(ec, c), textResult(msg)), nil, nil
 }
 
 // buildSkewNotice fetches the agent version and the local formae version and
@@ -457,42 +505,50 @@ func (s *Server) buildSkewNotice(ctx context.Context, formaeBin string, c *Forma
 }
 
 func (s *Server) handleListPolicies(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.ListPolicies(ctx)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleListChangesSinceLastReconcile(ctx context.Context, _ *mcp.CallToolRequest, input tools.ListChangesSinceLastReconcileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 
 	if input.Stack != "" {
 		result, err := c.ListChangesSinceLastReconcile(ctx, input.Stack)
 		if err != nil {
-			return errorResult(err), nil, nil
+			return attribute(reached(ec, c), errorResult(err)), nil, nil
 		}
-		return jsonResult(result), nil, nil
+		return attribute(reached(ec, c), jsonResult(result)), nil, nil
 	}
 
 	// No stack specified: fetch all stacks, then get drift for each
 	stacksJSON, err := c.ListStacks(ctx)
 	if err != nil {
-		return errorResult(fmt.Errorf("failed to list stacks: %w", err)), nil, nil
+		return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to list stacks: %w", err))), nil, nil
 	}
 
 	var stacks []struct {
 		Label string `json:"Label"`
 	}
 	if err := json.Unmarshal(stacksJSON, &stacks); err != nil {
-		return errorResult(fmt.Errorf("failed to parse stacks: %w", err)), nil, nil
+		return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to parse stacks: %w", err))), nil, nil
 	}
 
 	type stackDrift struct {
@@ -504,7 +560,7 @@ func (s *Server) handleListChangesSinceLastReconcile(ctx context.Context, _ *mcp
 	for _, stack := range stacks {
 		driftJSON, err := c.ListChangesSinceLastReconcile(ctx, stack.Label)
 		if err != nil {
-			return errorResult(fmt.Errorf("failed to get drift for stack %s: %w", stack.Label, err)), nil, nil
+			return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to get drift for stack %s: %w", stack.Label, err))), nil, nil
 		}
 
 		// Parse to check if there are modifications
@@ -512,7 +568,7 @@ func (s *Server) handleListChangesSinceLastReconcile(ctx context.Context, _ *mcp
 			ModifiedResources json.RawMessage `json:"ModifiedResources"`
 		}
 		if err := json.Unmarshal(driftJSON, &drift); err != nil {
-			return errorResult(fmt.Errorf("failed to parse drift for stack %s: %w", stack.Label, err)), nil, nil
+			return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to parse drift for stack %s: %w", stack.Label, err))), nil, nil
 		}
 
 		results = append(results, stackDrift{
@@ -523,9 +579,9 @@ func (s *Server) handleListChangesSinceLastReconcile(ctx context.Context, _ *mcp
 
 	aggregated, err := json.Marshal(results)
 	if err != nil {
-		return errorResult(fmt.Errorf("failed to marshal results: %w", err)), nil, nil
+		return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to marshal results: %w", err))), nil, nil
 	}
-	return jsonResult(aggregated), nil, nil
+	return attribute(reached(ec, c), jsonResult(aggregated)), nil, nil
 }
 
 func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequest, input tools.ExtractResourcesInput) (*mcp.CallToolResult, any, error) {
@@ -551,21 +607,30 @@ func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequ
 		args = append(args, "--profile", ec.ProfileName)
 	}
 	args = append(args, outFile)
+	// Extract reaches the agent through the CLI, so do never runs and cannot
+	// advance reach. It is taken from the subprocess outcome instead, and that
+	// is sound here for a reason rather than by exemption: extract is a read.
+	// It creates, changes and destroys nothing, so "might this have acted?"
+	// has one answer however it fails, and neither wording can send an operator
+	// looking for work that cannot exist. Do not copy this to a mutation.
 	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s", err, string(output))), nil, nil
+		return attribute(resolved(ec),
+			errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s",
+				err, safeSubprocessOutput(output, ec.Credential)))), nil, nil
 	}
+	extracted := destination{ec: ec, reach: reachAnswered}
 
 	content, err := os.ReadFile(outFile)
 	if err != nil {
-		return errorResult(fmt.Errorf("failed to read extracted file: %w", err)), nil, nil
+		return attribute(extracted, errorResult(fmt.Errorf("failed to read extracted file: %w", err))), nil, nil
 	}
 
 	notice := ""
-	if c, cerr := newClientFromCtx(ec); cerr == nil {
+	if c, cerr := s.newClient(ec); cerr == nil {
 		notice = s.buildSkewNotice(ctx, ec.FormaeBin, c)
 	}
-	return withNotice(textResult(string(content)), notice), nil, nil
+	return attribute(extracted, withNotice(textResult(string(content)), notice)), nil, nil
 }
 
 func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
@@ -646,18 +711,18 @@ func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, i
 	}
 	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
 	if err != nil {
-		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
+		return attribute(resolved(ec), errorResult(fmt.Errorf("failed to evaluate forma file: %w", err))), nil, nil
 	}
 
-	c, err := newClientFromCtx(ec)
+	c, err := s.newClient(ec)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.SubmitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return withNotice(jsonResult(result), s.buildSkewNotice(ctx, ec.FormaeBin, c)), nil, nil
+	return attribute(reached(ec, c), withNotice(jsonResult(result), s.buildSkewNotice(ctx, ec.FormaeBin, c))), nil, nil
 }
 
 func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
@@ -671,29 +736,29 @@ func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.newClient(ec)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 
 	if input.Query != "" {
 		result, err := c.DestroyByQuery(ctx, input.Query, input.Simulate, s.clientID.Resolve(ec.FormaeBin))
 		if err != nil {
-			return errorResult(err), nil, nil
+			return attribute(reached(ec, c), errorResult(err)), nil, nil
 		}
-		return jsonResult(result), nil, nil
+		return attribute(reached(ec, c), jsonResult(result)), nil, nil
 	}
 
 	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
 	if err != nil {
-		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
+		return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to evaluate forma file: %w", err))), nil, nil
 	}
 
 	result, err := c.SubmitCommand(ctx, "destroy", "", input.Simulate, false, formaJSON, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleCancelCommands(ctx context.Context, _ *mcp.CallToolRequest, input tools.CancelCommandsInput) (*mcp.CallToolResult, any, error) {
@@ -701,67 +766,112 @@ func (s *Server) handleCancelCommands(ctx context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	c, err := newClientFromCtx(ec)
+	c, err := s.newClient(ec)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.CancelCommands(ctx, input.Query, s.clientID.Resolve(ec.FormaeBin))
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleForceSync(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := c.ForceSync(ctx); err != nil {
-		return errorResult(err), nil, nil
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
-	return textResult("Resource synchronization triggered successfully."), nil, nil
+	if err := c.ForceSync(ctx); err != nil {
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
+	}
+	return attribute(reached(ec, c), textResult("Resource synchronization triggered successfully.")), nil, nil
 }
 
 func (s *Server) handleForceDiscover(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	if err := c.ForceDiscover(ctx); err != nil {
-		return errorResult(err), nil, nil
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
-	return textResult("Resource discovery triggered successfully."), nil, nil
+	if err := c.ForceDiscover(ctx); err != nil {
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
+	}
+	return attribute(reached(ec, c), textResult("Resource discovery triggered successfully.")), nil, nil
 }
 
 func (s *Server) handleForceCheckTTL(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	result, err := c.ForceCheckTTL(ctx)
 	if err != nil {
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(result), nil, nil
+	return attribute(reached(ec, c), jsonResult(result)), nil, nil
 }
 
 func (s *Server) handleForceReconcileStack(ctx context.Context, _ *mcp.CallToolRequest, input tools.ForceReconcileStackInput) (*mcp.CallToolResult, any, error) {
 	if input.Stack == "" {
 		return errorResult(fmt.Errorf("stack is required")), nil, nil
 	}
-	c, err := s.clientFor(ctx, input.Profile)
+	ec, err := s.resolveCtx(ctx, input.Profile)
 	if err != nil {
 		return errorResult(err), nil, nil
+	}
+	c, err := s.newClient(ec)
+	if err != nil {
+		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	body, _, err := c.ForceReconcileStack(ctx, input.Stack)
 	if err != nil {
 		if body != nil {
-			return errorResult(fmt.Errorf("%s: %s", err.Error(), string(body))), nil, nil
+			return attribute(reached(ec, c), errorResult(fmt.Errorf("%s: %s", err.Error(), string(body)))), nil, nil
 		}
-		return errorResult(err), nil, nil
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
-	return jsonResult(body), nil, nil
+	return attribute(reached(ec, c), jsonResult(body)), nil, nil
+}
+
+// maxSubprocessOutput bounds the diagnostics a failed CLI invocation may put
+// into a tool result. Unlike the configuration oracle, which reports an exit
+// status and never the bytes, extract's output is the user's own Pkl and
+// plugin diagnostics and is the whole value of the failure, so it is kept —
+// bounded, and with the credential we handed the process removed.
+const maxSubprocessOutput = 8 << 10
+
+// safeSubprocessOutput bounds subprocess output and removes the credential
+// this call resolved.
+//
+// It covers the credential we gave the process. A credential the CLI minted
+// for itself is not ours to know, and masking that is the CLI's own job on its
+// own output — said plainly here because "output is sanitised" would be a
+// wider claim than this makes good.
+func safeSubprocessOutput(output []byte, credential secret.Value) string {
+	// Scrub first, then truncate. The other order leaves a credential that
+	// straddles the cutoff partly intact: the search string is no longer
+	// present in the truncated bytes, so nothing is replaced and all but the
+	// tail of the token survives.
+	scrubbed := string(output)
+	if !credential.IsZero() {
+		scrubbed = strings.ReplaceAll(scrubbed, credential.Reveal(), secret.Mask)
+	}
+	if len(scrubbed) > maxSubprocessOutput {
+		scrubbed = scrubbed[:maxSubprocessOutput] + "\n… truncated"
+	}
+	return scrubbed
 }
 
 // Helpers

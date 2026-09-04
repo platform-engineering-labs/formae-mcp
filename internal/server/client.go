@@ -15,28 +15,39 @@ import (
 )
 
 // FormaeClient is a lightweight HTTP client for the formae agent REST API.
+//
+// There is no endpoint field: where a request goes and what authenticates it
+// are one decision, held by the routing, so neither can be paired with the
+// other arm's.
 type FormaeClient struct {
-	endpoint   string
+	route      routing
 	httpClient *http.Client
+	// reach is the high-water mark for this call: how far its requests got.
+	// One client is built per tool call, so there is nothing to reset, and the
+	// executor is the only thing that advances it.
+	reach reach
 }
 
+// NewFormaeClient builds a classic client for an endpoint that already carries
+// its port.
 func NewFormaeClient(endpoint string) *FormaeClient {
 	return &FormaeClient{
-		endpoint: endpoint,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		route:      classicRoute{base: endpoint},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-// newClientFromCtx builds a client for a resolved connection. Hosted is
-// recognised and refused: this build cannot authenticate, and shipping a
-// routing header without a credential would turn an understandable
-// "unsupported" into a remote 401.
+// newClientFromCtx builds a client for a resolved connection.
+//
+// The hosted connection is re-validated here rather than trusted from the CLI.
+// The MCP exposes tools that write profiles, so a model fed hostile input can
+// author a hosted profile naming the real issuer with an attacker's endpoint;
+// checking again at the last point before a credential reaches a header is what
+// makes that a refusal rather than an exfiltration.
 //
 // A classic connection with no port of its own carries one in its URL (a forced
 // endpoint), so it is used as-is.
-func newClientFromCtx(ec execctx.Context) (*FormaeClient, error) {
+func newClientFromCtx(ec execctx.Context, refresh refresher) (*FormaeClient, error) {
 	switch conn := ec.Conn.(type) {
 	case config.Classic:
 		endpoint := conn.URL
@@ -44,26 +55,47 @@ func newClientFromCtx(ec execctx.Context) (*FormaeClient, error) {
 			endpoint = fmt.Sprintf("%s:%d", conn.URL, conn.Port)
 		}
 		return NewFormaeClient(endpoint), nil
+
 	case config.Hosted:
-		return nil, fmt.Errorf(
-			"profile %q targets hosted formae, which this build does not support yet",
-			ec.ProfileName)
+		if err := config.ValidateHosted(conn); err != nil {
+			return nil, fmt.Errorf("profile %q resolved an unusable hosted connection: %w",
+				ec.ProfileName, err)
+		}
+		if ec.Credential.IsZero() {
+			return nil, fmt.Errorf(
+				"profile %q targets hosted formae but resolved no credential, so it cannot be authenticated",
+				ec.ProfileName)
+		}
+		return &FormaeClient{
+			route: &hostedRoute{
+				endpoint:     conn.Endpoint,
+				installation: conn.Installation,
+				credential:   ec.Credential,
+				refreshFn:    refresh,
+			},
+			httpClient: &http.Client{
+				Timeout: 30 * time.Second,
+				// Refused rather than followed; see refuseRedirects.
+				CheckRedirect: refuseRedirects,
+			},
+		}, nil
+
 	default:
 		return nil, fmt.Errorf("profile %q resolved no usable connection", ec.ProfileName)
 	}
 }
 
-func (c *FormaeClient) get(ctx context.Context, path string, query url.Values) ([]byte, int, error) {
-	return c.do(ctx, request{Method: http.MethodGet, Path: path, Query: query})
+func (c *FormaeClient) get(ctx context.Context, path string, query url.Values, retry retryPolicy) ([]byte, int, error) {
+	return c.do(ctx, request{Method: http.MethodGet, Path: path, Query: query}, retry)
 }
 
-func (c *FormaeClient) post(ctx context.Context, path string, query url.Values) ([]byte, int, error) {
+func (c *FormaeClient) post(ctx context.Context, path string, query url.Values, retry retryPolicy) ([]byte, int, error) {
 	return c.do(ctx, request{
 		Method:      http.MethodPost,
 		Path:        path,
 		Query:       query,
 		ContentType: "application/json",
-	})
+	}, retry)
 }
 
 // ListResources queries the agent for resources matching the given query string.
@@ -73,12 +105,15 @@ func (c *FormaeClient) ListResources(ctx context.Context, query string) (json.Ra
 		q.Set("query", query)
 	}
 
-	body, status, err := c.get(ctx, "/api/v1/resources", q)
+	body, status, err := c.get(ctx, "/api/v1/resources", q, retryOnce)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -89,12 +124,15 @@ func (c *FormaeClient) ListResources(ctx context.Context, query string) (json.Ra
 
 // ListStacks retrieves all stacks from the agent.
 func (c *FormaeClient) ListStacks(ctx context.Context) (json.RawMessage, error) {
-	body, status, err := c.get(ctx, "/api/v1/stacks", nil)
+	body, status, err := c.get(ctx, "/api/v1/stacks", nil, retryOnce)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -105,12 +143,15 @@ func (c *FormaeClient) ListStacks(ctx context.Context) (json.RawMessage, error) 
 
 // ListPolicies retrieves all standalone policies from the agent.
 func (c *FormaeClient) ListPolicies(ctx context.Context) (json.RawMessage, error) {
-	body, status, err := c.get(ctx, "/api/v1/policies", nil)
+	body, status, err := c.get(ctx, "/api/v1/policies", nil, retryOnce)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -126,12 +167,15 @@ func (c *FormaeClient) ListTargets(ctx context.Context, query string) (json.RawM
 		q.Set("query", query)
 	}
 
-	body, status, err := c.get(ctx, "/api/v1/targets", q)
+	body, status, err := c.get(ctx, "/api/v1/targets", q, retryOnce)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage("[]"), nil
+		return c.route.collectionMiss(json.RawMessage("[]"))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -150,12 +194,23 @@ func (c *FormaeClient) GetCommandStatus(ctx context.Context, commandID string, c
 		Path:    "/api/v1/commands/status",
 		Query:   q,
 		Headers: map[string]string{"Client-ID": clientID},
-	})
+	}, retryOnce)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusNotFound {
+		// Both readings, because the status alone cannot separate them: the
+		// agent answers 404 for a command it does not know, and the edge
+		// answers 404 for an installation it cannot route. Asserting the
+		// first sends the reader hunting for a command that was never the
+		// problem.
+		if unrouted := c.route.unrouted(); unrouted != nil {
+			return nil, fmt.Errorf("command %s was not found, or %w", commandID, unrouted)
+		}
 		return nil, fmt.Errorf("command %s not found", commandID)
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -179,12 +234,15 @@ func (c *FormaeClient) ListCommands(ctx context.Context, query string, maxResult
 		Path:    "/api/v1/commands/status",
 		Query:   q,
 		Headers: map[string]string{"Client-ID": clientID},
-	})
+	}, retryOnce)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage(`{"Commands":[]}`), nil
+		return c.route.collectionMiss(json.RawMessage(`{"Commands":[]}`))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -195,8 +253,11 @@ func (c *FormaeClient) ListCommands(ctx context.Context, query string, maxResult
 
 // GetAgentStats retrieves agent statistics.
 func (c *FormaeClient) GetAgentStats(ctx context.Context) (json.RawMessage, error) {
-	body, status, err := c.get(ctx, "/api/v1/stats", nil)
+	body, status, err := c.get(ctx, "/api/v1/stats", nil, retryOnce)
 	if err != nil {
+		return nil, err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK {
@@ -208,9 +269,12 @@ func (c *FormaeClient) GetAgentStats(ctx context.Context) (json.RawMessage, erro
 
 // CheckHealth checks if the agent is healthy.
 func (c *FormaeClient) CheckHealth(ctx context.Context) error {
-	_, status, err := c.get(ctx, "/api/v1/health", nil)
+	_, status, err := c.get(ctx, "/api/v1/health", nil, retryOnce)
 	if err != nil {
 		return fmt.Errorf("agent is not reachable: %w", err)
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return err
 	}
 	if status != http.StatusOK {
 		return fmt.Errorf("agent returned unhealthy status: %d", status)
@@ -244,6 +308,9 @@ func (c *FormaeClient) SubmitCommand(ctx context.Context, command string, mode s
 	if err != nil {
 		return nil, err
 	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
 	if !isCommandStatusOK(status, simulate) {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
@@ -261,6 +328,9 @@ func (c *FormaeClient) DestroyByQuery(ctx context.Context, query string, simulat
 
 	body, status, err := c.postMultipartWithHeaders(ctx, "/api/v1/commands", nil, fields, "", "", nil, map[string]string{"Client-ID": clientID})
 	if err != nil {
+		return nil, err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
 	if !isCommandStatusOK(status, simulate) {
@@ -289,12 +359,12 @@ func (c *FormaeClient) CancelCommands(ctx context.Context, query string, clientI
 		Path:    "/api/v1/commands/cancel",
 		Query:   q,
 		Headers: map[string]string{"Client-ID": clientID},
-	})
+	}, noRetry)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusNotFound {
-		return json.RawMessage(`{"CommandIds":[]}`), nil
+		return c.route.collectionMiss(json.RawMessage(`{"CommandIds":[]}`))
 	}
 	if status != http.StatusAccepted {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
@@ -306,8 +376,11 @@ func (c *FormaeClient) CancelCommands(ctx context.Context, query string, clientI
 // ListChangesSinceLastReconcile retrieves modifications since last reconcile for a stack.
 func (c *FormaeClient) ListChangesSinceLastReconcile(ctx context.Context, stack string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/api/v1/stacks/%s/changes-since-last-reconcile", url.PathEscape(stack))
-	body, status, err := c.get(ctx, path, nil)
+	body, status, err := c.get(ctx, path, nil, retryOnce)
 	if err != nil {
+		return nil, err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK {
@@ -319,8 +392,11 @@ func (c *FormaeClient) ListChangesSinceLastReconcile(ctx context.Context, stack 
 
 // ForceSync triggers an immediate resource synchronization.
 func (c *FormaeClient) ForceSync(ctx context.Context) error {
-	_, status, err := c.post(ctx, "/api/v1/admin/synchronize", nil)
+	_, status, err := c.post(ctx, "/api/v1/admin/synchronize", nil, noRetry)
 	if err != nil {
+		return err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return err
 	}
 	if status != http.StatusOK {
@@ -332,8 +408,11 @@ func (c *FormaeClient) ForceSync(ctx context.Context) error {
 
 // ForceDiscover triggers an immediate resource discovery.
 func (c *FormaeClient) ForceDiscover(ctx context.Context) error {
-	_, status, err := c.post(ctx, "/api/v1/admin/discover", nil)
+	_, status, err := c.post(ctx, "/api/v1/admin/discover", nil, noRetry)
 	if err != nil {
+		return err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return err
 	}
 	if status != http.StatusOK {
@@ -345,8 +424,11 @@ func (c *FormaeClient) ForceDiscover(ctx context.Context) error {
 
 // ForceCheckTTL triggers an immediate TTL expiry sweep.
 func (c *FormaeClient) ForceCheckTTL(ctx context.Context) (json.RawMessage, error) {
-	body, status, err := c.post(ctx, "/api/v1/admin/check-ttl", nil)
+	body, status, err := c.post(ctx, "/api/v1/admin/check-ttl", nil, noRetry)
 	if err != nil {
+		return nil, err
+	}
+	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK {
@@ -360,9 +442,12 @@ func (c *FormaeClient) ForceCheckTTL(ctx context.Context) (json.RawMessage, erro
 // but body is also returned so callers can surface the agent's error JSON.
 func (c *FormaeClient) ForceReconcileStack(ctx context.Context, label string) (json.RawMessage, int, error) {
 	path := fmt.Sprintf("/api/v1/stacks/%s/reconcile", url.PathEscape(label))
-	body, status, err := c.post(ctx, path, nil)
+	body, status, err := c.post(ctx, path, nil, noRetry)
 	if err != nil {
 		return nil, 0, err
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return body, status, err
 	}
 	if status != http.StatusOK && status != http.StatusAccepted {
 		return body, status, fmt.Errorf("agent returned status %d", status)
@@ -401,5 +486,16 @@ func (c *FormaeClient) postMultipartWithHeaders(ctx context.Context, path string
 		Headers:     headers,
 		Body:        &buf,
 		ContentType: w.FormDataContentType(),
-	})
+	}, noRetry)
+}
+
+// unroutedIf explains a 404 from an endpoint that has no "this object does not
+// exist" reading. The agent answers those with 200 or an error, never 404, so
+// under hosted a 404 came from the edge rather than from the installation.
+// Classic reports nothing and the caller's own status handling stands.
+func (c *FormaeClient) unroutedIf(status int) error {
+	if status != http.StatusNotFound {
+		return nil
+	}
+	return c.route.unrouted()
 }
