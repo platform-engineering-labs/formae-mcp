@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// The six endpoints that translate a 404 into an empty payload. Under hosted
+// The seven endpoints that translate a 404 into an empty payload. Under hosted
 // the shared edge answers 404 for an unknown or unrouted installation, so
 // reporting "nothing here" would present a routing failure as a plausible
 // answer — the one failure mode nobody investigates.
@@ -38,6 +38,18 @@ var collectionCalls = map[string]struct {
 			return c.ListCommands(ctx, "", "10", "cid")
 		},
 		wantEmpty: `{"Commands":[]}`,
+	},
+	// ListPlugins returns a typed slice rather than raw JSON, so it is adapted
+	// here to keep one matrix authoritative; a nil slice marshals to "null".
+	"ListPlugins": {
+		call: func(ctx context.Context, c *FormaeClient) (json.RawMessage, error) {
+			ps, err := c.ListPlugins(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(ps)
+		},
+		wantEmpty: "null",
 	},
 	"CancelCommands": {
 		call: func(ctx context.Context, c *FormaeClient) (json.RawMessage, error) {
@@ -139,6 +151,7 @@ func TestEveryCallExplainsAGoneInstallation(t *testing.T) {
 		"ListStacks":     func() error { _, e := c.ListStacks(ctx); return e },
 		"ListTargets":    func() error { _, e := c.ListTargets(ctx, ""); return e },
 		"ListPolicies":   func() error { _, e := c.ListPolicies(ctx); return e },
+		"ListPlugins":    func() error { _, e := c.ListPlugins(ctx); return e },
 		"ListCommands":   func() error { _, e := c.ListCommands(ctx, "", "10", "cid"); return e },
 		"CancelCommands": func() error { _, e := c.CancelCommands(ctx, "", "cid"); return e },
 		"GetCommandStatus": func() error {

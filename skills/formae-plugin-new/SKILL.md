@@ -7,6 +7,14 @@ description: "Use when the user wants to create a new formae resource plugin, bu
 
 Create a complete formae resource plugin for a cloud provider or service, following the plugin SDK tutorial and using TDD for the implementation.
 
+## Step 0 — Is this a hosted installation?
+
+Call `list_agent_plugins` with an explicit `profile` and read the mode it reports.
+
+If the connection is **hosted formae**, say so plainly before starting: a hosted installation cannot install the plugin this produces, because plugins ride the agent image and there is no on-demand install. The work is still worth doing — for a self-hosted agent, or as a candidate for the curated cloud plugin set — but it will not become usable on their installation at the end of this session. Ask for explicit confirmation before continuing, and if they decline, stop here rather than building something they cannot use.
+
+If the connection is a self-hosted agent, continue.
+
 ## When you arrive here from authoring
 
 Building a resource plugin is a **large, multi-step, context-hungry effort**: provider API research, schema design, CRUD implementation, TDD for every operation, conformance tests, and end-to-end verification. The full workflow (steps 1–8 below) easily spans hundreds of tool calls and thousands of tokens — far bigger than authoring a forma file.

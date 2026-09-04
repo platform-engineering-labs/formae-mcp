@@ -25,19 +25,30 @@ Before authoring new resources, ask: is the intent to bring **existing** cloud r
 
 If the intent is "bring existing cloud resources under management", hand off to the `formae-import` skill. That skill still needs a code location — complete Step 1 first. After import, return here if the user also wants to author additional new resources.
 
-## Step 3 — Infer schema plugins
+## Step 3 — Establish what plugins are available
 
-Call `search_hub_plugins` to identify the schema packages the user's intent requires. Map intent to plugin names — for example: "EKS on AWS" → `aws`, `k8s`; "Azure storage" → `azure`; "Tailscale mesh" → `tailscale`. When `search_hub_plugins` returns multiple candidates for an ambiguous name, use `get_hub_plugin` to disambiguate and fetch the repo and version detail. Present the inferred set and ask the user to confirm or adjust before proceeding.
+**Always call `list_agent_plugins` first**, passing the `profile` explicitly. It reports both the plugins the connected installation has and whether that installation is hosted formae or a self-hosted agent. The mode decides everything below, so it cannot be inferred before this call.
 
-Make clear: these are **schema packages only** — they provide PKL types and IDE completion. They do not install resource plugins on the agent.
+**Hosted.** The reported resource plugins are the catalogue. Map the user's intent onto them and confirm the set with the user before proceeding. Wire deps from the schema versions it reports.
 
-**If a needed plugin is absent from the catalog:** surface `formae-plugin-new` as the path forward. Add a context-window caution to the user: plugin building is a substantial task — it is best started in a fresh session or as a sub-agent to avoid context pressure mid-authoring.
+- If the intent needs a plugin that is not in the list, say it is **not reported as installed on this installation**, and that hosted formae cannot install plugins on demand. Then say what the available set can do for the intent, and stop there.
+- Do **not** call `search_hub_plugins` in this branch. The catalogue lists plugins this installation cannot install, and showing them offers something that cannot be delivered.
+- Do **not** hand off to `formae-plugin-new` as a way to get a missing plugin. Authoring one does not make it installable here.
+- If the listing could not be read, the tool says so. Say the available set could not be established and stop; do not fall back to the hub.
+
+**Self-hosted.** Call `search_hub_plugins` to identify the schema packages the user's intent requires. Map intent to plugin names — for example: "EKS on AWS" → `aws`, `k8s`; "Azure storage" → `azure`; "Tailscale mesh" → `tailscale`. When `search_hub_plugins` returns multiple candidates for an ambiguous name, use `get_hub_plugin` to disambiguate and fetch the repo and version detail. Present the inferred set and ask the user to confirm or adjust before proceeding.
+
+**If a needed plugin is absent from the catalog** (self-hosted only): surface `formae-plugin-new` as the path forward. Add a context-window caution to the user: plugin building is a substantial task — it is best started in a fresh session or as a sub-agent to avoid context pressure mid-authoring. A failed plugin listing changes nothing in this branch.
+
+Make clear in both branches: these are **schema packages only** — they provide PKL types and IDE completion. They do not install resource plugins on the agent.
 
 **Dependency wiring** — do not wire deps yourself:
 - New project: `formae-project-init` sets up the initial schema package deps.
 - Existing project needing additional packages: hand off to the `formae-deps` skill to add them.
 
-## Step 4 — Trust gate
+## Step 4 — Trust gate (self-hosted only)
+
+Skip this step on hosted formae. Its plugins are first-party and already installed, so there is no `originatorVerified` decision left to make, and asking for one implies a choice the user does not have.
 
 From the `search_hub_plugins` output, check `originatorVerified` for each chosen plugin. Default to verified or first-party plugins.
 
@@ -45,14 +56,17 @@ If any plugin returns `originatorVerified: false`, **surface its `originatorDoma
 
 ## Step 5 — Agent readiness (guidance only, non-blocking)
 
-Authoring and simulate mode need only plugin **schemas** (the PklProject dependencies) — not the resource plugins themselves — so **assume the required resource plugins are already installed on the agent** and proceed. Do **not** probe the agent's installed plugins here: there is no reliable, non-privileged way to list an agent's plugins (the old `list_plugins`/`formae plugin list` path requires sudo and only sees *local* plugins anyway), and authoring never needs it. `check_health` is fine as an optional, no-privilege reachability check.
+Authoring and simulate mode need only plugin **schemas** (the PklProject dependencies), not the resource plugins themselves, so a missing resource plugin never blocks authoring.
+
+Two different questions get confused here, so keep them apart. `list_agent_plugins` reports what the **agent** has, over its API, with no privileges needed — that is the one Step 3 uses. `formae plugin list` reports what **this machine's** package store holds, which is a different set and not what authoring cares about. Never shell out to the latter to answer the former. `check_health` remains a fine optional reachability check.
 
 **Exception — `formae project init` does reach the agent**: a non-`@local` `--include <name>` resolves that plugin's version from the agent, so init can fail if the plugin isn't installed agent-side. The `formae-project-init` skill covers the `@local`/`--plugin-dir` fallback for offline init.
 
 If a later `apply` fails because a required resource plugin is not installed on the agent:
 
 - Inform the user which plugin is missing (the apply error will name it).
-- Point to docs.formae.io for installation instructions (Docker vs other environments). Never install it yourself.
+- **Self-hosted:** point to docs.formae.io for installation instructions (Docker vs other environments). Never install it yourself.
+- **Hosted:** do not point at installation instructions. The plugin cannot be installed on that installation, so say that plainly and go back to what the reported set can do.
 - Clarify: authoring, `formae eval --output-consumer machine`, and simulate mode all work without the plugin. A real apply requires the plugin to be present on the agent.
 
 Do not install resource plugins. That is an agent-side operation outside this skill's scope.
@@ -85,4 +99,5 @@ Auto-activation from this skill's `description` field is a Claude Code behavior;
 - **Always use `formae eval --output-consumer machine`.** Never use `pkl eval` — forma files use formae-specific extensions that only the formae CLI resolves correctly, and `--output-consumer machine` produces parseable output.
 - **This skill dispatches — it does not duplicate.** The full procedures for init, deps, stack design, import, policy, and apply live in their respective skills. Stay thin: triage, confirm, hand off.
 - **Never invent project paths.** Only present `~/dev` scan results that are verified formae projects. Never guess or fabricate paths.
-- **Never silently depend on unverified plugins.** Always surface `originatorVerified: false` and get explicit user confirmation.
+- **Never silently depend on unverified plugins** (self-hosted). Always surface `originatorVerified: false` and get explicit user confirmation. On hosted formae the question does not arise: the set is first-party and already installed.
+- **Never offer a hosted user a plugin their installation does not have.** Not from the hub, and not by authoring one. The reported set is the catalogue, and anything outside it cannot be applied.
