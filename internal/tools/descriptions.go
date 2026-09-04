@@ -233,3 +233,27 @@ Hard-refuses when the policy is still attached to one or more stacks; the error 
 If destroy_forma later returns a Skip operation with ReferencingStacks, someone attached the policy between the pre-check and the destroy: the source is already edited but the policy still exists in the agent. Report that plainly and name the attaching stacks.
 
 Errors when: the policy is unknown to the agent, or its source declaration cannot be located in the workspace.`
+
+// LoginDescription documents the first half of a hosted sign-in.
+const LoginDescription = `Start signing in to the hosted formae platform.
+
+Returns a URL (or a device code) that the user must open themselves — you cannot
+complete a sign-in on their behalf. Show it to them, wait, then call
+complete_login.
+
+Use this when a hosted profile's session has lapsed, or as part of /formae:setup
+on a machine being set up for the hosted platform. It needs no profile and works
+on a machine where nothing is configured, which is the case it exists for.
+
+Signing in again while a session is already open is harmless: it reports the
+existing session and writes nothing.`
+
+// CompleteLoginDescription documents the second half.
+const CompleteLoginDescription = `Finish the sign-in that the login tool started.
+
+Call this after the user says they have finished in the browser (or entered the
+device code). It waits for the flow to complete and reports who signed in, the
+profiles formae wrote for the installations their grants cover, and which profile
+is now active.
+
+Calling it without a preceding login tool call is an error, not a no-op.`
