@@ -119,6 +119,25 @@ func (c *FormaeClient) ListPolicies() (json.RawMessage, error) {
 	return body, nil
 }
 
+// ListGenerators retrieves all live generators from the agent: each one's
+// cadence, the instant of its last committed rotation, and the resources bound
+// to it. Values are never returned; a generator's value exists only as opaque
+// envelopes on its destinations.
+func (c *FormaeClient) ListGenerators() (json.RawMessage, error) {
+	body, status, err := c.get("/api/v1/generators", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status == http.StatusNotFound {
+		return json.RawMessage("[]"), nil
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
+	}
+
+	return body, nil
+}
+
 // ListTargets queries the agent for targets matching the given query string.
 func (c *FormaeClient) ListTargets(query string) (json.RawMessage, error) {
 	q := url.Values{}

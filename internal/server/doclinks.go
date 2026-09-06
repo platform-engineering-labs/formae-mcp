@@ -38,6 +38,7 @@ var docPages = []docPage{
 	{"Properties", "documentation/concepts/properties", "Resource properties and cross-resource references."},
 	{"Resources", "documentation/concepts/resources", "Managed and unmanaged cloud resources."},
 	{"Values", "documentation/concepts/values", "Resolvables and late-bound values."},
+	{"Secrets and generators", "documentation/concepts/secrets", "Live secret references, generator-drawn credentials, and rotation cadences."},
 	{"Apply modes", "documentation/concepts/apply-modes", "Reconcile vs patch semantics."},
 	{"Synchronization", "documentation/concepts/synchronization", "How the agent keeps cloud state in sync."},
 	{"Discovery", "documentation/concepts/discovery", "Finding unmanaged resources for import."},

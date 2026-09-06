@@ -29,11 +29,17 @@ const FeatureStandalonePolicy Feature = "standalone-policy"
 // both. TTL policies are unaffected and are not gated by this.
 const FeatureAutoReconcilePolicy Feature = "auto-reconcile-policy"
 
+// FeatureGenerators gates the generator inventory tool (list_generators).
+// Generators (agent-drawn credentials with rotation) and the agent's
+// /api/v1/generators endpoint first shipped in the formae 0.89.0 line.
+const FeatureGenerators Feature = "generators"
+
 // registry maps each feature to its minimum required formae version.
 var registry = map[Feature]string{
 	FeatureProfile:             "0.87.0",
 	FeatureStandalonePolicy:    "0.82.0",
 	FeatureAutoReconcilePolicy: "0.88.0",
+	FeatureGenerators:          "0.89.0",
 }
 
 // detectFn is the version source; overridable in tests.

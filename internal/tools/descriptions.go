@@ -25,6 +25,10 @@ const ListPoliciesDescription = `List all standalone (reusable) policies known t
 
 Use this tool when the user asks about reusable policies, which stacks share a policy, or what standalone policies exist. For inline policies attached directly to a stack, use list_stacks — inline policies appear on each stack object.`
 
+const ListGeneratorsDescription = `List all live generators known to the formae agent (requires formae >= 0.89.0). A generator is an agent-drawn credential (e.g. formae.PasswordGenerator, formae.KeyPairGenerator) declared in a forma; the agent draws its value, writes it to every bound destination, and rotates it on the declared cadence. Returns each generator's label, type, stack, configuration, rotation cadence in seconds, the instant of its last committed rotation, and the resources bound to it. Never returns any secret value: destinations hold the value only as opaque envelopes.
+
+Use this tool when the user asks what credentials formae manages or rotates, when something last rotated, what a rotation would touch, or whether a stack's secrets are generator-backed. Note that rotations themselves run agent-side and do not appear in list_commands.`
+
 const ListTargetsDescription = `Query infrastructure targets (cloud accounts/regions) configured in the formae agent.
 
 Use this tool when the user asks about their cloud targets, configured regions, or provider setup.

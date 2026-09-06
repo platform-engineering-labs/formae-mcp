@@ -69,6 +69,8 @@ Then hand off to the `formae-stack-design` skill to decide how resources are gro
 
 **Policy needs** — if the user wants TTL, auto-reconcile, or other lifecycle policies on a stack, hand off to the `formae-policy` skill.
 
+**Credential needs** — if the infrastructure needs a password, API key, or key pair (a database's master password, a service's signing key), hand off to the `formae-secrets` skill: formae draws and rotates the credential via a generator. Never invent a secret value or seed one with eval-time randomness.
+
 **Simulate then apply** — hand off to the `formae-apply` skill for the simulate-then-apply workflow.
 
 ---

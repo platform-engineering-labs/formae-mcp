@@ -137,6 +137,12 @@ func (s *Server) registerTools() {
 	}, s.handleListPolicies)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "list_generators",
+		Description: tools.ListGeneratorsDescription,
+		Annotations: readOnly,
+	}, s.handleListGenerators)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "list_changes_since_last_reconcile",
 		Description: tools.ListChangesSinceLastReconcileDescription,
 		Annotations: readOnly,
@@ -364,6 +370,21 @@ func (s *Server) handleListPolicies(_ context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(err), nil, nil
 	}
 	result, err := c.ListPolicies()
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	return jsonResult(result), nil, nil
+}
+
+func (s *Server) handleListGenerators(_ context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {
+	if err := featuregate.GuardFeature(featuregate.FeatureGenerators); err != nil {
+		return errorResult(err), nil, nil
+	}
+	c, err := s.clientFor(input.Profile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
+	result, err := c.ListGenerators()
 	if err != nil {
 		return errorResult(err), nil, nil
 	}

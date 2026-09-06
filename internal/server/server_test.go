@@ -810,3 +810,72 @@ func TestClientFor_ExplicitProfileResolvesFromConfigDir(t *testing.T) {
 		t.Errorf("expected profile endpoint, got %q", c.endpoint)
 	}
 }
+
+func TestListGenerators(t *testing.T) {
+	withFakeVersion(t, "0.89.0")
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/generators": func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `[{"Label":"db-password-gen","Type":"PasswordGenerator","Stack":"app-durable","Config":{"Length":32},"EverySeconds":7776000,"LastRotatedAt":"2026-09-05T22:00:00Z","Destinations":[{"Label":"db-password","Stack":"app-durable"}]}]`)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_generators",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", textContent(t, result))
+	}
+	text := textContent(t, result)
+	if !strings.Contains(text, "db-password-gen") {
+		t.Errorf("expected response to contain generator label, got: %s", text)
+	}
+}
+
+func TestListGeneratorsEmpty(t *testing.T) {
+	withFakeVersion(t, "0.89.0")
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/generators": func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		},
+	})
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_generators",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success on 404, got error: %s", textContent(t, result))
+	}
+	if text := textContent(t, result); text != "[]" {
+		t.Errorf("expected empty array, got: %s", text)
+	}
+}
+
+func TestListGeneratorsRequiresFormae089(t *testing.T) {
+	withFakeVersion(t, "0.88.0")
+	agent := mockAgent(t, nil)
+	defer agent.Close()
+
+	session := connectTestServer(t, agent.URL)
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_generators",
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected a version-gate error on formae 0.88.0")
+	}
+	if text := textContent(t, result); !strings.Contains(text, "0.89.0") {
+		t.Errorf("expected the gate to name the required version, got: %s", text)
+	}
+}

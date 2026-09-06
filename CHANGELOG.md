@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [0.9.0]
+
+### Added
+
+- A `list_generators` tool (requires formae >= 0.89.0): each live generator's
+  label, type, stack, configuration, rotation cadence, last committed rotation,
+  and the resources bound to it. Secret values are never returned. Rotations
+  run agent-side and do not appear in `list_commands`; this tool is how an
+  assistant answers "when did X last rotate?".
+- A `formae-secrets` skill: authoring generator-backed credentials
+  (`PasswordGenerator`, `KeyPairGenerator`, `RotationSpec`) instead of the
+  legacy eval-time-randomness + `setOnce` shape, cadence guidance including the
+  fifteen-minute floor, the rotation window contract consumers must tolerate,
+  and how to inspect rotation state. The `formae-author` skill now hands
+  credential needs off to it.
+- The docs index gains the secrets-and-generators concept page.
+
 ## [0.8.0]
 
 ### Changed
