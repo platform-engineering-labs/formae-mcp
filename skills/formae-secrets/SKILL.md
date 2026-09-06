@@ -44,10 +44,14 @@ local dbPassword: secret.Secret = new {
 }
 ```
 
-Without a `rotation` block the generator draws once and never again. Key
-pairs: `formae.KeyPairGenerator` draws an RSA pair as two named outputs of one
-draw — bind `gen.privateKey` (PKCS#8 PEM) and `gen.publicKey` (PKIX PEM) to
-their own destinations and the two always hold halves of the same pair.
+Without a `rotation` block the generator never rotates on a schedule, but do
+not promise the value is fixed for life: an apply can still redraw it — when a
+new destination binds to the generator, or when the generator's spec changes
+so the held generation no longer satisfies it. The consumer contract below
+applies to those redraws too. Key pairs: `formae.KeyPairGenerator` draws an
+RSA pair as two named outputs of one draw — bind `gen.privateKey` (PKCS#8 PEM)
+and `gen.publicKey` (PKIX PEM) to their own destinations and the two always
+hold halves of the same pair.
 
 **Do NOT author the legacy shape** (eval-time `random.password(...)` seeded
 into a `.opaque.setOnce` secret). It cannot rotate, and `setOnce` is a one-way
