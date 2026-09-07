@@ -794,10 +794,24 @@ type stubResolver struct {
 	err        error
 	managed    bool
 	sawProfile string
+	// calls and refreshes count what the 401 path did, so a test can assert
+	// that a refresh happened, or that one did not.
+	calls     int
+	refreshes int
+	// refreshed, when set, is what a forced refresh resolves to. Nil means a
+	// refresh returns the same context as the first resolution.
+	refreshed *execctx.Context
 }
 
-func (r *stubResolver) Resolve(_ context.Context, profileName string) (execctx.Context, error) {
+func (r *stubResolver) Resolve(_ context.Context, profileName string, forceRefresh bool) (execctx.Context, error) {
 	r.sawProfile = profileName
+	r.calls++
+	if forceRefresh {
+		r.refreshes++
+		if r.refreshed != nil {
+			return *r.refreshed, nil
+		}
+	}
 	return r.ec, r.err
 }
 
@@ -822,8 +836,8 @@ func TestClientFor_ExplicitProfileReachesTheResolver(t *testing.T) {
 	if r.sawProfile != "p" {
 		t.Errorf("resolver saw profile %q, want %q", r.sawProfile, "p")
 	}
-	if c.endpoint != "http://p-host:7000" {
-		t.Errorf("endpoint = %q, want the profile endpoint", c.endpoint)
+	if got := c.route.url("", nil); got != "http://p-host:7000" {
+		t.Errorf("endpoint = %q, want the profile endpoint", got)
 	}
 }
 
@@ -835,7 +849,7 @@ func TestClientFor_RefusesHosted(t *testing.T) {
 		ProfileName: "acme-prod",
 		Conn: config.Hosted{
 			Endpoint:     config.HostedOrigin,
-			Installation: "3f2b8c14-0000-4000-8000-000000000000",
+			Installation: "3HzFPXfPDGhwLJJVtaHbmFs6vLa",
 		},
 	}}
 	s := New("")
@@ -861,8 +875,8 @@ func TestClientFor_ClassicBuildsURLPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.endpoint != "http://localhost:49684" {
-		t.Errorf("endpoint = %q", c.endpoint)
+	if got := c.route.url("", nil); got != "http://localhost:49684" {
+		t.Errorf("endpoint = %q", got)
 	}
 }
 
@@ -886,8 +900,8 @@ func TestClientFor_ForcedEndpointIsClassicWithoutAPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.endpoint != "http://forced:1" {
-		t.Errorf("endpoint = %q, want the forced endpoint", c.endpoint)
+	if got := c.route.url("", nil); got != "http://forced:1" {
+		t.Errorf("endpoint = %q, want the forced endpoint", got)
 	}
 }
 
