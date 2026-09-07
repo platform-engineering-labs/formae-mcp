@@ -828,6 +828,9 @@ func TestClientFor_ExplicitProfileReachesTheResolver(t *testing.T) {
 	}}
 	s := New("http://forced:1")
 	s.ctxResolver = r
+	// The gate runs before resolution; without this the stubbed resolver above
+	// is unreachable on a machine with no formae configuration.
+	s.gate = func() error { return nil }
 
 	c, err := s.clientFor(context.Background(), "p")
 	if err != nil {
@@ -854,6 +857,9 @@ func TestClientFor_RefusesHosted(t *testing.T) {
 	}}
 	s := New("")
 	s.ctxResolver = r
+	// The gate runs before resolution; without this the stubbed resolver above
+	// is unreachable on a machine with no formae configuration.
+	s.gate = func() error { return nil }
 
 	_, err := s.clientFor(context.Background(), "acme-prod")
 	if err == nil {
@@ -870,6 +876,9 @@ func TestClientFor_ClassicBuildsURLPort(t *testing.T) {
 	}}
 	s := New("")
 	s.ctxResolver = r
+	// The gate runs before resolution; without this the stubbed resolver above
+	// is unreachable on a machine with no formae configuration.
+	s.gate = func() error { return nil }
 
 	c, err := s.clientFor(context.Background(), "")
 	if err != nil {
@@ -918,6 +927,9 @@ func TestResolveCtx_ExplainsAnInstallBelowTheFloor(t *testing.T) {
 			err:     tooOld,
 			managed: true,
 		}
+		// The gate runs before resolution; this test is about the floor refusal,
+		// not about whether the machine has formae configured.
+		s.gate = func() error { return nil }
 		_, err := s.resolveCtx(context.Background(), "")
 		if err == nil {
 			t.Fatal("expected the floor refusal to surface")
@@ -936,6 +948,9 @@ func TestResolveCtx_ExplainsAnInstallBelowTheFloor(t *testing.T) {
 			ec:  execctx.Context{FormaeBin: "/opt/pel/bin/formae"},
 			err: tooOld,
 		}
+		// The gate runs before resolution; this test is about the floor refusal,
+		// not about whether the machine has formae configured.
+		s.gate = func() error { return nil }
 		_, err := s.resolveCtx(context.Background(), "")
 		if err == nil {
 			t.Fatal("expected the floor refusal to surface")

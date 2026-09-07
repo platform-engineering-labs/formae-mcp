@@ -60,6 +60,12 @@ type Server struct {
 	// against a compile-time origin, so without a seam no test can exercise a
 	// hosted handler at all. Production never replaces it.
 	newClient func(execctx.Context) (*FormaeClient, error)
+	// gate reports whether this machine has usable formae configuration. It is
+	// a field for the same reason newClient is: it runs before resolution, so a
+	// test that stubs the resolver cannot reach that stub while the real gate
+	// stands in front of it, and the real gate only passes on a machine that
+	// already has formae configured. Production never replaces it.
+	gate func() error
 
 	// loginState holds the sign-in a user is part-way through. It is the one
 	// piece of state this server keeps between calls, and it exists because the
@@ -83,6 +89,7 @@ func New(endpoint string) *Server {
 		forcedEndpoint: endpoint,
 		ctxResolver:    execctx.NewResolver(formaebin.NewBinResolver()),
 		clientID:       clientid.NewResolver(),
+		gate:           gateStore,
 	}
 	s.newClient = s.clientFrom
 
@@ -153,7 +160,7 @@ func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Co
 	// profile store at all. The order matters in both directions and neither is
 	// incidental: gating first would break every test that uses that seam, and
 	// resolving first would create the profile whose absence is the question.
-	if err := gateStore(); err != nil {
+	if err := s.gate(); err != nil {
 		return execctx.Context{}, err
 	}
 

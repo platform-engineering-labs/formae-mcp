@@ -47,6 +47,10 @@ func serverWithStubResolver(t *testing.T, ec execctx.Context) *Server {
 	t.Helper()
 	s := New("")
 	s.ctxResolver = &stubResolver{ec: ec}
+	// Same intent as the stubbed resolver: the gate runs before resolution, so
+	// without this the real gate stands in front of the stub and the test
+	// depends on the machine having formae configured.
+	s.gate = func() error { return nil }
 	return s
 }
 

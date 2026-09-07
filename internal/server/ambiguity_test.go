@@ -20,6 +20,9 @@ import (
 // anyway.
 func TestAmbiguityBecomesAnActionableInstruction(t *testing.T) {
 	s := New("")
+	// The onboarding gate runs before resolution, so a stubbed resolver is
+	// unreachable behind the real gate on a machine with no formae configuration.
+	s.gate = func() error { return nil }
 	s.ctxResolver = &stubResolver{
 		ec: execctx.Context{FormaeBin: "/usr/bin/formae"},
 		err: &config.AmbiguousProfileError{
@@ -53,6 +56,9 @@ func TestAnExplicitProfileIsPassedThroughOnTheRetry(t *testing.T) {
 		FormaeBin:   "/usr/bin/formae",
 	}}
 	s := New("")
+	// The onboarding gate runs before resolution, so a stubbed resolver is
+	// unreachable behind the real gate on a machine with no formae configuration.
+	s.gate = func() error { return nil }
 	s.ctxResolver = r
 
 	if _, err := s.clientFor(context.Background(), "acme-staging"); err != nil {
