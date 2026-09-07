@@ -137,6 +137,16 @@ func TestWriteProfile_MissingProfile(t *testing.T) {
 	}
 }
 
+func TestRunFormaeProfileUsesGivenBinary(t *testing.T) {
+	out, err := runFormaeProfile("/nonexistent/marker-formae", []string{"list"})
+	if err == nil {
+		t.Fatal("expected error from missing binary")
+	}
+	if !strings.Contains(err.Error(), "marker-formae") && !strings.Contains(out, "marker-formae") {
+		t.Fatalf("error did not reference the given binary: %v / %s", err, out)
+	}
+}
+
 func TestCreateAndUseProfile(t *testing.T) {
 	// Requires the real formae 0.87.0 CLI on PATH (shell-out verbs).
 	if _, err := exec.LookPath("formae"); err != nil {

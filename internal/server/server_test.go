@@ -74,6 +74,11 @@ func TestCheckHealth(t *testing.T) {
 		"GET /api/v1/health": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		},
+		"GET /api/v1/stats": func(w http.ResponseWriter, r *http.Request) {
+			// Return no version so skew notice is skipped.
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, `{}`)
+		},
 	})
 	defer agent.Close()
 
@@ -521,6 +526,11 @@ func TestApplyForma_JSONFile(t *testing.T) {
 		"POST /api/v1/commands": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = fmt.Fprint(w, `{"id":"cmd-apply-1","status":"pending"}`)
+		},
+		"GET /api/v1/stats": func(w http.ResponseWriter, r *http.Request) {
+			// Return no version so skew notice is skipped.
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, `{}`)
 		},
 	})
 	defer agent.Close()

@@ -20,12 +20,12 @@ Register the marketplace:
 Install the plugin:
 
 ```
-/plugin install formae-mcp@formae-marketplace
+/plugin install formae@formae-marketplace
 ```
 
 Run `/reload-plugins` (Claude Code v2.1.116+) to apply the install without restarting your session. On older versions, restart Claude Code instead. The MCP server binary is built automatically on first use.
 
-Verify by asking Claude to run `/formae-status`.
+Verify by asking Claude to run `/formae:formae-status`.
 
 ### Claude Code (manual)
 
@@ -53,35 +53,53 @@ See [.codex/INSTALL.md](.codex/INSTALL.md) for Codex-specific installation instr
 
 See [.opencode/INSTALL.md](.opencode/INSTALL.md) for OpenCode-specific installation instructions.
 
+## Migration from `formae-mcp`
+
+The plugin was previously distributed under the name `formae-mcp`. If you installed it under that name, re-add it under the new name `formae`:
+
+```
+/plugin install formae@formae-marketplace
+```
+
+Then remove the old entry:
+
+```
+/plugin remove formae-mcp
+```
+
+Run `/reload-plugins` to apply the change without restarting your session.
+
 ## Available Skills
 
 ### Authoring
 
-`formae-author` is the front door for authoring new infrastructure with formae. Tell it what you want to deploy ("I want to deploy a static website with CloudFront") and it triages the work: infers which plugin schema dependencies are needed, and dispatches to focused skills — `formae-project-init` to scaffold a new forma project, `formae-deps` to resolve plugin and PKL schema dependencies, `formae-stack-design` to design and write the forma file, `formae-policy` to attach lifecycle policies, and `formae-plugin-new` when a required resource type has no existing plugin. For existing cloud resources, it hands off to `formae-import` to bring them under management. The authoring skills are backed by hub tools (`search_hub_plugins`, `list_plugin_examples`) that pull the live plugin catalog and version-matched examples directly from the formae hub.
+`/formae:formae-author` is the front door for authoring new infrastructure with formae. Tell it what you want to deploy ("I want to deploy a static website with CloudFront") and it triages the work: infers which plugin schema dependencies are needed, and dispatches to focused skills — `/formae:formae-project-init` to scaffold a new forma project, `/formae:formae-deps` to resolve plugin and PKL schema dependencies, `/formae:formae-stack-design` to design and write the forma file, `/formae:formae-policy` to attach lifecycle policies, and `/formae:formae-plugin-new` when a required resource type has no existing plugin. For existing cloud resources, it hands off to `/formae:formae-import` to bring them under management. The authoring skills are backed by hub tools (`search_hub_plugins`, `list_plugin_examples`) that pull the live plugin catalog and version-matched examples directly from the formae hub.
 
 ### All Skills
 
 | Skill | Description |
 |-------|-------------|
-| `formae-author` | Front door for authoring new infrastructure: triages intent, infers deps, dispatches to focused skills |
-| `formae-project-init` | Scaffold a new forma project with the correct directory layout and config |
-| `formae-deps` | Resolve and install plugin and PKL schema dependencies for a forma project |
-| `formae-stack-design` | Design and write a forma file for a given set of infrastructure requirements |
-| `formae-status` | Check running commands, deployment progress, recent operations, and failures |
-| `formae-stacks` | View infrastructure stacks, organization, and resource counts |
-| `formae-resources` | Query deployed resources by type, stack, label, or management status |
-| `formae-targets` | List cloud targets, configured regions, and provider accounts |
-| `formae-apply` | Deploy infrastructure by applying a forma file or reconciling a stack |
-| `formae-patch` | Make targeted infrastructure changes without a full reconcile |
-| `formae-rename` | Rename a resource's label via `alias` without destroying the cloud object |
-| `formae-destroy` | Tear down infrastructure resources, stacks, or environments |
-| `formae-fix-code-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
-| `formae-policy` | Set, remove, or inspect TTL and auto-reconcile policies — inline on one stack, or standalone and reused across several |
-| `formae-discover` | Find unmanaged resources in cloud accounts |
-| `formae-import` | Bring unmanaged/discovered resources under formae management |
-| `formae-plugin-new` | Scaffold a new formae resource plugin |
-| `formae-plugin-add-resource` | Add a new resource type to an existing plugin |
-| `formae-config` | Switch, list, save, create, delete, compare, view, and edit named formae configuration profiles (drives `formae profile`; requires formae >= 0.87.0) |
+| `/formae:formae-author` | Front door for authoring new infrastructure: triages intent, infers deps, dispatches to focused skills |
+| `/formae:formae-project-init` | Scaffold a new forma project with the correct directory layout and config |
+| `/formae:formae-deps` | Resolve and install plugin and PKL schema dependencies for a forma project |
+| `/formae:formae-stack-design` | Design and write a forma file for a given set of infrastructure requirements |
+| `/formae:formae-status` | Check running commands, deployment progress, recent operations, and failures |
+| `/formae:formae-stacks` | View infrastructure stacks, organization, and resource counts |
+| `/formae:formae-resources` | Query deployed resources by type, stack, label, or management status |
+| `/formae:formae-targets` | List cloud targets, configured regions, and provider accounts |
+| `/formae:formae-apply` | Deploy infrastructure by applying a forma file or reconciling a stack |
+| `/formae:formae-patch` | Make targeted infrastructure changes without a full reconcile |
+| `/formae:formae-rename` | Rename a resource's label via `alias` without destroying the cloud object |
+| `/formae:formae-destroy` | Tear down infrastructure resources, stacks, or environments |
+| `/formae:formae-fix-code-drift` | Check for out-of-band changes and decide whether to absorb or overwrite |
+| `/formae:formae-policy` | Set, remove, or inspect TTL and auto-reconcile policies — inline on one stack, or standalone and reused across several |
+| `/formae:formae-discover` | Find unmanaged resources in cloud accounts |
+| `/formae:formae-import` | Bring unmanaged/discovered resources under formae management |
+| `/formae:formae-plugin-new` | Scaffold a new formae resource plugin |
+| `/formae:formae-plugin-add-resource` | Add a new resource type to an existing plugin |
+| `/formae:formae-config` | Switch, list, save, create, delete, compare, view, and edit named formae configuration profiles (drives `formae profile`; requires formae >= 0.87.0) |
+| `/formae:setup` | Install or repair the formae MCP — ensures the prebuilt binary and bundled formae are present and the MCP is registered in the current harness |
+| `/formae:upgrade` | Upgrade local formae when the connected agent is newer (classic mode) — always asks first and warns that it may move a pinned formae |
 
 ## Available MCP Tools
 

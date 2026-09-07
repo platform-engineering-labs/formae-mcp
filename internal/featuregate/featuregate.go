@@ -2,6 +2,7 @@ package featuregate
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -36,63 +37,80 @@ var registry = map[Feature]string{
 	FeatureAutoReconcilePolicy: "0.88.0",
 }
 
-// detectFn is the version source; overridable in tests.
-var detectFn = detectFromCLI
+type result struct {
+	ver string
+	err error
+}
 
 var (
-	cacheMu   sync.Mutex
-	cached    bool
-	cachedVer string
-	cachedErr error
+	cacheMu  sync.Mutex
+	cache    = map[string]result{}
+	detectFn = detectFromCLI // func(bin string) (string, error)
 )
 
-// resetCacheForTest clears the memoized version (tests only).
+// resetCacheForTest clears the per-binary version cache (tests only).
 func resetCacheForTest() {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	cached, cachedVer, cachedErr = false, "", nil
+	cache = map[string]result{}
 	detectFn = detectFromCLI
 }
 
-// SetDetectForTest overrides version detection for tests and clears the cache.
+// SetDetectForTest forces a version for any binary and clears the cache.
 func SetDetectForTest(v string) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	detectFn = func() (string, error) { return v, nil }
-	cached, cachedVer, cachedErr = false, "", nil
+	detectFn = func(string) (string, error) { return v, nil }
+	cache = map[string]result{}
 }
 
-// Detect returns the local formae version (e.g. "0.87.0"), memoized for the
-// process lifetime.
-func Detect() (string, error) {
+// fileIdentityKey returns a cache key that includes the file's mtime and size
+// so an in-place binary upgrade (same path, new build) invalidates the entry.
+// If stat fails (path does not exist, permissions, etc.) it falls back to the
+// plain path so callers with synthetic/stub paths still work.
+func fileIdentityKey(bin string) string {
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return bin
+	}
+	return fmt.Sprintf("%s\x00%d\x00%d", bin, fi.ModTime().UnixNano(), fi.Size())
+}
+
+// Detect returns the version of the formae binary at bin, memoized by file
+// identity (path + mtime + size). An in-place binary upgrade (same path, new
+// build) causes re-detection on the next call. When stat is unavailable the
+// key falls back to the plain path.
+func Detect(bin string) (string, error) {
+	key := fileIdentityKey(bin)
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	if !cached {
-		cachedVer, cachedErr = detectFn()
-		cached = true
+	if r, ok := cache[key]; ok {
+		return r.ver, r.err
 	}
-	return cachedVer, cachedErr
+	ver, err := detectFn(bin)
+	cache[key] = result{ver, err}
+	return ver, err
 }
 
-// GuardFeature returns nil if the local formae satisfies the feature's minimum
-// version, else a "requires formae >= X.Y.Z (connected: A.B.C)" error.
-func GuardFeature(f Feature) error {
+// GuardFeature returns nil if the formae binary at bin satisfies the feature's
+// minimum version, else a "requires formae >= X.Y.Z (connected: A.B.C)" error.
+func GuardFeature(f Feature, bin string) error {
 	min, ok := registry[f]
 	if !ok {
 		return fmt.Errorf("unknown feature %q", f)
 	}
-	got, err := Detect()
+	got, err := Detect(bin)
 	if err != nil {
 		return fmt.Errorf("could not determine formae version: %w", err)
 	}
-	if compareVersions(got, min) < 0 {
+	if CompareVersions(got, min) < 0 {
 		return fmt.Errorf("requires formae >= %s (connected: %s)", min, got)
 	}
 	return nil
 }
 
-func detectFromCLI() (string, error) {
-	out, err := exec.Command("formae", "--version").CombinedOutput()
+func detectFromCLI(bin string) (string, error) {
+	out, err := exec.Command(bin, "--version").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("formae --version failed: %w (output: %s)", err, string(out))
 	}
@@ -109,8 +127,8 @@ func parseFormaeVersion(out string) (string, error) {
 	return m[1], nil
 }
 
-// compareVersions returns -1, 0, or 1 comparing two X.Y.Z strings numerically.
-func compareVersions(a, b string) int {
+// CompareVersions returns -1, 0, or 1 comparing two X.Y.Z strings numerically.
+func CompareVersions(a, b string) int {
 	pa, pb := parseParts(a), parseParts(b)
 	for i := 0; i < 3; i++ {
 		if pa[i] < pb[i] {
