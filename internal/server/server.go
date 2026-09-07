@@ -10,6 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/clientid"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 	"github.com/platform-engineering-labs/formae-mcp/internal/formaebin"
@@ -34,8 +35,9 @@ func implementation() *mcp.Implementation {
 type Server struct {
 	mcpServer      *mcp.Server
 	hub            *HubClient
-	forcedEndpoint string            // when set, empty-profile calls use this (tests / explicit)
-	ctxResolver    *execctx.Resolver // resolves per-call execution context
+	forcedEndpoint string             // when set, empty-profile calls use this (tests / explicit)
+	ctxResolver    *execctx.Resolver  // resolves per-call execution context
+	clientID       *clientid.Resolver // resolves the Client-ID header value
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -52,6 +54,7 @@ func New(endpoint string) *Server {
 		hub:            NewHubClient(),
 		forcedEndpoint: endpoint,
 		ctxResolver:    execctx.NewResolver(formaebin.NewBinResolver()),
+		clientID:       clientid.NewResolver(),
 	}
 
 	s.registerTools()
@@ -340,7 +343,7 @@ func (s *Server) handleGetCommandStatus(_ context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.GetCommandStatus(input.CommandID, "formae-mcp")
+	result, err := c.GetCommandStatus(input.CommandID, s.clientID.Resolve(s.formaeBin()))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -356,7 +359,7 @@ func (s *Server) handleListCommands(_ context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.ListCommands(input.Query, maxResults, "formae-mcp")
+	result, err := c.ListCommands(input.Query, maxResults, s.clientID.Resolve(s.formaeBin()))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -618,7 +621,7 @@ func (s *Server) handleApplyForma(_ context.Context, _ *mcp.CallToolRequest, inp
 	}
 
 	c := newClientFromCtx(ctx)
-	result, err := c.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, "formae-mcp")
+	result, err := c.SubmitCommand("apply", input.Mode, input.Simulate, input.Force, formaJSON, s.clientID.Resolve(ctx.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -648,7 +651,7 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 	c := newClientFromCtx(ctx)
 
 	if input.Query != "" {
-		result, err := c.DestroyByQuery(input.Query, input.Simulate, "formae-mcp")
+		result, err := c.DestroyByQuery(input.Query, input.Simulate, s.clientID.Resolve(ctx.FormaeBin))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -660,7 +663,7 @@ func (s *Server) handleDestroyForma(_ context.Context, _ *mcp.CallToolRequest, i
 		return errorResult(fmt.Errorf("failed to evaluate forma file: %w", err)), nil, nil
 	}
 
-	result, err := c.SubmitCommand("destroy", "", input.Simulate, false, formaJSON, "formae-mcp")
+	result, err := c.SubmitCommand("destroy", "", input.Simulate, false, formaJSON, s.clientID.Resolve(ctx.FormaeBin))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
@@ -672,7 +675,7 @@ func (s *Server) handleCancelCommands(_ context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	result, err := c.CancelCommands(input.Query, "formae-mcp")
+	result, err := c.CancelCommands(input.Query, s.clientID.Resolve(s.formaeBin()))
 	if err != nil {
 		return errorResult(err), nil, nil
 	}

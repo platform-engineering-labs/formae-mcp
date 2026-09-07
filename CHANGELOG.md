@@ -12,10 +12,15 @@ Install via the
 
 ## [Unreleased]
 
+### Added
+
+- The MCP now warns when the connected formae agent is newer than your local `formae`, so you can tell when authoring may not reflect the agent's latest capabilities. The notice points at `/formae:upgrade`, which fetches the newer `formae` after you confirm (never silently in classic mode).
+
 ### Changed
 
 - Plugin renamed from `formae-mcp` to `formae`; added `/formae:setup` and `/formae:upgrade`.
-- The plugin now runs a prebuilt binary instead of compiling on first launch; a bundled `formae` is used when none is installed.
+- The plugin now downloads its prebuilt `formae-mcp` and a matched `formae` into `~/.formae-ai/opt` on first run (no build-from-source; set `FORMAE_MCP_DEV=1` for local dev builds).
+- Commands issued through the MCP (apply, destroy, cancel, status, list) now identify with your CLI's client ID (`~/.pel/formae/cli_client_id`) instead of a fixed `formae-mcp` identity, so the agent attributes them to the same client as your own `formae` runs. When the ID file does not exist yet, the MCP runs `formae --version` once so formae creates it, and falls back to the old `formae-mcp` identity if it still cannot be read.
 
 ## [0.8.0]
 

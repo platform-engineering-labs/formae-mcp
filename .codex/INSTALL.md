@@ -1,91 +1,135 @@
-# Installing formae-mcp for Codex
+# Installing the formae MCP for Codex
 
 ## Prerequisites
 
-- Go 1.25+
-- Git
-- A running formae agent (`formae agent start`)
+- A recent Codex CLI (verified with 0.148.0) that supports `codex plugin` and
+  Claude-format plugin marketplaces.
+- A running formae agent (`formae agent start`) and a formae profile pointing at it.
 
 ## Installation
 
-1. Install the MCP server binary:
+```bash
+codex plugin marketplace add platform-engineering-labs/formae-marketplace
+codex plugin add formae@formae-marketplace
+```
 
-   ```bash
-   go install github.com/platform-engineering-labs/formae-mcp/cmd/formae-mcp@latest
-   ```
+That's it. The skills and the MCP server both come with the plugin — no
+cloning, no symlinking, no editing `~/.codex/config.toml`, and nothing needs to
+be on your `PATH`.
 
-2. Clone the repo:
-
-   ```bash
-   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.codex/formae-mcp
-   ```
-
-3. Symlink skills into Codex:
-
-   ```bash
-   mkdir -p ~/.agents/skills
-   ln -s ~/.codex/formae-mcp/skills ~/.agents/skills/formae-mcp
-   ```
-
-4. Register the MCP server. The skills drive the `formae-mcp` tools, so Codex
-   must know how to start the server. Either use the CLI:
-
-   ```bash
-   codex mcp add formae -- formae-mcp
-   ```
-
-   or merge this block into `~/.codex/config.toml` (add to the existing file —
-   don't replace it):
-
-   ```toml
-   [mcp_servers.formae]
-   command = "formae-mcp"
-   ```
-
-   `formae-mcp` must be resolvable on your `PATH` (`go install` puts it in
-   `$(go env GOPATH)/bin`). If Codex can't find it — GUI/IDE launches often have
-   a narrower `PATH` — use the absolute path instead of the bare name (run
-   `go env GOPATH` to find it, then point at `<gopath>/bin/formae-mcp`).
-
-5. Restart Codex.
+The first session after install downloads the prebuilt `formae-mcp` binary
+(and a matched `formae`) into `~/.formae-ai/opt`. The plugin manifest declares
+the server as `required` with a 120-second `startup_timeout_sec`, so Codex
+waits for that one-time download instead of starting the session without
+formae tools. Later sessions start instantly.
 
 ## Verify
 
-Two checks — the first confirms Codex sees the server, the second confirms it
-actually works end-to-end.
+Two checks — the first confirms Codex installed the plugin, the second
+confirms it actually works end-to-end.
 
-1. Confirm the server is registered:
+1. Confirm the plugin is installed:
 
    ```bash
-   codex mcp list
+   codex plugin list
    ```
 
-   `formae` should appear in the list.
+   `formae` should appear, sourced from `formae-marketplace`.
 
-2. With a formae agent running (`formae agent start`), ask Codex for formae
-   status (invoke the `formae-status` skill, e.g. "what formae commands are
-   running?") and confirm a tool call returns live agent data — not just that
-   the skill loaded.
+2. With a formae agent running (`formae agent start`), start a Codex session
+   and ask for formae status (e.g. "what formae commands are running?") or a
+   hub search (e.g. "search the formae hub for aws plugins"), and confirm a
+   real tool call returns data — not just that the skill loaded.
 
 ## Updating
 
 ```bash
-cd ~/.codex/formae-mcp && git pull && go install ./cmd/formae-mcp/
+codex plugin marketplace upgrade
+codex plugin remove formae@formae-marketplace
+codex plugin add formae@formae-marketplace
 ```
 
 ## Uninstalling
 
 ```bash
-codex mcp remove formae
-rm ~/.agents/skills/formae-mcp
-rm -rf ~/.codex/formae-mcp
+codex plugin remove formae@formae-marketplace
+codex plugin marketplace remove formae-marketplace
 ```
 
-If you registered the server by editing `~/.codex/config.toml`, delete the
-`[mcp_servers.formae]` block instead of running `codex mcp remove`.
-
-Optionally remove the binary:
+Optionally remove the downloaded binaries:
 
 ```bash
-rm "$(go env GOPATH)/bin/formae-mcp"
+rm -rf ~/.formae-ai/opt
 ```
+
+## Manual install (older Codex versions)
+
+If your Codex CLI predates plugin marketplace support, register the MCP
+server by hand instead.
+
+1. Clone the repo (it carries the skills and the launcher):
+
+   ```bash
+   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.codex/formae
+   ```
+
+2. Symlink the skills into Codex:
+
+   ```bash
+   mkdir -p ~/.agents/skills
+   ln -s ~/.codex/formae/skills ~/.agents/skills/formae
+   ```
+
+3. Register the MCP server. Point Codex at the launcher script, which downloads
+   the prebuilt `formae-mcp` (and a matched `formae`) into `~/.formae-ai/opt` on
+   first run and starts the server. Merge this block into `~/.codex/config.toml`
+   (add to the existing file — don't replace it):
+
+   ```toml
+   [mcp_servers.formae]
+   command = "/home/you/.codex/formae/scripts/start-mcp.sh"
+   required = true            # wait for the server at session start
+   startup_timeout_sec = 120  # headroom for the one-time binary download
+   ```
+
+   Use an **absolute** path to `start-mcp.sh` (expand `~`), and make sure it is
+   executable (`chmod +x`). No binary needs to be on your `PATH`.
+
+   Both extra settings matter: Codex starts sessions without waiting for MCP
+   servers, so without `required = true` the first session (while the binaries
+   download) silently has no formae tools. `startup_timeout_sec` gives that
+   one-time download room; later launches start in milliseconds. If you prefer
+   registering via the CLI, run
+   `codex mcp add formae -- ~/.codex/formae/scripts/start-mcp.sh`, then add the
+   `required` and `startup_timeout_sec` lines to the generated
+   `[mcp_servers.formae]` block by hand (the CLI cannot set them).
+
+4. Verify with `codex mcp list`, then confirm end-to-end with a live tool call
+   as described above.
+
+5. To update, pull the latest skills and launcher:
+
+   ```bash
+   cd ~/.codex/formae && git pull
+   ```
+
+   On the next launch, if the plugin version changed, the launcher automatically
+   downloads the matching `formae-mcp` binary. To update the `formae` binary when
+   the connected agent is newer, run the `/formae:upgrade` skill (it asks first).
+
+6. To uninstall:
+
+   ```bash
+   codex mcp remove formae
+   rm ~/.agents/skills/formae
+   rm -rf ~/.codex/formae
+   ```
+
+   If you registered the server by editing `~/.codex/config.toml`, delete the
+   `[mcp_servers.formae]` block instead of running `codex mcp remove`.
+
+   Optionally remove the downloaded binaries:
+
+   ```bash
+   rm -rf ~/.formae-ai/opt
+   ```
