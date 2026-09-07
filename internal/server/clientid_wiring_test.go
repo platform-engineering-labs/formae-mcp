@@ -28,9 +28,8 @@ func TestCancelCommandsSendsResolvedClientID(t *testing.T) {
 	home := t.TempDir()
 	s := New(srv.URL)
 	s.clientID = &clientid.Resolver{
-		Home:      func() (string, error) { return home, nil },
-		ReadFile:  os.ReadFile,
-		EnsureRun: func(string) error { return nil },
+		Home:     func() (string, error) { return home, nil },
+		ReadFile: os.ReadFile,
 	}
 	writeIDFile(t, home, "2N3x8aQdLmVp0rGhTzYwBcKfJe1\n")
 
@@ -55,5 +54,27 @@ func writeIDFile(t *testing.T, dir, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(idDir, "cli_client_id"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// With no resolvable identity the handler must fail rather than fall back to a
+// constant: a shared string cannot distinguish two machines and is
+// indistinguishable from an MCP that sent no real ID at all.
+func TestCancelCommandsFailsWhenClientIDIsMalformed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler reached the agent without a resolvable client ID")
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	s := New(srv.URL)
+	s.clientID = &clientid.Resolver{
+		Home:     func() (string, error) { return home, nil },
+		ReadFile: os.ReadFile,
+	}
+	writeIDFile(t, home, "not a valid id")
+
+	if _, _, err := s.handleCancelCommands(context.Background(), nil, tools.CancelCommandsInput{Query: "stack=default"}); err == nil {
+		t.Fatal("want an error when the client ID cannot be resolved")
 	}
 }

@@ -565,7 +565,11 @@ func (s *Server) handleGetCommandStatus(ctx context.Context, _ *mcp.CallToolRequ
 		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
 	fetch := func(ctx context.Context) (json.RawMessage, error) {
-		return c.GetCommandStatus(ctx, input.CommandID, s.clientID.Resolve(ec.FormaeBin))
+		clientID, err := s.clientID.Resolve()
+		if err != nil {
+			return nil, err
+		}
+		return c.GetCommandStatus(ctx, input.CommandID, clientID)
 	}
 
 	if !input.Wait {
@@ -600,7 +604,11 @@ func (s *Server) handleListCommands(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
-	result, err := c.ListCommands(ctx, input.Query, maxResults, s.clientID.Resolve(ec.FormaeBin))
+	clientID, err := s.clientID.Resolve()
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := c.ListCommands(ctx, input.Query, maxResults, clientID)
 	if err != nil {
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
@@ -894,7 +902,11 @@ func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
-	result, err := c.SubmitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, s.clientID.Resolve(ec.FormaeBin))
+	clientID, err := s.clientID.Resolve()
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := c.SubmitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, clientID)
 	if err != nil {
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
@@ -918,7 +930,11 @@ func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest,
 	}
 
 	if input.Query != "" {
-		result, err := c.DestroyByQuery(ctx, input.Query, input.Simulate, s.clientID.Resolve(ec.FormaeBin))
+		clientID, err := s.clientID.Resolve()
+		if err != nil {
+			return nil, nil, err
+		}
+		result, err := c.DestroyByQuery(ctx, input.Query, input.Simulate, clientID)
 		if err != nil {
 			return attribute(reached(ec, c), errorResult(err)), nil, nil
 		}
@@ -930,7 +946,11 @@ func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest,
 		return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to evaluate forma file: %w", err))), nil, nil
 	}
 
-	result, err := c.SubmitCommand(ctx, "destroy", "", input.Simulate, false, formaJSON, s.clientID.Resolve(ec.FormaeBin))
+	clientID, err := s.clientID.Resolve()
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := c.SubmitCommand(ctx, "destroy", "", input.Simulate, false, formaJSON, clientID)
 	if err != nil {
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
@@ -946,7 +966,11 @@ func (s *Server) handleCancelCommands(ctx context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return attribute(resolved(ec), errorResult(err)), nil, nil
 	}
-	result, err := c.CancelCommands(ctx, input.Query, s.clientID.Resolve(ec.FormaeBin))
+	clientID, err := s.clientID.Resolve()
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := c.CancelCommands(ctx, input.Query, clientID)
 	if err != nil {
 		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
