@@ -55,7 +55,7 @@ lives there, where the ambiguity is real, and not here.
   to do with the agent.
 
 The one exception: if the user *volunteers* that they self-host, believe them and
-go to step 6 instead. Do not prompt for it.
+go to step 7 instead. Do not prompt for it.
 
 ## Step 3 — Hosted
 
@@ -98,8 +98,14 @@ a valid session was already open. Carry on to step 4.
 
 If `complete_login` reports that they are **signed in but the profiles could not
 be written**, do not start another sign-in. Their session is saved and a second
-one fixes nothing; the problem is between formae and the control plane. Report it
-as the message says, and offer `formae login --hosted` for the reason.
+one fixes nothing; the problem is between formae and the control plane. Report
+what the tool said and stop there.
+
+**Do not tell them to run a formae command.** This skill drives the journey
+through its tools; handing the user a CLI command to run and paste back makes
+them the transport between two things that can already talk to each other. If
+the reason a step failed is not in what the tool returned, that is a gap in the
+tool, not a task to delegate to the user.
 
 ## Step 4 — Check what was written, and finish the round trip
 
@@ -137,9 +143,13 @@ Finish the trip rather than ending on it:
 
 **If the second pass still writes no profiles, stop and say so.** Do not loop
 again on your own. Report what you found and let them decide; asking the same
-question a third time only spends their time. `formae login --hosted` in a
-terminal is worth offering at that point, because its own output says more about
-why than this tool surfaces.
+question a third time only spends their time.
+
+**Do not fall back to telling them to run `formae login --hosted` in a
+terminal.** It reads as a diagnostic step but it is a dead end: it makes the
+user carry output between two components that are already connected, and on a
+machine where formae is not on the user's own PATH it fails with
+`command not found`, which looks like a broken install and is not one.
 
 ## Step 5 — Now check the agent
 
@@ -150,18 +160,64 @@ This is the first step that needs a reachable agent, which is why it is last.
 - On a version-skew notice, hand off to `/formae:upgrade`.
 - If it fails on a self-hosted setup, the likely cause is that no agent is
   running yet, or the profile points at the wrong address — not that setup went
-  wrong. Say which, and offer `formae profile edit`.
+  wrong. Say which. If the address is wrong, offer to repoint it yourself with
+  `write_profile`; do not send them to `formae profile edit`.
 
-Then tell them they can work with their infrastructure, and offer a first step:
-listing what they have, or authoring something new.
+## Step 6 — Is there a cloud account to manage?
 
-## Step 6 — Self-hosted, only if they said so
+A reachable agent is not the finish line: a hosted installation with no cloud
+account registered cannot manage anything yet. Run `list_cloud_connections` and
+read what it says. Its wording can collapse three different outcomes into what
+looks like one failure — tell them apart, because only one of the three is
+actually a problem:
+
+1. **The step does not apply.** `list_cloud_connections` refuses because
+   connect needs a hosted profile (the active profile is self-hosted/classic),
+   or it refuses with a `requires formae >=` version floor (the connected
+   formae is too old to support the check). Neither means anything is wrong: a
+   classic setup has no installation-wide cloud-account registry to check in
+   the first place, and an old-but-working hosted setup is still a working
+   setup. **Skip this step silently.** Do not report a failure and do not
+   mention a version floor unless the user asks — just close the journey as
+   below, exactly as if the check had come back clean.
+2. **The listing ran but did not complete.** This is the genuine
+   cannot-determine case, and it is the one worth stopping over. Say that
+   whether a cloud account is registered could not be determined, and stop
+   there. Do **not** offer to connect one on this basis: an unreadable answer
+   is not the same as "none registered", and offering to provision because a
+   response could not be read is exactly the mistake this check exists to
+   prevent.
+3. **The listing ran and succeeded.**
+   - **Registered connections exist.** Name each one (cloud and account). Say
+     they are **registered**, never verified, working, or that formae can
+     manage them: this reports what the control plane has on file, not that
+     the role has been used successfully.
+   - **The listing completed and came back empty.** No cloud account is
+     registered yet. Say so, and offer to connect one.
+
+     **Offer to connect "a cloud account", and do not name a cloud.** Which
+     cloud is `/formae:connect`'s first question, and naming one here answers
+     it on the user's behalf: a model that has just been told which clouds work
+     will offer that one directly, and the choice never gets made.
+
+     An affirmative answer is not enough to act on: do not hand off and stop
+     here. Continue straight into the `/formae:connect` flow and let it open
+     with its own first question.
+
+Close the journey in every outcome except the genuine cannot-determine one:
+once the step did not apply, or a cloud account is confirmed registered (found
+already, or just connected), tell them they can work with their
+infrastructure, and offer a first step: listing what they have, or authoring
+something new.
+
+## Step 7 — Self-hosted, only if they said so
 
 Reached only when the user volunteered that they run their own agent.
 
 Call `use_profile` with `name: "default"`, which creates the default profile if it
 does not exist and makes it active. Then, in a sentence or two: the profile points
-at a local agent on `http://localhost:49684`, `formae profile edit` repoints it,
-and offer to help author a first forma.
+at a local agent on `http://localhost:49684`, offer to repoint it yourself with
+`write_profile` if their agent is somewhere else, and offer to help author a first
+forma.
 
 There is nothing to sign in to on a self-hosted setup, so do not offer it.
