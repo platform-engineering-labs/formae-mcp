@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/clientid"
 	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
@@ -38,6 +40,12 @@ func connectTestServer(t *testing.T, agentURL string) *mcp.ClientSession {
 	ctx := context.Background()
 
 	s := New(agentURL)
+	// connectTestServer goes through forcedEndpoint, which skips the CLI
+	// resolution that creates the client ID on a real run. Without an injected
+	// identity these tests pass only on a machine that happens to have one and
+	// fail on a clean checkout, so the fixture supplies its own. Tests that
+	// exercise a missing or malformed ID build their own resolver.
+	s.clientID = testClientIDResolver(t)
 
 	t1, t2 := mcp.NewInMemoryTransports()
 
@@ -1028,5 +1036,24 @@ func TestResolveCtx_LeavesOtherFailuresAlone(t *testing.T) {
 	_, err := s.resolveCtx(context.Background(), "")
 	if err == nil || strings.Contains(err.Error(), "/formae:upgrade") {
 		t.Fatalf("unrelated failure should not be dressed as an upgrade prompt: %v", err)
+	}
+}
+
+// testClientIDResolver returns a resolver backed by a valid ID in a temporary
+// home, so a handler under test can attribute its commands without depending
+// on the developer's own ~/.pel/formae/cli_client_id.
+func testClientIDResolver(t *testing.T) *clientid.Resolver {
+	t.Helper()
+	home := t.TempDir()
+	dir := filepath.Join(home, ".pel", "formae")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cli_client_id"), []byte("2TestClientIDForTheSuite001"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return &clientid.Resolver{
+		Home:     func() (string, error) { return home, nil },
+		ReadFile: os.ReadFile,
 	}
 }

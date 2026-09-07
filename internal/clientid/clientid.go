@@ -1,91 +1,96 @@
 // Package clientid resolves the client identity the MCP sends to the agent.
 //
-// The formae CLI identifies itself with a per-user ID at
-// ~/.pel/formae/cli_client_id, created by formae itself on any CLI
-// invocation. The MCP sends the same ID so commands issued through it are
-// attributed to the same client as the user's own CLI. This package never
-// creates the file: when it is missing, it runs the formae binary once so
-// formae creates it, and degrades to the Fallback constant otherwise.
+// The formae CLI keeps a per-machine ID at ~/.pel/formae/cli_client_id and
+// creates it on any CLI invocation. The MCP sends the same ID so commands
+// issued through it are attributed to the same client as the user's own CLI
+// runs.
+//
+// This package only ever reads. Every tool call that needs an identity first
+// resolves its connection through the formae CLI, and that invocation creates
+// the file, so by the time the ID is read it exists. Writing it here as well
+// would add a second writer for no gain: the CLI's own create is a stat
+// followed by a non-atomic write, so two writers could disagree on the
+// identity, and a create interrupted between reserving the path and filling it
+// would leave an empty file that reads as malformed forever.
+//
+// There is also no fallback identity. A constant would be the same string on
+// every machine, which makes `client:` queries unable to tell two
+// installations apart and is indistinguishable from an older MCP that sent no
+// real ID at all. When no ID can be resolved the caller gets an error and the
+// tool call fails, rather than reporting under an identity that means nothing.
 package clientid
 
 import (
+	"errors"
+	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 )
 
-// Fallback is sent when no CLI client ID can be resolved. It matches the
-// constant the MCP historically sent, so agents see no new identity when
-// resolution fails.
-const Fallback = "formae-mcp"
-
 // maxIDLen bounds accepted IDs. A KSUID is 27 bytes; the bound is generous so
 // a future formae ID format still passes without coupling to the exact shape.
 const maxIDLen = 64
 
-// Resolver resolves the CLI client ID. Filesystem and exec access are
-// injected so the logic is unit-testable.
+// Resolver resolves the CLI client ID. Filesystem access is injected so the
+// logic is unit-testable. Safe for concurrent use.
 type Resolver struct {
-	Home      func() (string, error)
-	ReadFile  func(string) ([]byte, error)
-	EnsureRun func(bin string) error
+	Home     func() (string, error)
+	ReadFile func(string) ([]byte, error)
 
 	mu     sync.Mutex // guards cached; see internal/featuregate for the same pattern
 	cached string
 }
 
-// NewResolver wires a Resolver to the real filesystem and a real formae run.
+// NewResolver wires a Resolver to the real filesystem.
 func NewResolver() *Resolver {
 	return &Resolver{
 		Home:     os.UserHomeDir,
 		ReadFile: os.ReadFile,
-		EnsureRun: func(bin string) error {
-			// Any formae invocation creates the ID file before dispatch;
-			// --version is the cheapest one.
-			return exec.Command(bin, "--version").Run()
-		},
 	}
 }
 
-// Resolve returns the CLI client ID, running formaeBin once to let formae
-// create the ID file when it is missing. It never fails: an unresolvable ID
-// degrades to Fallback. A successfully read ID is cached for the process
-// lifetime (the file never changes once written); a fallback is not, so a
-// later call picks up the real file once it exists.
-func (r *Resolver) Resolve(formaeBin string) string {
+// Resolve returns the machine's formae client ID. It fails rather than
+// substituting a placeholder: a missing or malformed ID file is a real fault
+// the user should see, not something to paper over with an identity shared by
+// every machine.
+//
+// A resolved ID is cached for the process lifetime, since the file does not
+// change once written. A failure is not cached, so a repaired file is picked
+// up by the next call.
+func (r *Resolver) Resolve() (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cached != "" {
-		return r.cached
+		return r.cached, nil
 	}
-	if id, ok := r.read(); ok {
-		r.cached = id
-		return id
-	}
-	_ = r.EnsureRun(formaeBin)
-	if id, ok := r.read(); ok {
-		r.cached = id
-		return id
-	}
-	return Fallback
-}
 
-func (r *Resolver) read() (string, bool) {
 	home, err := r.Home()
 	if err != nil {
-		return "", false
+		return "", fmt.Errorf("cannot locate the home directory holding the formae client ID: %w", err)
 	}
-	data, err := r.ReadFile(filepath.Join(home, ".pel", "formae", "cli_client_id"))
+	path := filepath.Join(home, ".pel", "formae", "cli_client_id")
+
+	data, err := r.ReadFile(path)
 	if err != nil {
-		return "", false
+		if errors.Is(err, os.ErrNotExist) {
+			// Resolving the connection runs the formae CLI, which creates this
+			// file, so reaching here means that did not happen.
+			return "", fmt.Errorf(
+				"no formae client ID at %s; run any formae command to create it", path)
+		}
+		return "", fmt.Errorf("cannot read the formae client ID at %s: %w", path, err)
 	}
+
 	id := strings.TrimSpace(string(data))
 	if !validID(id) {
-		return "", false
+		return "", fmt.Errorf(
+			"the formae client ID at %s is malformed; delete the file and run any formae command to recreate it", path)
 	}
-	return id, true
+
+	r.cached = id
+	return id, nil
 }
 
 // validID reports whether id is safe to send as an HTTP header value: 1-64
