@@ -164,9 +164,14 @@ func TestGcpFailureCodesCarryARemedy(t *testing.T) {
 			t.Errorf("%s has an empty description", code)
 		}
 	}
-	// The one whose remedy is a command has to name it: that is the whole
-	// point of describing it rather than passing the code through.
-	if got := connectFailureDescriptions["credentials_required"]; !strings.Contains(got, "gcloud auth application-default login") {
+	// credentials_required is shared with Azure, so its bare description can no
+	// longer name gcloud specifically - the remedy has to reach the caller
+	// through the decoded failure instead, the same way GCP's own
+	// non-interactive path reports it (a static command under the "command"
+	// detail key, the same shape Azure's failure carries).
+	envelope := `{"schemaVersion":1,"code":"credentials_required","message":"no usable Google Cloud credentials on this machine; run the sign-in and re-run this command",` +
+		`"details":{"command":"gcloud auth application-default login"}}`
+	if got := decodeConnectFailure([]byte(envelope), 1).Error(); !strings.Contains(got, "gcloud auth application-default login") {
 		t.Errorf("credentials_required does not name the command to run: %q", got)
 	}
 }

@@ -8,21 +8,18 @@ description: "Use when the user wants to connect a cloud account to their hosted
 Gives a hosted formae installation permission to manage resources in a cloud
 account. AWS has two ways to get there: provisioning directly from local AWS
 credentials in one step, or having the user apply a small CloudFormation stack
-themselves. GCP has one, because it has no console equivalent to offer.
-Azure has none yet.
+themselves. GCP and Azure each have one, because neither has a console
+equivalent to the CloudFormation quick-create URL to offer.
 
 ## Step 1 — Which cloud?
 
-Ask AWS, Azure, or GCP. Offer all three: AWS and GCP both work, and offering
-Azure keeps the shape of the product visible rather than looking like it has
-two clouds by accident.
-
-**Azure:** say plainly that support is not built yet. Do not promise a date;
-there is not one to promise.
+Ask AWS, Azure, or GCP.
 
 **AWS:** go to step 2.
 
 **GCP:** go to step 2G.
+
+**Azure:** go to step 2A.
 
 ## Step 2G — GCP: one call
 
@@ -57,7 +54,64 @@ nothing else: it does not check the provider exists, trusts the formae issuer,
 or grants access. The tool's own warning says so; pass it on rather than
 softening it.
 
-Then go to step 3.
+Then go to step 6: registration is already complete, in this one call, and
+steps 3-5 are AWS's own continuation.
+
+## Step 2A — Azure: credentials, or the template
+
+Azure has a credential-less path, unlike GCP: the portal accepts a
+subscription-scoped ARM template from a URL, which is the nearest thing to
+CloudFormation's quick-create link. So there are two ways in, and which one
+applies is a fact about this machine rather than a preference to survey the
+user about — with usable Azure credentials it is one call, and without them
+it is the template.
+
+Ask for the **subscription id**. Never infer it from az's active
+configuration: provisioning trust into the wrong subscription is not a
+mistake a default should be able to make.
+
+Then say what is about to happen, before calling anything:
+
+- formae will create a managed identity in that subscription and grant it
+  Contributor plus User Access Administrator — near-owner access. Say that in
+  those words; it is what the agent needs to manage arbitrary infrastructure,
+  and the user is entitled to know before it happens rather than after.
+- formae authenticates with the operator's own ambient Azure credentials
+  (environment variables, managed identity, an existing `az login` session)
+  and never opens a browser or spawns a sign-in itself. If there are none, the
+  call fails naming the exact `az login` command to run — show it to the user
+  verbatim, wait for them to run it themselves in their own terminal, then
+  call the tool again. Do not run it for them and do not offer to.
+
+Then call `connect_azure_subscription` with the subscription id.
+
+**If this machine has no usable Azure credentials** — the tool fails saying
+so, naming both remedies — the template is the path, and it is a better one
+than it sounds: it asks nothing of this machine at all.
+
+Call **`get_azure_trust_template`**. It returns a portal deep link that opens
+the template already loaded, with this installation's coordinates filled in as
+defaults. Show the user that link. There is nothing for them to paste, no CLI
+to install, and no credential to put anywhere; they pick a region and deploy
+under their own admin session, so formae never holds a provisioning
+credential.
+
+When they say the deployment finished, its Outputs tab carries a `tenantId`
+and a `clientId`. Register those with **`register_azure_trust`**, together
+with the subscription id.
+
+Do not print a formae command for the user to run at any point in this path.
+An MCP-native user has no reason to know a formae binary is on this machine,
+it is frequently not on PATH, and running it is the harness's job — the same
+binary this server already runs for every other connect. A command handed to
+the user is a dead end wearing the costume of a next step.
+
+This path validates the coordinates' shape and nothing else: it does not check
+the identity exists, trusts the formae issuer, or grants access. Say so, in
+those terms, rather than reporting a verified connection.
+
+Then go to step 6: registration is already complete, in this one call, and
+steps 3-5 are AWS's own continuation.
 
 ## Step 2 — AWS: local credentials, or the console link?
 
@@ -184,9 +238,10 @@ small project the user owns, and the target is the first thing declared in it.
 it names the project and authenticates through the workload identity provider
 rather than a role — but the questions are the same.
 
-**Azure:** say plainly that support is not built yet, in the same voice as the
-cloud menu in step 1. Do not promise a date. Then go to step 7 — there is no
-target to create yet.
+**Azure:** ask for a **label** only. There is no region to ask for: an Azure
+target names the subscription and authenticates through the tenant and client
+id from the registration, and the config carries no region field the way AWS's
+and GCP's do.
 
 Ask for the directory to create the project in, proposing the current
 directory by name as the default — the same thing `git init`, `npm init`,
@@ -227,6 +282,14 @@ dependencies {
 ```pkl
   ["gcp"] {
     uri = "package://hub.platform.engineering/plugins/gcp/schema/pkl/gcp/gcp@0.1.13"
+  }
+```
+
+**Azure** is the same file with the azure plugin in place of aws:
+
+```pkl
+  ["azure"] {
+    uri = "package://hub.platform.engineering/plugins/azure/schema/pkl/azure/azure@0.1.11"
   }
 ```
 
@@ -272,18 +335,40 @@ gcpTarget: formae.Target = new formae.Target {
 }
 ```
 
+**Azure** declares the same target with the subscription and the
+registration's tenant and client id in place of region and role. There is no
+region field:
+
+```pkl
+import "@formae/formae.pkl"
+import "@azure/azure.pkl"
+
+azureTarget: formae.Target = new formae.Target {
+  label = "<the label they gave>"
+  discoverable = true
+  config = new azure.Config {
+    subscriptionId = "<the subscription id they gave in step 2A>"
+    auth = new azure.OidcAuth {
+      tenantId = "<from the registration>"
+      clientId = "<from the registration>"
+    }
+  }
+}
+```
+
 **`discoverable` defaults to `false`.** Leave it off and the target exists,
 discovers nothing, and the user comes back later to an empty inventory with
 no error to explain it. Set it to `true`, and say why when you show them
 this file.
 
 **The trust coordinate comes from the registration, not the user.** Whichever
-path reached here — `provision_cloud_role`, `register_cloud_role`, or
-`connect_gcp_project` — already returned it, as a role ARN for AWS or a
-workload identity provider for GCP. Asking the user to retype it invites a typo
-the target would silently carry, the same reasoning that governs the account id
-on the local-credentials path in step 3. It is long and easy to mistype, which
-makes copying it rather than retyping it worth insisting on.
+path reached here — `provision_cloud_role`, `register_cloud_role`,
+`connect_gcp_project`, or `connect_azure_subscription` — already returned it,
+as a role ARN for AWS, a workload identity provider for GCP, or a tenant and
+client id for Azure. Asking the user to retype it invites a typo the target
+would silently carry, the same reasoning that governs the account id on the
+local-credentials path in step 3. It is long and easy to mistype, which makes
+copying it rather than retyping it worth insisting on.
 
 `targets.pkl`, the file that gets applied:
 
@@ -296,7 +381,7 @@ forma {
 }
 ```
 
-For GCP, spread `vars.gcpTarget` instead.
+For GCP, spread `vars.gcpTarget` instead; for Azure, `vars.azureTarget`.
 
 Apply `targets.pkl` the way `/formae:apply` does, because this is the user's
 first apply and it should look like every one after it: call `apply_forma` with
@@ -318,7 +403,9 @@ Then go to step 7.
 
 ## Step 7 — Confirm, and say how to add more
 
-Tell them the account is connected and name the role.
+Tell them the account is connected and name the trust coordinate that came
+back — a role for AWS, a workload identity provider for GCP, or a tenant and
+client id for Azure.
 
 **Do not mention verification, pending state, or anything to poll.** A
 registered connection is complete. There is no verified state in the control
@@ -333,7 +420,10 @@ one example prompt for each:
   ask what it found — e.g. `"What unmanaged resources do you see in
   <label>?"`
 - They can start creating infrastructure against it now — e.g. `"Create an
-  S3 bucket in <label>."`
+  S3 bucket in <label>."` for AWS, `"Create a storage bucket in <label>."`
+  for GCP, `"Create a blob container in <label>."` for Azure. Name the one
+  belonging to the cloud they just connected: the example exists to be
+  pasted, and the other two clouds do not have that resource.
 
 If no target was created, skip the above — this step needs nothing extra for
 that case.
@@ -347,16 +437,20 @@ Then offer the next step:
   feature. If they ask, say why: both installations would discover the same
   global resources and compete to manage them. The tool warns about it and
   that warning is the honest answer.
-- **Azure** does not exist yet. Do not imply it is coming.
-- **The same GCP project on a second installation** is worth one extra
-  sentence beyond the AWS answer above: installations connected to one project
-  share a trust domain, because each is granted enough access to rewrite the
-  project's IAM, including the other's. The tool warns about it; that warning
-  is the honest answer.
+- **Another Azure subscription** on the same installation is supported the
+  same way as another AWS account.
+- **The same GCP project, or the same Azure subscription, on a second
+  installation** is worth one extra sentence beyond the AWS answer above:
+  installations connected to one project or subscription share a trust
+  domain, because each is granted enough access to rewrite its IAM, including
+  the other's. The tool warns about it; that warning is the honest answer.
 
 They can also do this from a terminal: `formae connect aws --account <id>` for
-the console-link path, or `formae connect gcp --project <id>` for GCP. Both
-walk the same flow interactively.
+the console-link path, `formae connect gcp --project <id>` for GCP, or
+`formae connect azure --subscription <id>` for Azure. All three walk the same
+flow interactively. Azure's credential-less registration is not on that list:
+`register_azure_trust` does it here, and step 2A says why a formae command is
+not something to hand an MCP-native user.
 
 **That command is for the user, never for you.** Do not run it, and do not
 offer to. It is interactive and it provisions real cloud trust; run from a

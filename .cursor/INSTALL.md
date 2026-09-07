@@ -2,39 +2,25 @@
 
 ## Prerequisites
 
-- Go 1.25+
 - Git
+- `curl`
 - Cursor 2.4 or later, which is where Agent Skills arrived
-- **formae itself**, which this path does not install for you. The Claude Code
-  plugin provisions formae and the `oidc` auth plugin behind the scenes;
-  `go install` provides neither. Install formae from the package manager:
+- A running formae agent (`formae agent start`) and a formae profile pointing at it
 
-  ```bash
-  bash -c "$(curl -fsSL https://hub.platform.engineering/get/setup.sh)" -- install --yes formae
-  ```
-
-  Add `oidc` the same way if you use hosted formae — a hosted sign-in has no
-  auth plugin to drive without it, and says so rather than failing obscurely:
-
-  ```bash
-  bash -c "$(curl -fsSL https://hub.platform.engineering/get/setup.sh)" -- install --yes oidc
-  ```
+You do **not** need a Go toolchain, and you do not install formae separately. The
+MCP server, a matched `formae` binary, and the `oidc` auth plugin that a hosted
+sign-in needs are all downloaded as prebuilt artifacts on first launch — nothing
+is compiled on your machine.
 
 ## Installation
 
-1. Install the MCP server binary:
-
-   ```bash
-   go install github.com/platform-engineering-labs/formae-mcp/cmd/formae-mcp@latest
-   ```
-
-2. Clone the repo:
+1. Clone the repo (it carries the skills and the launcher):
 
    ```bash
    git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.cursor/formae-mcp
    ```
 
-3. Symlink skills into Cursor:
+2. Symlink skills into Cursor:
 
    ```bash
    mkdir -p ~/.agents/skills
@@ -45,52 +31,36 @@
    and Codex together. Cursor walks the root recursively, so the nesting this
    creates (`formae-mcp/<skill>/SKILL.md`) is picked up as normal.
 
-4. Register the MCP server. The skills drive the `formae-mcp` tools, so Cursor
-   must know how to start the server. Merge this into `~/.cursor/mcp.json` for
-   every project, or `.cursor/mcp.json` in one project's root to scope it there
-   — add to the existing file, don't replace it:
+3. Register the MCP server. Point Cursor at the launcher script, which downloads
+   the prebuilt `formae-mcp` (plus a matched `formae` and the `oidc` plugin) into
+   `~/.formae-ai/opt` on first run and starts the server. Merge this into
+   `~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one project's
+   root to scope it there — add to the existing file, don't replace it:
 
    ```json
    {
      "mcpServers": {
        "formae": {
-         "command": "formae-mcp"
+         "command": "/home/you/.cursor/formae-mcp/scripts/start-mcp.sh"
        }
      }
    }
    ```
 
-   Cursor has no CLI for this; the file (or Settings) is the way in.
+   Use an **absolute** path (expand `~`), and make sure the script is executable
+   (`chmod +x`). Cursor has no CLI for this; the file (or Settings) is the way in.
 
-   **Both paths matter, and they fail differently.** Cursor is launched from a
-   desktop session rather than your shell, so its `PATH` is usually narrower
-   than the one you see in a terminal.
+   **The launcher is what makes a desktop-launched Cursor work.** Cursor starts
+   from a desktop session rather than your shell, so its `PATH` is narrower than
+   the one you see in a terminal. Nothing here needs to be on it: the launcher
+   resolves its own binaries by absolute path and puts formae's own `bin`
+   directory on `PATH` for the server it starts. That last part matters more than
+   it looks — formae shells out to `pkl` by bare name to read a plugin's
+   manifest, which is how an auth plugin is recognised as one, so a server
+   started without it reports the `oidc` plugin as missing while it sits right
+   there on disk.
 
-   `formae-mcp` not being found means the server never starts, which Cursor
-   shows plainly. Give it an absolute path (`go install` puts the binary in
-   `$(go env GOBIN)`, falling back to `$(go env GOPATH)/bin` — check both,
-   since a Go managed by a version manager often sets `GOBIN`).
-
-   `formae` not being found is the one that misleads, because it is not caught
-   at startup: the server registers, lists every tool, and looks healthy, and
-   then each tool call fails with `exec: "formae": executable file not found in
-   $PATH`. Resolution is lazy, per call. Name the binary explicitly so a narrow
-   `PATH` cannot reach it:
-
-   ```json
-   {
-     "mcpServers": {
-       "formae": {
-         "command": "/absolute/path/to/formae-mcp",
-         "env": {
-           "FORMAE_BIN": "/opt/pel/bin/formae"
-         }
-       }
-     }
-   }
-   ```
-
-5. Restart Cursor.
+4. Restart Cursor.
 
 ## Verify
 
@@ -116,9 +86,15 @@ command.
 
 ## Updating
 
+Pull the latest skills and launcher:
+
 ```bash
-cd ~/.cursor/formae-mcp && git pull && go install ./cmd/formae-mcp/
+cd ~/.cursor/formae-mcp && git pull
 ```
+
+On the next launch, if the plugin version changed, the launcher automatically
+downloads the matching `formae-mcp` binary. To update the `formae` binary when
+the connected agent is newer, run the `formae:upgrade` skill (it asks first).
 
 ## Uninstalling
 
@@ -130,8 +106,8 @@ rm -rf ~/.cursor/formae-mcp
 Then delete the `formae` entry from `~/.cursor/mcp.json` (or the project's
 `.cursor/mcp.json`).
 
-Optionally remove the binary:
+Optionally remove the downloaded binaries:
 
 ```bash
-rm "$(go env GOPATH)/bin/formae-mcp"
+rm -rf ~/.formae-ai/opt
 ```

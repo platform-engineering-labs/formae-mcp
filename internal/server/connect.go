@@ -160,15 +160,41 @@ var connectFailureDescriptions = map[string]string{
 	"sync_incomplete":        "you are signed in, but formae could not bring the hosted profiles up to date",
 	"internal":               "formae could not complete this connect operation",
 
-	// GCP. credentials_required carries the command to run in its details, and
-	// a description that did not name it would leave the caller with a refusal
-	// and no remedy.
-	"credentials_required": "no usable Google Cloud credentials on this machine; run `gcloud auth application-default login` and try again. " +
-		"On a machine that cannot open a browser, run it in a terminal: gcloud falls back to printing a URL and reading a verification code typed back, " +
-		"which an unattended run has no way to supply",
-	"gcloud_missing":      "the gcloud CLI is needed to sign in to Google Cloud and is not installed; install it from https://cloud.google.com/sdk/docs/install and try again",
-	"project_unreachable": "that GCP project could not be read with these credentials; check the project id, and that this account can see it. Signing in again will not help: it returns the same account",
-	"api_disabled":        "a Google API this connection needs is not enabled on that project; enable it and try again",
+	// credentials_required is shared across clouds - GCP and Azure both use it
+	// - so its description cannot name either one's sign-in tool. The actual
+	// remedy always rides the relayed details (a command, or a transcript
+	// containing a URL); the description only points at it.
+	"credentials_required": "no usable credentials for this connection; how to sign in is in the details below. " +
+		"On a machine that cannot open a browser, complete the sign-in from a terminal instead: a flow that needs " +
+		"a browser has no way to finish unattended",
+	"gcloud_missing": "the gcloud CLI is needed to sign in to Google Cloud and is not installed; install it from https://cloud.google.com/sdk/docs/install and try again",
+	// az_missing is Azure's counterpart to gcloud_missing, but unlike GCP it has
+	// a second remedy that needs nothing on this machine at all: the ARM trust
+	// template deploys from the user's own portal or pipeline. A machine without
+	// az is therefore not blocked, and both have to appear here - the install is
+	// not always something the caller can do, and the template path is invisible
+	// to anyone who only sees the code.
+	"az_missing": "the az CLI is needed to sign in to Azure and is not installed; the user can install it from " +
+		"https://learn.microsoft.com/cli/azure/install-azure-cli and you retry. Or take the template path, which " +
+		"needs no CLI and no credential on this machine at all: call get_azure_trust_template for a portal link to " +
+		"show them, then register_azure_trust with the tenant id and client id their deployment outputs. Never tell " +
+		"them to run a formae command: they have no reason to know that binary exists and it is usually not on their PATH",
+	// project_unreachable is also shared: GCP raises it for a project, Azure
+	// for a subscription, so the wording names neither.
+	"project_unreachable": "that account could not be reached with these credentials; check the id, and that this principal can see it. Signing in again will not help: it returns the same principal",
+	// api_disabled is shared too: GCP raises it for a Google API, Azure for an
+	// unregistered resource provider. Which one is unavailable comes from the
+	// relayed "provider" detail, not this description.
+	"api_disabled": "a cloud API or resource provider this connection needs is not enabled; the relayed detail names it. Enable it and try again",
+	// orphaned_trust: provisioning succeeded and registration did not, so the
+	// subscription already grants a near-owner identity to an installation
+	// the control plane does not know about. There is no rollback - the
+	// relayed coordinates (resource group, identity, client id) are what a
+	// caller re-runs registration with, or cleans up by hand if it means to
+	// abandon the attempt instead.
+	"orphaned_trust": "provisioning succeeded but registration did not, so the identity below already has near-owner " +
+		"access to an installation the control plane does not know about. Re-run this command to finish " +
+		"registering it; there is no rollback",
 }
 
 // connectFailureView is the envelope the producer emits on stdout when a
@@ -202,9 +228,34 @@ type connectFailureView struct {
 // printed the only thing that would let the operator finish. Dropping it left
 // the caller with a canned instruction to run a command that fails the same
 // way.
+//
+// "command" is the Azure shape of the same failure: the CLI never spawns an
+// `az login`, so credentials_required always carries the exact command to run
+// under this key rather than a transcript. GCP's own non-interactive path
+// carries the same key with its own static command, so this entry is not
+// azure-only.
+//
+// sso_login_required is the AWS shape of the same disclosure decision: a
+// named key on a named code, carrying a literal `aws sso login --profile <p>`
+// command rather than arbitrary prose. Leaving it out of the allowlist is the
+// exact defect this file exists to close, one cloud later.
+//
+// api_disabled's "provider" names which API or resource provider is missing -
+// GCP's own API name, or the Azure resource provider notRegistered.Provider
+// names - so the caller learns what to enable rather than just that
+// something is.
+//
+// orphaned_trust's three keys are the whole reason that code carries details
+// at all: a review demanded automated callers be able to see and act on the
+// near-owner identity a failed registration leaves behind, and an allowlist
+// that dropped them would mean that requirement never reached the one caller
+// (this server) that speaks to automated callers at all.
 var relayedFailureDetails = map[string][]string{
-	"credentials_required": {"output"},
+	"credentials_required": {"output", "command"},
 	"gcloud_missing":       {"output"},
+	"sso_login_required":   {"command"},
+	"api_disabled":         {"provider"},
+	"orphaned_trust":       {"resourceGroup", "identity", "clientId"},
 }
 
 // withRelayedDetails appends a code's declared detail keys to its description.
@@ -274,8 +325,12 @@ type registeredDoc struct {
 	Account       string `json:"account"`
 	RoleArn       string `json:"roleArn"`
 	// WorkloadIdentityProvider is the GCP coordinate.
-	WorkloadIdentityProvider string   `json:"workloadIdentityProvider"`
-	Warnings                 []string `json:"warnings"`
+	WorkloadIdentityProvider string `json:"workloadIdentityProvider"`
+	// AzureTenantID and AzureClientID are the Azure coordinate: the
+	// subscription's Entra tenant and the managed identity's client id.
+	AzureTenantID string   `json:"azureTenantId"`
+	AzureClientID string   `json:"azureClientId"`
+	Warnings      []string `json:"warnings"`
 }
 
 // handleRegisterCloudRole records the role an applied stack produced.
@@ -312,7 +367,12 @@ func decodeRegisteredDoc(out []byte) (registeredDoc, error) {
 	return doc, nil
 }
 
-// renderRegistered reports what the registration did.
+// renderRegisteredDoc reports what a registration did, worded for one cloud.
+// noun is what was connected ("account", "project", "subscription");
+// alreadyHas is what an idempotent re-run says it already shares ("the same
+// role", "the same federation", "the same identity"); coordinates are
+// pre-formatted "Label: value" lines — one for AWS and GCP, two for Azure,
+// because neither of its two identifies the trust on its own.
 //
 // It states the fact and stops. There is no verified state to be waiting for:
 // the declared-to-verified lifecycle was cut rather than deferred, and the
@@ -320,18 +380,26 @@ func decodeRegisteredDoc(out []byte) (registeredDoc, error) {
 // happens — a command that cannot assume the role fails loudly and the agent
 // logs say why — which tells the user everything a verified stamp would, at the
 // moment it matters.
-func renderRegistered(d registeredDoc) string {
+func renderRegisteredDoc(d registeredDoc, noun, alreadyHas string, coordinates ...string) string {
 	var b strings.Builder
 	if d.Status == statusAlreadyRegistered {
-		fmt.Fprintf(&b, "Account %s was already connected to this installation with the same role.\n", d.Account)
+		title := strings.ToUpper(noun[:1]) + noun[1:]
+		fmt.Fprintf(&b, "%s %s was already connected to this installation with %s.\n", title, d.Account, alreadyHas)
 	} else {
-		fmt.Fprintf(&b, "Connected account %s.\n", d.Account)
+		fmt.Fprintf(&b, "Connected %s %s.\n", noun, d.Account)
 	}
-	fmt.Fprintf(&b, "Role: %s\n", d.RoleArn)
-	for _, w := range d.Warnings {
-		fmt.Fprintf(&b, "\nWarning: %s\n", w)
+	for _, c := range coordinates {
+		fmt.Fprintf(&b, "%s\n", c)
+	}
+	for _, warning := range d.Warnings {
+		fmt.Fprintf(&b, "\nWarning: %s\n", warning)
 	}
 	return b.String()
+}
+
+// renderRegistered reports what an AWS registration did.
+func renderRegistered(d registeredDoc) string {
+	return renderRegisteredDoc(d, "account", "the same role", "Role: "+d.RoleArn)
 }
 
 // cloudConnection is one registered row in a connections listing. RoleArn is

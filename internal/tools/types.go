@@ -24,7 +24,12 @@ type ListTargetsInput struct {
 // GetCommandStatusInput is the input for the get_command_status tool.
 type GetCommandStatusInput struct {
 	CommandID string `json:"command_id" jsonschema:"required,The ID of the command to check status for."`
-	Profile   string `json:"profile,omitempty" jsonschema:"Preferred way to target a named formae environment/agent for THIS call only, without changing global state. Use this in preference to use_profile for per-session targeting: the active profile is global and shared with the user's CLI and any other concurrent sessions, so switching it can hijack work elsewhere. Leave empty to use the active profile. See list_profiles for names. Requires formae >= 0.87.0."`
+	// Wait moves the polling to this server. Without it a caller that needs the
+	// outcome has to sleep between calls, which is slower, noisier, and shows
+	// the user a series of commands that are not about their work.
+	Wait           bool   `json:"wait,omitempty" jsonschema:"Block until the command finishes instead of returning its current state. Prefer this over calling repeatedly with your own delay. Returns the final status on completion, or the latest status if the wait budget runs out - a budget overrun is not an error, so call again to keep waiting."`
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty" jsonschema:"How long to wait, in seconds, when wait is set. Defaults to 300 and is capped at 900. Ignored unless wait is set."`
+	Profile        string `json:"profile,omitempty" jsonschema:"Preferred way to target a named formae environment/agent for THIS call only, without changing global state. Use this in preference to use_profile for per-session targeting: the active profile is global and shared with the user's CLI and any other concurrent sessions, so switching it can hijack work elsewhere. Leave empty to use the active profile. See list_profiles for names. Requires formae >= 0.87.0."`
 }
 
 // ListCommandsInput is the input for the list_commands tool.
@@ -281,6 +286,32 @@ type ConnectGcpProjectInput struct {
 	WorkloadIdentityProvider string `json:"workload_identity_provider,omitempty" jsonschema:"Set ONLY when the user says they already created the workload identity pool and provider themselves (for example with Terraform). Leave empty in every other case: formae then provisions the federation, which is the normal path. When set, formae validates the name's shape and registers it without checking that it exists or grants access."`
 }
 
+// ConnectAzureSubscriptionInput connects one Azure subscription, provisioning
+// the trust and registering it in a single invocation.
+//
+// Azure has one interactive path, like GCP, so there is no link-then-register
+// pair and no second mode to choose between: formae obtains the operator's
+// ambient Azure credentials, provisions the connection, and registers it in
+// one call. The credential-less path (an operator who deploys the ARM
+// template themselves and supplies the resulting tenant and client id) is a
+// terminal command for the user, not an argument this tool accepts.
+type ConnectAzureSubscriptionInput struct {
+	// Subscription is always explicit and never inferred from ambient
+	// credentials, matching the AWS and GCP rule for the same reason:
+	// provisioning trust into the wrong subscription is not a mistake a
+	// default should be able to make.
+	Subscription string `json:"subscription" jsonschema:"The Azure subscription id to connect. Ask the user for it; never infer it from ambient credentials or az's active configuration."`
+	// Location and ResourceGroup both default on the CLI side, so leave them
+	// empty unless the user names one.
+	Location      string `json:"location,omitempty" jsonschema:"Optional Azure region for the managed identity's metadata record. Leave empty to use the CLI's default (eastus)."`
+	ResourceGroup string `json:"resource_group,omitempty" jsonschema:"Optional resource group the connection resources live in. Leave empty to use the CLI's default (formae-ai)."`
+	// TenantID is an authentication hint, not a placement coordinate: the CLI
+	// derives the tenant from the operator's credentials when this is absent,
+	// which is the normal path for most callers. Leave it empty unless the
+	// operator's account needs it to authenticate at all.
+	TenantID string `json:"tenant_id,omitempty" jsonschema:"Optional Entra tenant id for the subscription. Leave empty; the CLI derives it automatically for most accounts. Supply it when a sign-in attempt already failed reporting no subscriptions found, or when the user says their account is a guest in another directory or spans several tenants."`
+}
+
 // ProvisionCloudRoleInput creates the connect role directly with the named
 // local AWS credentials and registers it, in one invocation. Both fields are
 // required: there is no ambient default for either, matching
@@ -298,3 +329,28 @@ type ProvisionCloudRoleInput struct {
 	// defaulted.
 	AwsProfile string `json:"aws_profile" jsonschema:"The local AWS profile name to provision the role with, as shown by list_aws_profiles. Ask the user to pick one; never guess or default it."`
 }
+
+// RegisterAzureTrustInput registers trust an operator established themselves by
+// deploying the ARM template, rather than having formae provision it.
+//
+// This is a separate tool and not three more optional fields on
+// ConnectAzureSubscriptionInput, because the two paths are not variants of one
+// operation: this one provisions nothing, needs no Azure credential on the
+// machine, and its coordinates are outputs the operator already holds. Folding
+// them together would make "which fields may coexist" a rule in prose, and the
+// tool would accept a client id with no tenant id -- a combination the CLI
+// rejects outright.
+type RegisterAzureTrustInput struct {
+	Subscription string `json:"subscription" jsonschema:"The Azure subscription the deployed template established trust in."`
+	// Both coordinates come from the deployment's outputs, named there exactly
+	// as they are here. Neither is inferable: the identity was created outside
+	// formae, so nothing on this machine knows it exists.
+	TenantID string `json:"tenant_id" jsonschema:"The Entra tenant id, from the template deployment's tenantId output."`
+	ClientID string `json:"client_id" jsonschema:"The managed identity's client id, from the template deployment's clientId output."`
+}
+
+// GetAzureTrustTemplateInput takes nothing: the template's coordinates are
+// properties of the signed-in installation, not something a caller supplies,
+// and the subscription is not among them -- the same template establishes trust
+// for whichever subscription it is deployed into.
+type GetAzureTrustTemplateInput struct{}
