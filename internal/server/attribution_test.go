@@ -43,6 +43,11 @@ func hostedServerFor(t *testing.T, srv *httptest.Server) (*Server, execctx.Conte
 	}
 	s := New("")
 	s.ctxResolver = &stubResolver{ec: ec}
+	// The onboarding gate runs before resolution, so the stubbed resolver above
+	// is unreachable behind the real gate on a machine with no formae
+	// configuration. Every handler test here is about what happens after
+	// resolution, not about the gate, which is covered in onboarding_test.go.
+	s.gate = func() error { return nil }
 	// The hosted arm validates its endpoint against a compile-time origin, so a
 	// handler test has to build its client through the seam rather than through
 	// the guard. The guard itself is covered directly in routing_test.go.

@@ -60,6 +60,18 @@ type Server struct {
 	// against a compile-time origin, so without a seam no test can exercise a
 	// hosted handler at all. Production never replaces it.
 	newClient func(execctx.Context) (*FormaeClient, error)
+	// gate reports whether this machine has usable formae configuration. It is
+	// a field for the same reason newClient is: it runs before resolution, so a
+	// test that stubs the resolver cannot reach that stub while the real gate
+	// stands in front of it, and the real gate only passes on a machine that
+	// already has formae configured. Production never replaces it.
+	gate func() error
+
+	// loginState holds the sign-in a user is part-way through. It is the one
+	// piece of state this server keeps between calls, and it exists because the
+	// auth plugin's pending login is in-process memory that no second process
+	// could resume.
+	loginState
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -77,6 +89,7 @@ func New(endpoint string) *Server {
 		forcedEndpoint: endpoint,
 		ctxResolver:    execctx.NewResolver(formaebin.NewBinResolver()),
 		clientID:       clientid.NewResolver(),
+		gate:           gateStore,
 	}
 	s.newClient = s.clientFrom
 
@@ -141,9 +154,19 @@ func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Co
 			FormaeBin: s.ctxResolver.Bin(),
 		}, nil
 	}
+
+	// Asked before anything resolves, and after the forced endpoint, which is the
+	// seam a test injects a mock agent URL through and must keep working with no
+	// profile store at all. The order matters in both directions and neither is
+	// incidental: gating first would break every test that uses that seam, and
+	// resolving first would create the profile whose absence is the question.
+	if err := s.gate(); err != nil {
+		return execctx.Context{}, err
+	}
+
 	ec, err := s.ctxResolver.Resolve(ctx, profileName, false)
 	if err != nil {
-		return execctx.Context{}, s.explainIfTooOld(err)
+		return execctx.Context{}, explainLapsedSession(s.explainIfTooOld(err))
 	}
 	return ec, nil
 }
@@ -172,7 +195,17 @@ func (s *Server) formaeBin() string {
 }
 
 // Run starts the MCP server with the given transport.
+// Run serves the MCP protocol until ctx is done.
+//
+// The context is captured because a sign-in outlives the tool call that starts
+// it: the login child is tied to this one, so it ends when the server does rather
+// than when `login` returns.
 func (s *Server) Run(ctx context.Context, transport mcp.Transport) error {
+	s.loginMu.Lock()
+	s.runCtx = ctx
+	s.loginMu.Unlock()
+	defer s.closePendingLogin()
+
 	return s.mcpServer.Run(ctx, transport)
 }
 
@@ -239,6 +272,16 @@ func (s *Server) registerTools() {
 		Description: tools.ExtractResourcesDescription,
 		Annotations: readOnly,
 	}, s.handleExtractResources)
+
+	// Signing in creates profiles and changes no infrastructure, so neither hint
+	// fits: ReadOnlyHint would be a lie and DestructiveHint would warn about the
+	// wrong thing.
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "login", Description: tools.LoginDescription,
+	}, s.handleLogin)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name: "complete_login", Description: tools.CompleteLoginDescription,
+	}, s.handleCompleteLogin)
 
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name: "list_profiles", Description: tools.ListProfilesDescription, Annotations: readOnly,
