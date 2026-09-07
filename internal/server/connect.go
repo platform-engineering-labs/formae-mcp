@@ -159,6 +159,16 @@ var connectFailureDescriptions = map[string]string{
 	"login_failed":           "signing in failed",
 	"sync_incomplete":        "you are signed in, but formae could not bring the hosted profiles up to date",
 	"internal":               "formae could not complete this connect operation",
+
+	// GCP. credentials_required carries the command to run in its details, and
+	// a description that did not name it would leave the caller with a refusal
+	// and no remedy.
+	"credentials_required": "no usable Google Cloud credentials on this machine; run `gcloud auth application-default login` and try again. " +
+		"On a machine that cannot open a browser, run it in a terminal: gcloud falls back to printing a URL and reading a verification code typed back, " +
+		"which an unattended run has no way to supply",
+	"gcloud_missing":      "the gcloud CLI is needed to sign in to Google Cloud and is not installed; install it from https://cloud.google.com/sdk/docs/install and try again",
+	"project_unreachable": "that GCP project could not be read with these credentials; check the project id, and that this account can see it. Signing in again will not help: it returns the same account",
+	"api_disabled":        "a Google API this connection needs is not enabled on that project; enable it and try again",
 }
 
 // connectFailureView is the envelope the producer emits on stdout when a
@@ -171,6 +181,44 @@ type connectFailureView struct {
 	// failure quotes profile source lines, which for a classic profile can hold
 	// an inline password.
 	Message string `json:"message"`
+	// Details are relayed, unlike Message, but only the keys a code declares in
+	// relayedFailureDetails. Each is a value the producer chose under a key it
+	// declared, which is what makes a named key from a named code safe where
+	// the whole message is not.
+	Details map[string]string `json:"details"`
+}
+
+// relayedFailureDetails names, per code, the detail keys this build passes
+// through to the caller, in the order they are shown.
+//
+// An allowlist rather than a passthrough. The producer may attach anything it
+// likes to any failure, and a blanket relay would make every future detail on
+// every future code a disclosure decision nobody made. Adding a key here is
+// that decision, taken once and reviewable.
+//
+// credentials_required is the case that forced this. Where a browser cannot be
+// opened, gcloud prints a sign-in URL and waits for a verification code on a
+// stdin that is /dev/null under this server, so the run fails having already
+// printed the only thing that would let the operator finish. Dropping it left
+// the caller with a canned instruction to run a command that fails the same
+// way.
+var relayedFailureDetails = map[string][]string{
+	"credentials_required": {"output"},
+	"gcloud_missing":       {"output"},
+}
+
+// withRelayedDetails appends a code's declared detail keys to its description.
+func withRelayedDetails(desc string, v connectFailureView) string {
+	var parts []string
+	for _, key := range relayedFailureDetails[v.Code] {
+		if val := strings.TrimSpace(v.Details[key]); val != "" {
+			parts = append(parts, val)
+		}
+	}
+	if len(parts) == 0 {
+		return desc
+	}
+	return desc + "\n\n" + strings.Join(parts, "\n\n")
 }
 
 // decodeConnectFailure turns a non-zero exit into an error the caller can act
@@ -195,7 +243,7 @@ func decodeConnectFailure(stdout []byte, exitStatus int) error {
 		return unreadable
 	}
 	if desc, ok := connectFailureDescriptions[v.Code]; ok {
-		return errors.New(desc)
+		return errors.New(withRelayedDetails(desc, v))
 	}
 	// An envelope this build has no prose for still names its code. The code is
 	// ours; the message is the producer's and never crosses.
@@ -214,14 +262,20 @@ func describeConnectFailure(code string) string {
 }
 
 // registeredDoc is what a registration reports.
+// registeredDoc is the producer's "registered" document. Each cloud carries
+// exactly its own trust coordinate and omits the others, so which field is
+// populated follows from Cloud rather than from whichever happens to be
+// non-empty.
 type registeredDoc struct {
-	SchemaVersion int      `json:"schemaVersion"`
-	Phase         string   `json:"phase"`
-	Status        string   `json:"status"`
-	Cloud         string   `json:"cloud"`
-	Account       string   `json:"account"`
-	RoleArn       string   `json:"roleArn"`
-	Warnings      []string `json:"warnings"`
+	SchemaVersion int    `json:"schemaVersion"`
+	Phase         string `json:"phase"`
+	Status        string `json:"status"`
+	Cloud         string `json:"cloud"`
+	Account       string `json:"account"`
+	RoleArn       string `json:"roleArn"`
+	// WorkloadIdentityProvider is the GCP coordinate.
+	WorkloadIdentityProvider string   `json:"workloadIdentityProvider"`
+	Warnings                 []string `json:"warnings"`
 }
 
 // handleRegisterCloudRole records the role an applied stack produced.
