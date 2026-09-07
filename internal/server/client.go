@@ -141,6 +141,31 @@ func (c *FormaeClient) ListStacks(ctx context.Context) (json.RawMessage, error) 
 	return body, nil
 }
 
+// ListGenerators retrieves all generators from the agent, with each one's
+// cadence, the instant of its last committed rotation, and the resources bound
+// to it.
+//
+// A 404 is an empty collection rather than an error, matching ListPolicies: an
+// agent older than the generator feature has no generators to report, so
+// "none" is the truthful answer and not a capability complaint.
+func (c *FormaeClient) ListGenerators(ctx context.Context) (json.RawMessage, error) {
+	body, status, err := c.get(ctx, "/api/v1/generators", nil, retryOnce)
+	if err != nil {
+		return nil, err
+	}
+	if status == http.StatusNotFound {
+		return c.route.collectionMiss(json.RawMessage("[]"))
+	}
+	if err := c.unroutedIf(status); err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
+	}
+
+	return body, nil
+}
+
 // ListPolicies retrieves all standalone policies from the agent.
 func (c *FormaeClient) ListPolicies(ctx context.Context) (json.RawMessage, error) {
 	body, status, err := c.get(ctx, "/api/v1/policies", nil, retryOnce)
