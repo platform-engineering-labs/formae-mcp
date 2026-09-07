@@ -32,3 +32,5 @@ jobs:
           version: v2.12.2
       - name: Test
         run: go test ./... -race -count=1 -timeout 120s
+      - name: Shell tests
+        run: sh test/resolve-formae.sh
