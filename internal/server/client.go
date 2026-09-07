@@ -2,14 +2,15 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 )
 
@@ -28,66 +29,51 @@ func NewFormaeClient(endpoint string) *FormaeClient {
 	}
 }
 
-// newClientFromCtx builds a FormaeClient from a resolved execution context.
-// When ctx.Port is non-empty the endpoint is assembled as URL:Port; when Port
-// is empty ctx.URL is used as-is (e.g. a full URL supplied via forcedEndpoint
-// in tests or an explicit override).
-func newClientFromCtx(ctx execctx.Context) *FormaeClient {
-	endpoint := ctx.URL
-	if ctx.Port != "" {
-		endpoint = ctx.URL + ":" + ctx.Port
+// newClientFromCtx builds a client for a resolved connection. Hosted is
+// recognised and refused: this build cannot authenticate, and shipping a
+// routing header without a credential would turn an understandable
+// "unsupported" into a remote 401.
+//
+// A classic connection with no port of its own carries one in its URL (a forced
+// endpoint), so it is used as-is.
+func newClientFromCtx(ec execctx.Context) (*FormaeClient, error) {
+	switch conn := ec.Conn.(type) {
+	case config.Classic:
+		endpoint := conn.URL
+		if conn.Port != 0 {
+			endpoint = fmt.Sprintf("%s:%d", conn.URL, conn.Port)
+		}
+		return NewFormaeClient(endpoint), nil
+	case config.Hosted:
+		return nil, fmt.Errorf(
+			"profile %q targets hosted formae, which this build does not support yet",
+			ec.ProfileName)
+	default:
+		return nil, fmt.Errorf("profile %q resolved no usable connection", ec.ProfileName)
 	}
-	return NewFormaeClient(endpoint)
 }
 
-func (c *FormaeClient) get(path string, query url.Values) ([]byte, int, error) {
-	u := c.endpoint + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-
-	resp, err := c.httpClient.Get(u)
-	if err != nil {
-		return nil, 0, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	return body, resp.StatusCode, nil
+func (c *FormaeClient) get(ctx context.Context, path string, query url.Values) ([]byte, int, error) {
+	return c.do(ctx, request{Method: http.MethodGet, Path: path, Query: query})
 }
 
-func (c *FormaeClient) post(path string, query url.Values) ([]byte, int, error) {
-	u := c.endpoint + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-
-	resp, err := c.httpClient.Post(u, "application/json", nil)
-	if err != nil {
-		return nil, 0, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	return body, resp.StatusCode, nil
+func (c *FormaeClient) post(ctx context.Context, path string, query url.Values) ([]byte, int, error) {
+	return c.do(ctx, request{
+		Method:      http.MethodPost,
+		Path:        path,
+		Query:       query,
+		ContentType: "application/json",
+	})
 }
 
 // ListResources queries the agent for resources matching the given query string.
-func (c *FormaeClient) ListResources(query string) (json.RawMessage, error) {
+func (c *FormaeClient) ListResources(ctx context.Context, query string) (json.RawMessage, error) {
 	q := url.Values{}
 	if query != "" {
 		q.Set("query", query)
 	}
 
-	body, status, err := c.get("/api/v1/resources", q)
+	body, status, err := c.get(ctx, "/api/v1/resources", q)
 	if err != nil {
 		return nil, err
 	}
@@ -102,8 +88,8 @@ func (c *FormaeClient) ListResources(query string) (json.RawMessage, error) {
 }
 
 // ListStacks retrieves all stacks from the agent.
-func (c *FormaeClient) ListStacks() (json.RawMessage, error) {
-	body, status, err := c.get("/api/v1/stacks", nil)
+func (c *FormaeClient) ListStacks(ctx context.Context) (json.RawMessage, error) {
+	body, status, err := c.get(ctx, "/api/v1/stacks", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +104,8 @@ func (c *FormaeClient) ListStacks() (json.RawMessage, error) {
 }
 
 // ListPolicies retrieves all standalone policies from the agent.
-func (c *FormaeClient) ListPolicies() (json.RawMessage, error) {
-	body, status, err := c.get("/api/v1/policies", nil)
+func (c *FormaeClient) ListPolicies(ctx context.Context) (json.RawMessage, error) {
+	body, status, err := c.get(ctx, "/api/v1/policies", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -134,13 +120,13 @@ func (c *FormaeClient) ListPolicies() (json.RawMessage, error) {
 }
 
 // ListTargets queries the agent for targets matching the given query string.
-func (c *FormaeClient) ListTargets(query string) (json.RawMessage, error) {
+func (c *FormaeClient) ListTargets(ctx context.Context, query string) (json.RawMessage, error) {
 	q := url.Values{}
 	if query != "" {
 		q.Set("query", query)
 	}
 
-	body, status, err := c.get("/api/v1/targets", q)
+	body, status, err := c.get(ctx, "/api/v1/targets", q)
 	if err != nil {
 		return nil, err
 	}
@@ -155,39 +141,31 @@ func (c *FormaeClient) ListTargets(query string) (json.RawMessage, error) {
 }
 
 // GetCommandStatus retrieves the status of a specific command.
-func (c *FormaeClient) GetCommandStatus(commandID string, clientID string) (json.RawMessage, error) {
+func (c *FormaeClient) GetCommandStatus(ctx context.Context, commandID string, clientID string) (json.RawMessage, error) {
 	q := url.Values{}
 	q.Set("id", commandID)
 
-	req, err := http.NewRequest("GET", c.endpoint+"/api/v1/commands/status"+"?"+q.Encode(), nil)
+	body, status, err := c.do(ctx, request{
+		Method:  http.MethodGet,
+		Path:    "/api/v1/commands/status",
+		Query:   q,
+		Headers: map[string]string{"Client-ID": clientID},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Client-ID", clientID)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
+	if status == http.StatusNotFound {
 		return nil, fmt.Errorf("command %s not found", commandID)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("agent returned status %d: %s", resp.StatusCode, string(body))
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
 	return body, nil
 }
 
 // ListCommands retrieves command statuses matching an optional query.
-func (c *FormaeClient) ListCommands(query string, maxResults string, clientID string) (json.RawMessage, error) {
+func (c *FormaeClient) ListCommands(ctx context.Context, query string, maxResults string, clientID string) (json.RawMessage, error) {
 	q := url.Values{}
 	if query != "" {
 		q.Set("query", query)
@@ -196,36 +174,28 @@ func (c *FormaeClient) ListCommands(query string, maxResults string, clientID st
 		q.Set("max_results", maxResults)
 	}
 
-	req, err := http.NewRequest("GET", c.endpoint+"/api/v1/commands/status"+"?"+q.Encode(), nil)
+	body, status, err := c.do(ctx, request{
+		Method:  http.MethodGet,
+		Path:    "/api/v1/commands/status",
+		Query:   q,
+		Headers: map[string]string{"Client-ID": clientID},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Client-ID", clientID)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
+	if status == http.StatusNotFound {
 		return json.RawMessage(`{"Commands":[]}`), nil
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("agent returned status %d: %s", resp.StatusCode, string(body))
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
 	return body, nil
 }
 
 // GetAgentStats retrieves agent statistics.
-func (c *FormaeClient) GetAgentStats() (json.RawMessage, error) {
-	body, status, err := c.get("/api/v1/stats", nil)
+func (c *FormaeClient) GetAgentStats(ctx context.Context) (json.RawMessage, error) {
+	body, status, err := c.get(ctx, "/api/v1/stats", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -237,8 +207,8 @@ func (c *FormaeClient) GetAgentStats() (json.RawMessage, error) {
 }
 
 // CheckHealth checks if the agent is healthy.
-func (c *FormaeClient) CheckHealth() error {
-	_, status, err := c.get("/api/v1/health", nil)
+func (c *FormaeClient) CheckHealth(ctx context.Context) error {
+	_, status, err := c.get(ctx, "/api/v1/health", nil)
 	if err != nil {
 		return fmt.Errorf("agent is not reachable: %w", err)
 	}
@@ -250,7 +220,7 @@ func (c *FormaeClient) CheckHealth() error {
 }
 
 // SubmitCommand submits a forma command (apply/destroy) to the agent.
-func (c *FormaeClient) SubmitCommand(command string, mode string, simulate bool, force bool, formaJSON []byte, clientID string) (json.RawMessage, error) {
+func (c *FormaeClient) SubmitCommand(ctx context.Context, command string, mode string, simulate bool, force bool, formaJSON []byte, clientID string) (json.RawMessage, error) {
 	fields := map[string]string{
 		"command":  command,
 		"simulate": fmt.Sprintf("%t", simulate),
@@ -270,7 +240,7 @@ func (c *FormaeClient) SubmitCommand(command string, mode string, simulate bool,
 		fileContent = formaJSON
 	}
 
-	body, status, err := c.postMultipartWithHeaders("/api/v1/commands", nil, fields, fileField, fileName, fileContent, map[string]string{"Client-ID": clientID})
+	body, status, err := c.postMultipartWithHeaders(ctx, "/api/v1/commands", nil, fields, fileField, fileName, fileContent, map[string]string{"Client-ID": clientID})
 	if err != nil {
 		return nil, err
 	}
@@ -282,14 +252,14 @@ func (c *FormaeClient) SubmitCommand(command string, mode string, simulate bool,
 }
 
 // DestroyByQuery submits a destroy-by-query command to the agent.
-func (c *FormaeClient) DestroyByQuery(query string, simulate bool, clientID string) (json.RawMessage, error) {
+func (c *FormaeClient) DestroyByQuery(ctx context.Context, query string, simulate bool, clientID string) (json.RawMessage, error) {
 	fields := map[string]string{
 		"command":  "destroy",
 		"query":    query,
 		"simulate": fmt.Sprintf("%t", simulate),
 	}
 
-	body, status, err := c.postMultipartWithHeaders("/api/v1/commands", nil, fields, "", "", nil, map[string]string{"Client-ID": clientID})
+	body, status, err := c.postMultipartWithHeaders(ctx, "/api/v1/commands", nil, fields, "", "", nil, map[string]string{"Client-ID": clientID})
 	if err != nil {
 		return nil, err
 	}
@@ -308,43 +278,35 @@ func isCommandStatusOK(status int, simulate bool) bool {
 }
 
 // CancelCommands cancels running commands matching an optional query.
-func (c *FormaeClient) CancelCommands(query string, clientID string) (json.RawMessage, error) {
+func (c *FormaeClient) CancelCommands(ctx context.Context, query string, clientID string) (json.RawMessage, error) {
 	q := url.Values{}
 	if query != "" {
 		q.Set("query", query)
 	}
 
-	req, err := http.NewRequest("POST", c.endpoint+"/api/v1/commands/cancel"+"?"+q.Encode(), nil)
+	body, status, err := c.do(ctx, request{
+		Method:  http.MethodPost,
+		Path:    "/api/v1/commands/cancel",
+		Query:   q,
+		Headers: map[string]string{"Client-ID": clientID},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Client-ID", clientID)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
+	if status == http.StatusNotFound {
 		return json.RawMessage(`{"CommandIds":[]}`), nil
 	}
-	if resp.StatusCode != http.StatusAccepted {
-		return nil, fmt.Errorf("agent returned status %d: %s", resp.StatusCode, string(body))
+	if status != http.StatusAccepted {
+		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
 	return body, nil
 }
 
 // ListChangesSinceLastReconcile retrieves modifications since last reconcile for a stack.
-func (c *FormaeClient) ListChangesSinceLastReconcile(stack string) (json.RawMessage, error) {
+func (c *FormaeClient) ListChangesSinceLastReconcile(ctx context.Context, stack string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/api/v1/stacks/%s/changes-since-last-reconcile", url.PathEscape(stack))
-	body, status, err := c.get(path, nil)
+	body, status, err := c.get(ctx, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -356,8 +318,8 @@ func (c *FormaeClient) ListChangesSinceLastReconcile(stack string) (json.RawMess
 }
 
 // ForceSync triggers an immediate resource synchronization.
-func (c *FormaeClient) ForceSync() error {
-	_, status, err := c.post("/api/v1/admin/synchronize", nil)
+func (c *FormaeClient) ForceSync(ctx context.Context) error {
+	_, status, err := c.post(ctx, "/api/v1/admin/synchronize", nil)
 	if err != nil {
 		return err
 	}
@@ -369,8 +331,8 @@ func (c *FormaeClient) ForceSync() error {
 }
 
 // ForceDiscover triggers an immediate resource discovery.
-func (c *FormaeClient) ForceDiscover() error {
-	_, status, err := c.post("/api/v1/admin/discover", nil)
+func (c *FormaeClient) ForceDiscover(ctx context.Context) error {
+	_, status, err := c.post(ctx, "/api/v1/admin/discover", nil)
 	if err != nil {
 		return err
 	}
@@ -382,8 +344,8 @@ func (c *FormaeClient) ForceDiscover() error {
 }
 
 // ForceCheckTTL triggers an immediate TTL expiry sweep.
-func (c *FormaeClient) ForceCheckTTL() (json.RawMessage, error) {
-	body, status, err := c.post("/api/v1/admin/check-ttl", nil)
+func (c *FormaeClient) ForceCheckTTL(ctx context.Context) (json.RawMessage, error) {
+	body, status, err := c.post(ctx, "/api/v1/admin/check-ttl", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -396,9 +358,9 @@ func (c *FormaeClient) ForceCheckTTL() (json.RawMessage, error) {
 // ForceReconcileStack triggers a one-shot reconcile for a specific stack.
 // Returns the response body and HTTP status. On non-2xx status, error is non-nil
 // but body is also returned so callers can surface the agent's error JSON.
-func (c *FormaeClient) ForceReconcileStack(label string) (json.RawMessage, int, error) {
+func (c *FormaeClient) ForceReconcileStack(ctx context.Context, label string) (json.RawMessage, int, error) {
 	path := fmt.Sprintf("/api/v1/stacks/%s/reconcile", url.PathEscape(label))
-	body, status, err := c.post(path, nil)
+	body, status, err := c.post(ctx, path, nil)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -408,12 +370,7 @@ func (c *FormaeClient) ForceReconcileStack(label string) (json.RawMessage, int, 
 	return body, status, nil
 }
 
-func (c *FormaeClient) postMultipartWithHeaders(path string, query url.Values, fields map[string]string, fileField, fileName string, fileContent []byte, headers map[string]string) ([]byte, int, error) {
-	u := c.endpoint + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-
+func (c *FormaeClient) postMultipartWithHeaders(ctx context.Context, path string, query url.Values, fields map[string]string, fileField, fileName string, fileContent []byte, headers map[string]string) ([]byte, int, error) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
@@ -437,25 +394,12 @@ func (c *FormaeClient) postMultipartWithHeaders(path string, query url.Values, f
 		return nil, 0, fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", u, &buf)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	return body, resp.StatusCode, nil
+	return c.do(ctx, request{
+		Method:      http.MethodPost,
+		Path:        path,
+		Query:       query,
+		Headers:     headers,
+		Body:        &buf,
+		ContentType: w.FormDataContentType(),
+	})
 }

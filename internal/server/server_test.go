@@ -11,6 +11,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/config"
+	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
 )
 
@@ -783,40 +785,105 @@ func withFakeVersion(t *testing.T, v string) {
 	t.Cleanup(func() { featuregate.SetDetectForTest("0.0.0") })
 }
 
-// --- clientFor tests ---
+// --- connection resolution tests ---
 
-func TestClientFor_EmptyProfileUsesForcedEndpoint(t *testing.T) {
-	s := New("http://forced:1") // forcedEndpoint
-	c, err := s.clientFor("")
+// stubResolver stands in for the execctx resolver. The concrete one shells out
+// to the CLI and its injection points are unexported outside its package.
+type stubResolver struct {
+	ec         execctx.Context
+	err        error
+	sawProfile string
+}
+
+func (r *stubResolver) Resolve(_ context.Context, profileName string) (execctx.Context, error) {
+	r.sawProfile = profileName
+	return r.ec, r.err
+}
+
+func (r *stubResolver) Bin() string { return r.ec.FormaeBin }
+
+// An explicit profile argument must reach the resolver. Without this the other
+// cases would pass even if every call resolved the active profile.
+func TestClientFor_ExplicitProfileReachesTheResolver(t *testing.T) {
+	r := &stubResolver{ec: execctx.Context{
+		ProfileName: "p",
+		Conn:        config.Classic{URL: "http://p-host", Port: 7000},
+	}}
+	s := New("http://forced:1")
+	s.ctxResolver = r
+
+	c, err := s.clientFor(context.Background(), "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.sawProfile != "p" {
+		t.Errorf("resolver saw profile %q, want %q", r.sawProfile, "p")
+	}
+	if c.endpoint != "http://p-host:7000" {
+		t.Errorf("endpoint = %q, want the profile endpoint", c.endpoint)
+	}
+}
+
+// A hosted profile is recognised and refused. This build cannot authenticate,
+// and routing without a credential would replace a comprehensible
+// "unsupported" with a remote 401.
+func TestClientFor_RefusesHosted(t *testing.T) {
+	r := &stubResolver{ec: execctx.Context{
+		ProfileName: "acme-prod",
+		Conn: config.Hosted{
+			Endpoint:     config.HostedOrigin,
+			Installation: "3f2b8c14-0000-4000-8000-000000000000",
+		},
+	}}
+	s := New("")
+	s.ctxResolver = r
+
+	_, err := s.clientFor(context.Background(), "acme-prod")
+	if err == nil {
+		t.Fatal("expected a hosted profile to be refused")
+	}
+	if !strings.Contains(err.Error(), "acme-prod") {
+		t.Errorf("error does not name the profile: %v", err)
+	}
+}
+
+func TestClientFor_ClassicBuildsURLPort(t *testing.T) {
+	r := &stubResolver{ec: execctx.Context{
+		Conn: config.Classic{URL: "http://localhost", Port: 49684},
+	}}
+	s := New("")
+	s.ctxResolver = r
+
+	c, err := s.clientFor(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.endpoint != "http://localhost:49684" {
+		t.Errorf("endpoint = %q", c.endpoint)
+	}
+}
+
+// A forced endpoint carries its own port, so it resolves to a classic
+// connection with no port of its own to append.
+func TestClientFor_ForcedEndpointIsClassicWithoutAPort(t *testing.T) {
+	s := New("http://forced:1")
+
+	ec, err := s.resolveCtx(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	classic, ok := ec.Conn.(config.Classic)
+	if !ok {
+		t.Fatalf("Conn = %#v, want a classic connection", ec.Conn)
+	}
+	if classic.Port != 0 {
+		t.Errorf("Port = %d, want 0", classic.Port)
+	}
+	c, err := s.clientFor(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.endpoint != "http://forced:1" {
-		t.Errorf("expected forced endpoint, got %q", c.endpoint)
-	}
-}
-
-func TestClientFor_ExplicitProfileResolvesFromConfigDir(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("FORMAE_CONFIG_DIR", dir)
-	t.Setenv("FORMAE_AGENT_URL", "")
-	t.Setenv("FORMAE_AGENT_PORT", "")
-	p := dir + "/profiles/p.pkl"
-	if err := os.MkdirAll(dir+"/profiles", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(p, []byte("cli { api { url = \"http://p-host\" port = 7000 } }\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// version gate: inject a new-enough version via the version package seam.
-	withFakeVersion(t, "0.87.0")
-
-	s := New("http://forced:1")
-	c, err := s.clientFor("p")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.endpoint != "http://p-host:7000" {
-		t.Errorf("expected profile endpoint, got %q", c.endpoint)
+		t.Errorf("endpoint = %q, want the forced endpoint", c.endpoint)
 	}
 }

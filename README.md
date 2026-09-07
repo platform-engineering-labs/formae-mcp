@@ -160,29 +160,31 @@ Manage named formae environments (endpoint + targets) from your assistant.
 
 ## Configuration
 
-By default, formae-mcp connects to the formae agent at `http://localhost:49684`. To override this:
+formae-mcp does not resolve the agent endpoint itself. It asks your `formae`
+CLI (`formae profile show`) once per tool call, so the MCP and your own
+`formae` runs can never disagree about where a profile points. This needs
+formae 0.89.0 or newer.
 
-**Environment variables** (highest precedence):
-
-```bash
-export FORMAE_AGENT_URL=http://my-agent-host
-export FORMAE_AGENT_PORT=8080
-```
-
-**Profile** (formae >= 0.87.0): when no environment variables are set, formae-mcp reads the agent endpoint from your **active** formae profile — or from the profile named by a tool's `profile` argument. Profiles live at `~/.config/formae/profiles/<name>.pkl` and are managed with `formae profile` (or the profile tools above); each looks like:
+Profiles live at `~/.config/formae/profiles/<name>.pkl` and are managed with
+`formae profile` (or the profile tools above); each looks like:
 
 ```pkl
 amends "formae:/Config.pkl"
 
 cli {
-  api {
+  connection = new Classic {
     url = "http://my-agent-host"
     port = 8080
   }
 }
 ```
 
-Precedence: environment variables > per-call `profile` / active profile > `http://localhost:49684` default.
+A tool's `profile` argument selects which profile that call uses; without one,
+formae resolves the active profile. Prefer the per-call argument: the active
+pointer is global and shared with your CLI and any other session.
+
+The `FORMAE_AGENT_URL` and `FORMAE_AGENT_PORT` environment variables are no
+longer read. Configure a profile instead.
 
 ## License
 
