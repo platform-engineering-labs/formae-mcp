@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [0.9.1]
+
+Requires formae 0.89.0 or newer.
+
+### Fixed
+
+- The launcher no longer writes installer output to stdout. On a first launch, where the MCP binary and a matched `formae` still have to be downloaded, both the package manager and the hub bootstrap script printed progress and a PATH notice onto the same stream the MCP protocol uses, putting nine non-JSON lines in front of the first response. Clients that skip leading noise connected anyway, which is why it survived: it reproduces only against an empty `~/.formae-ai/opt`, never on a machine that has launched the server before.
+
+- The Cursor install guide cloned the repository to `~/.cursor/formae-mcp` while registering the launcher from `~/.cursor/formae`, so following both steps left the configured path pointing at nothing. It now uses `~/.cursor/formae` throughout, and links the skills as `~/.agents/skills/formae`, which is also what the Codex guide does. That makes good on something the guide already claimed, that one symlink serves both.
+
+- The `formae-connect` skill said `discoverable` defaults to `false` on a target and warned that omitting it yields a target that discovers nothing. It defaults to `true`. The `false` default belongs to the agent's own configuration schema, which declares a separate `Target` class that does not govern a forma.
+
 ## [0.9.0]
 
 Requires formae 0.89.0 or newer.
