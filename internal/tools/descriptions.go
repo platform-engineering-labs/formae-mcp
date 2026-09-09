@@ -44,11 +44,15 @@ Leave query empty to list all targets.`
 
 const GetCommandStatusDescription = `Get the detailed status of a specific formae command by its ID. Returns the command's state, resource updates, and any errors.
 
-Use this tool to check on the progress of a previously submitted apply or destroy command. Commands execute asynchronously in the formae agent.`
+Use this tool to check on the progress of a previously submitted apply or destroy command. Commands execute asynchronously in the formae agent.
+
+A resource update in state Rejected means the pre-update cloud read detected an out-of-band change not yet synchronized into inventory. The observed state has been saved and that update was stopped to protect it. The overall command can be Failed without a provider error. Compare refreshed resource state with the forma, re-simulate, and explicitly resolve drift before retrying: absorb it or obtain approval to overwrite it. A successful simulation does not establish approval; do not rely on a ReconcileRejected response to enforce the decision. Other resources may have succeeded; Failed dependents with empty errors may have been skipped due to the rejection. See formae://docs/troubleshooting.`
 
 const ListCommandsDescription = `List recent formae commands and their statuses. Returns command history with state, timestamps, and resource update summaries.
 
 Use this tool when the user asks about running commands, recent deployments, command history, or what failed.
+
+A Failed command can contain Rejected resource updates: drift protection, not necessarily a provider failure. Use get_command_status to inspect resource states, then re-simulate and handle drift before retrying. See formae://docs/troubleshooting.
 
 Query syntax uses field:value pairs. Supported fields:
 - id: filter by command ID
@@ -76,6 +80,8 @@ This tool evaluates the forma file (PKL -> JSON if needed) and submits it to the
 
 Use simulate=true to preview changes without modifying infrastructure.
 Use force=true (reconcile only) to overwrite detected drift.
+
+Simulation uses agent inventory, not a fresh cloud read. If an in-place update's cloud read detects an unsynchronized out-of-band change, it saves the new state and stops with resource state Rejected, even with force=true. Compare refreshed resource state with the forma and re-simulate the same apply. Absorb the drift or overwrite only with explicit user approval, even if simulation succeeds: a retry is not guaranteed to raise ReconcileRejected, and patch mode has no soft-reconcile gate. Do not automatically retry with force=true. This rejection is expected drift protection, not a reason by itself to debug plugins or credentials. See formae://docs/troubleshooting.
 
 IMPORTANT: Always simulate first and confirm with the user before applying changes to infrastructure.`
 

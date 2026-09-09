@@ -692,12 +692,58 @@ Multiple resources in the changeset want incompatible versions of a shared
 resource. Inspect the simulate output to see which resources contributed which
 constraints.
 
-## "drift detected" on apply
+## Resource update state "Rejected"
 
-The actual cloud state diverged from formae's internal view since the last
-sync. Options:
-- Force-reconcile (overwrite cloud with formae's view): rerun apply with explicit confirmation
-- Absorb drift (update IaC to match cloud): use the fix-code-drift workflow
+This specific resource update state is an expected drift-protection outcome.
+Formae continuously synchronizes its inventory with cloud state, but simulation
+uses the agent's inventory rather than reading the cloud. An out-of-band (OOB)
+change can therefore exist in the cloud that has not yet been synchronized when
+an apply is simulated.
+
+Before performing an in-place update, formae reads the cloud state. If it detects
+a change, it persists the observed state into inventory and rejects that resource
+update before performing the write, protecting the OOB change from being overwritten.
+The resource state is Rejected; the overall command can report Failed even without
+a provider error message. Do not hunt for a plugin, credential, or agent fault
+solely because of this rejection.
+
+This guard can reject an update even with force=true. It does not protect deletes
+or replacements; those are not stopped by this drift guard.
+
+Expected next steps:
+1. Inspect get_command_status for the affected resources. Other resources may have
+   succeeded; rejection does not roll back the whole command. Dependents may be
+   marked Failed with empty errors because they were skipped after the rejection.
+   Check dependencies before treating these as independent operational failures.
+2. Compare the affected resources' refreshed inventory (list_resources or
+   extract_resources) with the forma, and re-run the same apply with simulate=true,
+   keeping the same profile and scope. The rejecting read already saved the new
+   state, so waiting for background sync or forcing a sync is not normally needed.
+3. Explicitly resolve the drift with the user: absorb the cloud changes into the
+   forma using the fix-code-drift workflow, or obtain approval to overwrite them.
+   Follow the usual soft-reconcile workflow if ReconcileRejected is returned (see
+   below), but do not rely on that gate: persisting the rejecting read under a
+   reconcile command can advance the drift baseline, and patch mode does not run
+   the soft-reconcile gate at all. A successful simulation is not approval to
+   overwrite the newly observed cloud state. A non-simulated reconcile apply with
+   force=true requires an explicitly approved drift overwrite; simulation with
+   force=true can be used to preview it without changing infrastructure.
+4. After resolving the drift, review the resulting simulation and apply again.
+   Do not blindly repeat the old plan or switch to patch mode to bypass the drift
+   decision. Skipped dependents will be planned again as needed.
+
+This guidance applies to resource state Rejected, not every message containing
+"rejected" (for example, alias validation, PatchRejected, or authentication errors).
+
+## "drift detected" / ReconcileRejected on apply
+
+Soft reconcile has detected out-of-band modifications recorded since the last
+reconcile that the submitted forma does not already absorb, including changes to
+cloud defaults previously observed from formae's writes. Review the changes, absorb them into
+the forma or explicitly approve overwriting them with force=true, then simulate
+and apply again. Unlike an execution-time Rejected resource update, this is a
+submission-time drift rejection. It is not guaranteed on retry after a resource
+update was Rejected; follow the explicit drift decision above in that case.
 
 Concept: https://docs.formae.io/documentation/concepts/synchronization
 
