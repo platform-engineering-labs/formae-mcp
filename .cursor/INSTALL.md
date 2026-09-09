@@ -1,4 +1,4 @@
-# Installing formae-mcp for Cursor
+# Installing the formae MCP for Cursor
 
 ## Prerequisites
 
@@ -17,19 +17,19 @@ is compiled on your machine.
 1. Clone the repo (it carries the skills and the launcher):
 
    ```bash
-   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.cursor/formae-mcp
+   git clone https://github.com/platform-engineering-labs/formae-mcp.git ~/.cursor/formae
    ```
 
 2. Symlink skills into Cursor:
 
    ```bash
    mkdir -p ~/.agents/skills
-   ln -s ~/.cursor/formae-mcp/skills ~/.agents/skills/formae-mcp
+   ln -s ~/.cursor/formae/skills ~/.agents/skills/formae
    ```
 
    `~/.agents/skills` is the cross-agent location, so one symlink serves Cursor
    and Codex together. Cursor walks the root recursively, so the nesting this
-   creates (`formae-mcp/<skill>/SKILL.md`) is picked up as normal.
+   creates (`formae/<skill>/SKILL.md`) is picked up as normal.
 
 3. Register the MCP server. Point Cursor at the launcher script, which downloads
    the prebuilt `formae-mcp` (plus a matched `formae` and the `oidc` plugin) into
@@ -41,7 +41,7 @@ is compiled on your machine.
    {
      "mcpServers": {
        "formae": {
-         "command": "/home/you/.cursor/formae-mcp/scripts/start-mcp.sh"
+         "command": "/home/you/.cursor/formae/scripts/start-mcp.sh"
        }
      }
    }
@@ -89,7 +89,7 @@ command.
 Pull the latest skills and launcher:
 
 ```bash
-cd ~/.cursor/formae-mcp && git pull
+cd ~/.cursor/formae && git pull
 ```
 
 On the next launch, if the plugin version changed, the launcher automatically
@@ -99,8 +99,8 @@ the connected agent is newer, run the `formae:upgrade` skill (it asks first).
 ## Uninstalling
 
 ```bash
-rm ~/.agents/skills/formae-mcp
-rm -rf ~/.cursor/formae-mcp
+rm ~/.agents/skills/formae
+rm -rf ~/.cursor/formae
 ```
 
 Then delete the `formae` entry from `~/.cursor/mcp.json` (or the project's
