@@ -13,6 +13,16 @@
 #   Installs <pkg> from <channel> into ~/.formae-ai/opt using pelmgr.
 #   The binary lands at ~/.formae-ai/opt/bin/<pkg>.
 #   Returns non-zero on failure; progress is written to stderr.
+#
+#   Every installer invocation below is redirected to stderr, and that is a
+#   protocol requirement rather than tidiness. This file is sourced by
+#   start-mcp.sh, whose stdout IS the MCP stdio stream, so anything an installer
+#   prints there lands in the middle of the JSON-RPC framing. Both pelmgr and the
+#   hub bootstrap are chatty on stdout ("Downloading: pelmgr", and a PATH notice
+#   from setup.sh), which put nine non-JSON lines in front of the first response
+#   on a cold install. Clients that skip leading garbage survive it; a strict one
+#   would not. It reproduces only on a first launch, never on a warm tree, which
+#   is why it stayed invisible on developer machines.
 provision_pkg() {
     _ppkg="$1"
     _pchan="$2"
@@ -34,7 +44,7 @@ provision_pkg() {
     if command -v pelmgr >/dev/null 2>&1; then
         # pelmgr is already on PATH — invoke it directly.
         echo "provision_pkg: installing $_ppkg (channel: $_pchan) via pelmgr" >&2
-        pelmgr --install-path "$_tree" install --channel "$_pchan" --yes "$_ppkg"
+        pelmgr --install-path "$_tree" install --channel "$_pchan" --yes "$_ppkg" >&2
     else
         # Bootstrap pelmgr via the hub setup script.
         # The `--` after the inline script string is bash's $0 placeholder, NOT
@@ -49,7 +59,7 @@ provision_pkg() {
             --install-path "$_tree" \
             --channel "$_pchan" \
             --yes \
-            "$_ppkg"
+            "$_ppkg" >&2
     fi
 }
 
