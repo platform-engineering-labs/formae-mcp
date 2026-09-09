@@ -356,10 +356,14 @@ azureTarget: formae.Target = new formae.Target {
 }
 ```
 
-**`discoverable` defaults to `false`.** Leave it off and the target exists,
-discovers nothing, and the user comes back later to an empty inventory with
-no error to explain it. Set it to `true`, and say why when you show them
-this file.
+**`discoverable` defaults to `true`.** The blocks above set it anyway, because
+this is a file the user is about to read and discovery is what will populate
+their inventory: worth naming rather than leaving to a default they cannot see.
+Say what it does when you show them the file.
+
+There is a `false` default, but it belongs to the agent's own configuration
+schema, which declares a different `Target` class. It is not the one a forma
+declares, and it does not govern this file.
 
 **The trust coordinate comes from the registration, not the user.** Whichever
 path reached here — `provision_cloud_role`, `register_cloud_role`,
