@@ -37,6 +37,7 @@ func (r authoringResolver) Managed() bool { return false }
 func authoringSession(t *testing.T, conn config.Connection, endpoint, bin, registry string) *mcp.ClientSession {
 	t.Helper()
 	s := New("")
+	s.clientID = testClientIDResolver(t)
 	s.gate = func() error { return nil }
 	s.ctxResolver = authoringResolver{conn: conn, bin: bin}
 	s.codebaseRegistry = func() (codebase.Registry, error) { return codebase.Registry{Path: registry}, nil }
