@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -83,6 +84,7 @@ func (c *FormaeClient) do(ctx context.Context, r request, retry retryPolicy) ([]
 
 // send performs exactly one attempt.
 func (c *FormaeClient) send(ctx context.Context, r request) ([]byte, int, error) {
+	defer func() { captureReportReach(ctx, c.reach) }()
 	req, err := http.NewRequestWithContext(ctx, r.Method, c.route.url(r.Path, r.Query), r.Body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("building request: %w", err)
@@ -148,4 +150,10 @@ func (c *FormaeClient) advance(r reach) {
 	if r > c.reach {
 		c.reach = r
 	}
+}
+
+// newBugReportRequest addresses the hosted support control plane, independently
+// of agent routing or health. The origin is deliberately not configurable.
+func newBugReportRequest(ctx context.Context, installation string, body []byte) (*http.Request, error) {
+	return http.NewRequestWithContext(ctx, http.MethodPost, consoleURL+"/api/v1/installations/"+installation+"/bug-reports", bytes.NewReader(body))
 }

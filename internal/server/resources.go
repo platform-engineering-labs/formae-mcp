@@ -678,6 +678,29 @@ rules). Sub-resources don't have their own lifecycle independent of the parent.
 
 const troubleshootingDoc = `# Formae Troubleshooting
 
+## Reporting a likely product bug
+
+Hosted formae users can prepare a report with prepare_bug_report and send it to
+support@formae.ai with submit_bug_report. This covers any workflow, including
+local CLI errors before a command is submitted. First establish why the evidence
+points to a formae, plugin, or MCP defect. Expected drift rejections, invalid
+input, missing access, and cloud quotas normally need their usual recovery steps.
+
+Use the original operation's diagnostic reference when available. The report
+needs the installation, failure time, and command ID when one exists so support
+can find the hosted logs. Agent and plugin logs already live on the hosted side;
+only relevant local CLI diagnostics, such as conversion errors, need to accompany
+the report. Missing diagnostics do not justify inventing details or repeating
+an apply or destroy to reproduce the failure.
+
+Review the full prepared report and its sanitized local diagnostics with the
+user. Submit only with their approval or explicit session authorization. Do not
+claim a report was sent when the receipt says delivery_unknown; keep its report
+ID for follow-up. Reporting failures never justify retrying infrastructure.
+
+For self-hosted/OSS formae, use https://github.com/platform-engineering-labs/formae/issues
+or https://discord.gg/hr6dHaW76k instead.
+
 ## "plugin not found" / "plugin <X> not installed on the agent"
 
 The agent doesn't have the named plugin installed. Run

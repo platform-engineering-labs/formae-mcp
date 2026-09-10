@@ -12,9 +12,14 @@ Install via the
 
 ## [0.9.2]
 
+### Added
+
+- Hosted formae users can ask their assistant to prepare and submit bug reports to support@formae.ai for likely formae, plugin, or MCP defects in any workflow. Reports include the identifiers support needs to find hosted logs and relevant sanitized local CLI diagnostics, including failures before a command reaches the agent. The assistant shows the report before sending unless the user has already authorized reporting for the session. Self-hosted users are directed to GitHub or Discord.
+
 ### Fixed
 
 - Assistants now recognize a `Rejected` resource update as protection against a newly detected out-of-band cloud change, even when the command reports `Failed`. Guidance directs them to review the refreshed state, simulate again, and resolve whether to absorb or overwrite the change before retrying. A successful simulation does not replace that decision. Dependents skipped because of the rejection are distinguished from independent failures, avoiding unnecessary troubleshooting.
+
 
 ## [0.9.1]
 
