@@ -51,6 +51,7 @@ func TestCodebaseContextToolIsLocalAndExplicit(t *testing.T) {
 func codebaseTestSession(t *testing.T, conn config.Connection, registryPath string) *mcp.ClientSession {
 	t.Helper()
 	s := New("")
+	s.clientID = testClientIDResolver(t)
 	s.gate = func() error { return nil }
 	s.ctxResolver = codebaseFixedResolver{conn: conn}
 	s.codebaseRegistry = func() (codebase.Registry, error) { return codebase.Registry{Path: registryPath}, nil }
