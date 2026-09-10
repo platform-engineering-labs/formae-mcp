@@ -19,12 +19,16 @@ Patch only applies the changes explicitly specified in the forma file. Other res
 - Quick configuration changes
 - Any situation where a full reconcile is inappropriate
 
+## Source context
+
+Reuse the selected `get_codebase_context` result. For `codebase`, keep the incident snippet inside the selected project and carry its binding context. For `none`, call `prepare_authoring` for the affected stack in an empty disposable directory, then author a separate minimal patch Pkl file inside it using its schema dependencies. Carry the returned `context` on apply. This workspace is temporary; never register it. Keep it until outcome/retry inspection is complete, then remove it.
+
 ## Workflow
 
 1. Help the user identify the resource(s) to modify
 2. Create or locate a minimal forma file with only the targeted change
 3. **Always simulate first**: call `apply_forma` with `mode: patch`, `simulate: true`
-4. Show exactly what will change
+4. Show exactly what will change and suggest a factual optional `message`; the user can edit it or clear it with `message: ""` in the ordinary confirmation
 5. **Ask for explicit confirmation**
 6. If confirmed: call `apply_forma` with `mode: patch`, `simulate: false`
 7. Poll `get_command_status` to monitor progress:
@@ -37,7 +41,9 @@ Patch only applies the changes explicitly specified in the forma file. Other res
 
 After a successful patch, always remind the user:
 
-> This patch will appear as **drift** until you reconcile your IaC code. When the incident is resolved, consider the `formae-fix-code-drift` skill to incorporate this change into your codebase.
+> This patch remains **drift** until an explicit later reconcile accepts or reverts it. When the incident is resolved, use `formae-fix-code-drift` to review that decision.
+
+Do not automatically absorb the patch or update maintained desired source to make it permanent. Resolution controls apply only to soft reconcile, never patch.
 
 ## Important
 

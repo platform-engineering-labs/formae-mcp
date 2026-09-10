@@ -742,16 +742,17 @@ Expected next steps:
    extract_resources) with the forma, and re-run the same apply with simulate=true,
    keeping the same profile and scope. The rejecting read already saved the new
    state, so waiting for background sync or forcing a sync is not normally needed.
-3. Explicitly resolve the drift with the user: absorb the cloud changes into the
-   forma using the fix-code-drift workflow, or obtain approval to overwrite them.
-   Follow the usual soft-reconcile workflow if ReconcileRejected is returned (see
-   below), but do not rely on that gate: persisting the rejecting read under a
-   reconcile command can advance the drift baseline, and patch mode does not run
-   the soft-reconcile gate at all. A successful simulation is not approval to
-   overwrite the newly observed cloud state. A non-simulated reconcile apply with
-   force=true requires an explicitly approved drift overwrite; simulation with
-   force=true can be used to preview it without changing infrastructure.
-4. After resolving the drift, review the resulting simulation and apply again.
+3. Explicitly resolve the drift with the user through the fix-code-drift workflow:
+   choose absorb or revert for every actionable resource, retain the original
+   declaration, simulate the combined resolution, then submit the confirmed
+   ReviewID with a stable IdempotencyKey. Acceptance is recorded centrally.
+   Catch up source afterward only for an explicitly selected maintained project.
+   If ReconcileRejected is returned, follow the submission-time workflow below,
+   but do not rely on that gate: a retry need not raise it, and patch mode does
+   not run the soft-reconcile gate. A successful simulation is not approval to
+   overwrite the newly observed cloud state. Any force=true overwrite still
+   requires explicit approval.
+4. Review the final combined simulation before submitting the resolution.
    Do not blindly repeat the old plan or switch to patch mode to bypass the drift
    decision. Skipped dependents will be planned again as needed.
 
@@ -762,9 +763,12 @@ This guidance applies to resource state Rejected, not every message containing
 
 Soft reconcile has detected out-of-band modifications recorded since the last
 reconcile that the submitted forma does not already absorb, including changes to
-cloud defaults previously observed from formae's writes. Review the changes, absorb them into
-the forma or explicitly approve overwriting them with force=true, then simulate
-and apply again. Unlike an execution-time Rejected resource update, this is a
+cloud defaults previously observed from formae's writes. Use the fix-code-drift
+workflow to review all explicit absorb/revert choices, simulate the combined
+resolution, and submit the confirmed ReviewID with a stable IdempotencyKey.
+Retain the original declaration through review; acceptance completes centrally
+before optional catch-up of the selected maintained project. Unlike an
+execution-time Rejected resource update, this is a
 submission-time drift rejection. It is not guaranteed on retry after a resource
 update was Rejected; follow the explicit drift decision above in that case.
 

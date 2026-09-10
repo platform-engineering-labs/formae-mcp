@@ -17,6 +17,12 @@ Destruction can be specified two ways (mutually exclusive):
 - **By file**: Destroys all resources declared in a forma file
 - **By query**: Destroys resources matching a query
 
+## Source context
+
+Use `get_codebase_context` to identify any selected maintained source. File-based destruction carries the selected `context` and uses a file inside that project or the prepared disposable directory. For no-codebase file work, use `prepare_authoring` and keep its PklProject/dependencies available. Query destruction has no local source context; do not pass `context` with `query`. Its explicit query and final simulation define the operation.
+
+After terminal destruction, remove only the corresponding declarations from the selected maintained project, preserving unrelated edits and reporting conflicts separately. A disposable workspace can be removed after outcome/retry inspection. A failed-create desired-intent diagnostic requires investigation/recovery; never infer successful deletion or remove its source merely from missing inventory.
+
 ## Workflow
 
 1. Clarify what the user wants to destroy

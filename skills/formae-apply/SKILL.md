@@ -3,58 +3,31 @@ name: formae-apply
 description: "Use when the user wants to deploy infrastructure, apply a forma file, reconcile a stack, update a stack, or make planned infrastructure changes"
 ---
 
-# Apply Infrastructure (Reconcile Mode)
+# Apply Infrastructure
 
-Use the `apply_forma` MCP tool in **reconcile** mode to deploy or update infrastructure.
+Use `apply_forma` in reconcile mode for planned changes. Each explicitly declared stack is a complete resource boundary: omitted resources are deleted, including when a stack contains only generators. Patch is the scoped incident path.
 
-## Targeting an environment (`profile`)
+## Source and installation
 
-`apply_forma` (and `get_command_status`) hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on the `apply_forma` call and any `get_command_status` follow-up so it targets that environment — for this session only, without changing global state. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+Pass the chosen `profile` on every agent call; never change the global active profile for a session. Call `get_codebase_context` with the actual harness `working_directory` or reuse the explicit context already selected. Resolve known candidates once and surface missing/corrupt projects.
 
-## How Reconcile Works
+- `codebase`: carry `context: {mode: "codebase", binding_id: ...}` and use the complete main forma inside that selected project. Every evaluated stack must fit its registered scope. Preserve abstractions and unrelated edits.
+- `none`: follow `formae-author` to call `prepare_authoring` in an empty disposable directory. Carry its returned `context` and complete `file_path`; keep PklProject and resolved dependencies. Never use an actual-inventory fragment or partial command delta as full reconcile input. A maintained project is opt-in.
+- Older agents without the connected `desired-stack-extraction` and `shared-drift-resolution` capabilities require an existing complete codebase. Do not send new controls or imply local binary version proves server support. Legacy file-based apply remains available.
 
-Reconcile guarantees the target infrastructure matches the forma file exactly:
-- Resources in the file but not deployed are **created**
-- Deployed resources not in the file are **destroyed**
-- Differences between file and deployed state are **updated**
-
-This is the standard mode for planned deployments.
+Pkl remains the code interface in both modes. Use `formae eval --output-schema json --output-consumer machine` for local evaluation. If retaining an evaluated JSON file for exact retry, keep it inside the same selected workspace along with the Pkl source and dependencies. Never edit the evaluated submission after review.
 
 ## Workflow
 
-1. Confirm the forma file path with the user
-2. **Always simulate first**: call `apply_forma` with `mode: reconcile`, `simulate: true`
-3. Present the simulation results clearly:
-   - Resources to be created
-   - Resources to be updated (show what changes)
-   - Resources to be destroyed
-4. **Ask for explicit confirmation** before proceeding
-5. If confirmed: call `apply_forma` with `mode: reconcile`, `simulate: false`
-6. The command runs asynchronously. Poll `get_command_status` to monitor progress:
-   - **Wait 5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
-   - **Only report state transitions** — do NOT print anything unless a resource changed status since the last poll (e.g., in_progress → completed, in_progress → failed). Silently poll until something changes.
-   - When reporting, summarize what changed (e.g., "3 resources created, VPC now deploying") rather than dumping the full JSON.
-7. Report the final result
+1. Prepare the complete declaration, preserving every existing resource, target, policy, reference and generator in each affected stack unless its change/removal is intended.
+2. Call `apply_forma` with the selected `context`, `mode: reconcile`, `simulate: true`, and no force.
+3. If rejected for actionable drift, follow `formae-fix-code-drift`: use the initial `ObservationID`, all explicit absorb/revert choices, final composed simulation `ReviewID`, then confirmed real submission with a stable `IdempotencyKey`. Do not pre-edit the source to absorb drift. A stale review requires a fresh review and confirmation.
+4. Show the final combined plan, including acceptance, provider work, ordinary changes, deletes, dependencies and warnings. Suggest a factual optional `message` in this same confirmation. The user can edit it or clear with `message: ""`; no extra confirmation round is needed solely for the message.
+5. After confirmation, submit the exact reviewed input with `simulate: false`. Carry the final resolution controls when applicable. Retain exact input, message and idempotency key while outcome is uncertain; an idempotent replay uses all of them unchanged.
+6. Call `get_command_status` with `wait: true`, and continue waiting if its budget ends before a terminal state. Report actual outcomes, errors, command ID and recorded acceptance separately from provider work. A no-change preview does not record central acceptance.
+7. After a terminal resolution, use `get_command_desired_delta` to automatically catch up only the selected maintained codebase via harness source edits. Its `Partial` result is a snippet, never a full reconcile file. Preserve abstractions and unrelated edits, apply recorded deletion guidance, and simulate the complete main forma afterward. Report source conflicts separately from central command success. Never catch up from later unconstrained inventory.
+8. For mode `none`, retain the disposable directory through outcome/retry inspection, then remove it. Also clean up abandoned previews after confirming no real request was sent. Never clean up an uncertain submission before retaining what is needed for its exact replay.
 
-## Error Recovery
+A Failed command is still its recorded outcome. Diagnose failures before a new corrective operation and new review. If a failed create has no trustworthy observation, preserve the `desired-intent-unavailable` resource/failed-command diagnostic, recover/reapply its declaration and investigate the provider outcome before removal. Discovery alone does not clear desired intent.
 
-If `get_command_status` returns a **failed** state:
-1. Report which resources failed and the error messages clearly.
-2. Do NOT automatically retry — ask the user how to proceed.
-3. Common options to offer:
-   - **Fix and retry**: address the root cause (permissions, quotas, naming conflicts) then re-run the workflow from simulation.
-   - **Roll back to a previous state**: reconcile with the previous forma file to converge infrastructure back toward the prior desired state. Reconcile cannot restore destroyed data or undo billable side effects from the partial deployment — flag this caveat to the user before proceeding.
-   - **Investigate**: use `get_command_status` details or provider logs to diagnose further.
-
-## Force Flag
-
-If the simulation reports drift (out-of-band changes detected), the apply may be rejected. The user can choose to:
-- **Investigate**: Use the `formae-fix-code-drift` skill to understand the changes
-- **Force**: Set `force: true` to overwrite the drift
-
-## Important
-
-- NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
-- NEVER skip the simulation step
-- NEVER apply without user confirmation
-- For targeted urgent fixes, use the `formae-patch` skill instead
+An unavailable literal secret cannot be reconstructed from history. Preserve its classification and the hashed-value error; obtain plaintext from an authorized source or keep a valid reference/generator expression. Never substitute a digest or write secrets to the local registry.

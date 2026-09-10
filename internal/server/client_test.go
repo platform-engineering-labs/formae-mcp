@@ -82,20 +82,19 @@ func TestSubmitCommandAccepts200Simulate(t *testing.T) {
 	}
 }
 
-// TestSubmitCommandRejects200NonSimulate verifies that a 200 response for a
-// non-simulate command is treated as an error (gating: 200 only valid when simulate=true).
-func TestSubmitCommandRejects200NonSimulate(t *testing.T) {
+// A real apply with no provider work may return a synchronous no-change result.
+func TestSubmitCommandAccepts200NonSimulate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"unexpected":"synchronous-ok"}`))
+		_, _ = w.Write([]byte(`{"CommandId":"","Description":"No changes required"}`))
 	}))
 	defer srv.Close()
 
 	c := newTestFormaeClient(srv)
 	_, err := c.SubmitCommand(context.Background(), "apply", "reconcile", false, false, nil, "client-1")
-	if err == nil {
-		t.Fatal("SubmitCommand: expected error for 200 without simulate=true, got nil")
+	if err != nil {
+		t.Fatalf("SubmitCommand: legitimate no-change result rejected: %v", err)
 	}
 }
 
