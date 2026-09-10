@@ -438,6 +438,44 @@ func TestPrepareAuthoringRetainsLargeCompleteSourceAndStrictContext(t *testing.T
 	}
 }
 
+func TestPrepareAuthoringReturnsUnresolvedDesiredDiagnostics(t *testing.T) {
+	diagnostics := `[{"Code":"unresolved_desired_reference","Path":"/Resources/0/Properties/producer","Reference":"formae://resource/original-producer#/name","Message":"Original producer has no eligible desired declaration"}]`
+	forma := `{"Stacks":[{"Label":"owned"}],"Targets":[{"Label":"target","Config":{"number":9007199254740993}}],"Resources":[{"Stack":"owned","Label":"failed-child","Properties":{"producer":{"$ref":"formae://resource/original-producer#/name"}}}],"Extraction":{"CompleteStacks":[{"Label":"owned"}],"Diagnostics":` + diagnostics + `}}`
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/stats": func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `{"Capabilities":["desired-stack-extraction","shared-drift-resolution"]}`)
+		},
+		"GET /api/v1/resources": func(w http.ResponseWriter, r *http.Request) { _, _ = fmt.Fprint(w, forma) },
+		"GET /api/v1/plugins": func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `{"Plugins":[{"type":"resource","namespace":"test","name":"test","installedVersion":"1.2.3"}]}`)
+		},
+	})
+	defer agent.Close()
+	dir := t.TempDir()
+	session := authoringSession(t, config.Classic{URL: agent.URL}, agent.URL, authoringCLI(t), t.TempDir()+"/registry.json")
+	var result map[string]json.RawMessage
+	codebaseCall(t, session, "prepare_authoring", map[string]any{"temporary_directory": dir, "stacks": []string{"owned"}}, &result)
+	var got, want any
+	if err := json.Unmarshal(result["diagnostics"], &got); err != nil {
+		t.Fatalf("repair diagnostics unavailable: %v", err)
+	}
+	if err := json.Unmarshal([]byte(diagnostics), &want); err != nil {
+		t.Fatal(err)
+	}
+	gotJSON, _ := json.Marshal(got)
+	wantJSON, _ := json.Marshal(want)
+	if !bytes.Equal(gotJSON, wantJSON) {
+		t.Fatalf("diagnostics lost original identity: %s", gotJSON)
+	}
+	source, err := os.ReadFile(filepath.Join(dir, "main.pkl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), "original-producer") || !strings.Contains(string(source), "failed-child") {
+		t.Fatal("repairable declaration was dropped before rendering")
+	}
+}
+
 func TestPrepareAuthoringFreezesRoutedIdentityAcrossProfileEdit(t *testing.T) {
 	ec := hostedCtx("Bearer authoring-token")
 	ec.FormaeBin = authoringCLI(t)

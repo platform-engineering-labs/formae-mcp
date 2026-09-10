@@ -40,6 +40,7 @@ type authoringResult struct {
 	SchemaPlugins  []schemaPlugin      `json:"schema_plugins"`
 	Instructions   string              `json:"instructions"`
 	Warnings       string              `json:"warnings,omitempty"`
+	Diagnostics    json.RawMessage     `json:"diagnostics,omitempty"`
 }
 
 type schemaPlugin struct {
@@ -204,6 +205,14 @@ func (s *Server) prepareAuthoring(ctx context.Context, ec execctx.Context, c *Fo
 			return nil, err
 		}
 	}
+	// Keep the agent's read-side repair diagnostics alongside the generated
+	// source. They do not authorize dropping or rebinding any declaration.
+	var extracted struct {
+		Extraction struct{ Diagnostics json.RawMessage }
+	}
+	if err := json.Unmarshal(forma, &extracted); err != nil {
+		return nil, err
+	}
 	plugins, summary, err := c.renderingPlugins(ctx)
 	if err != nil {
 		return nil, err
@@ -276,7 +285,7 @@ func (s *Server) prepareAuthoring(ctx context.Context, ec execctx.Context, c *Fo
 	if err := os.Rename(ready.Name(), filepath.Join(directory, authoringMetadataName)); err != nil {
 		return nil, err
 	}
-	return &authoringResult{FilePath: path, ProjectPath: filepath.Join(directory, "PklProject"), Context: tools.SourceContext{Mode: codebase.ModeNone, TemporaryDirectory: directory}, CompleteStacks: labels, SchemaPlugins: summary, Warnings: safeSubprocessOutput(output, ec.Credential), Instructions: "Read and edit the complete main.pkl; preserve all existing stack declarations, policies, targets, references and generators. Add schema dependencies for new resource namespaces using the reported installed versions, then resolve PklProject dependencies. Simulate soft reconcile with this exact context; resolve all actionable drift and confirm the final combined plan before submitting. Keep the directory and exact submission until outcome/retry inspection is complete. After terminal outcome, or abandoning a preview with no real submission, the harness removes this disposable directory. It is never a maintained project or automatically registered."}, nil
+	return &authoringResult{FilePath: path, ProjectPath: filepath.Join(directory, "PklProject"), Context: tools.SourceContext{Mode: codebase.ModeNone, TemporaryDirectory: directory}, CompleteStacks: labels, SchemaPlugins: summary, Diagnostics: extracted.Extraction.Diagnostics, Warnings: safeSubprocessOutput(output, ec.Credential), Instructions: "Read the diagnostics and complete main.pkl. Unresolved desired references are repair placeholders: explain the failure and use the user's intended change to remove the owning declaration, rewire its reference, or explicitly restore its dependency before evaluation. Ask when that choice is unclear; never silently drop declarations or bind to a same-name replacement. A complete reconcile can withdraw failed-create intent with zero cloud operations; that does not confirm cloud absence. Read and edit the complete main.pkl; preserve all existing stack declarations, policies, targets, references and generators. Add schema dependencies for new resource namespaces using the reported installed versions, then resolve PklProject dependencies. Simulate soft reconcile with this exact context; resolve all actionable drift and confirm the final combined plan before submitting. Keep the directory and exact submission until outcome/retry inspection is complete. After terminal outcome, or abandoning a preview with no real submission, the harness removes this disposable directory. It is never a maintained project or automatically registered."}, nil
 }
 
 func augmentAuthoring(ctx context.Context, c *FormaeClient, raw json.RawMessage, input tools.PrepareAuthoringInput) (json.RawMessage, error) {
