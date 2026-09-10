@@ -157,3 +157,7 @@ func (c *FormaeClient) advance(r reach) {
 func newBugReportRequest(ctx context.Context, installation string, body []byte) (*http.Request, error) {
 	return http.NewRequestWithContext(ctx, http.MethodPost, consoleURL+"/api/v1/installations/"+installation+"/bug-reports", bytes.NewReader(body))
 }
+
+func newBugReportConfigRequest(ctx context.Context, installation string) (*http.Request, error) {
+	return http.NewRequestWithContext(ctx, http.MethodGet, consoleURL+"/api/v1/installations/"+installation+"/bug-reports", nil)
+}

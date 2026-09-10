@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [Unreleased]
+
+### Changed
+
+- Hosted bug reports use the support recipient configured by the formae console (default `support@platform.engineering`). The MCP shows that destination before authorization and refuses to send if it changes after preparation.
+
 ## [0.9.2]
 
 ### Added

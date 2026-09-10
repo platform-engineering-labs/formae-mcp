@@ -22,8 +22,19 @@ type reportTransport func(*http.Request) (*http.Response, error)
 
 func (f reportTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func reportServer(t *testing.T) *Server {
-	return serverWithStubResolver(t, execctx.Context{ProfileName: "original", Conn: config.Hosted{Endpoint: config.HostedOrigin, Installation: "3IzNhVWTOwLD9D8HtLtjq9Jb8ic"}, Credential: secret.New("Bearer secret-token")})
+	s := serverWithStubResolver(t, execctx.Context{ProfileName: "original", Conn: config.Hosted{Endpoint: config.HostedOrigin, Installation: "3IzNhVWTOwLD9D8HtLtjq9Jb8ic"}, Credential: secret.New("Bearer secret-token")})
+	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodGet {
+			t.Fatal("unexpected report submission")
+		}
+		return reportRecipientResponse(), nil
+	})
+	return s
 }
+func reportRecipientResponse() *http.Response {
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"recipient":"support@platform.engineering"}`))}
+}
+
 func reportInput() prepareBugReportInput {
 	return prepareBugReportInput{Profile: "original", Tool: "apply", Component: "formae", Summary: "failure", Expected: "success", Actual: "failed", Evidence: "local failure", Diagnostics: "password=hunter2 Authorization: Bearer secret-token"}
 }
@@ -47,12 +58,15 @@ func TestBugReportPreviewFrozenAndSessionScoped(t *testing.T) {
 	calls := 0
 	var body []byte
 	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodGet {
+			return reportRecipientResponse(), nil
+		}
 		calls++
 		body, _ = io.ReadAll(r.Body)
 		if r.URL.Host != "console.formae.ai" || r.Header.Get("Authorization") != "Bearer secret-token" {
 			t.Fatal("wrong endpoint/auth")
 		}
-		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + r.Header.Get("Idempotency-Key") + `","status":"sent","recipient":"support@formae.ai","duplicate":false}`)), Header: http.Header{}}, nil
+		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + r.Header.Get("Idempotency-Key") + `","status":"sent","recipient":"support@platform.engineering","duplicate":false}`)), Header: http.Header{}}, nil
 	})
 	req := &mcp.CallToolRequest{Session: new(mcp.ServerSession)}
 	id, preview := prepared(t, s, req)
@@ -114,12 +128,20 @@ func TestBugReportCapturesFailedStatusOriginalContext(t *testing.T) {
 		t.Fatal("missing event reference")
 	}
 	id := strings.TrimPrefix(r.Content[1].(*mcp.TextContent).Text, "Bug report event_id: ")
-	s.ctxResolver.(*stubResolver).ec.Conn = config.Classic{URL: "http://localhost"}
+	// Simulate the active pointer moving while a refresh of the original
+	// named profile continues to resolve its original installation.
+	resolver := s.ctxResolver.(*stubResolver)
+	original := resolver.ec
+	resolver.refreshed = &original
+	resolver.ec.Conn = config.Classic{URL: "http://localhost"}
 	in := reportInput()
 	in.EventID = id
 	in.Profile = ""
 	in.Diagnostics = ""
 	r, _, _ = s.handlePrepareBugReport(context.Background(), req, in)
+	if resolver.sawProfile != "original" {
+		t.Fatal("discovery used active profile")
+	}
 	if r.IsError {
 		t.Fatal(r.Content)
 	}
@@ -160,7 +182,7 @@ func TestBugReportDeliveryUnknownAndRedirects(t *testing.T) {
 			calls := 0
 			s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
 				calls++
-				return &http.Response{StatusCode: status, Header: http.Header{"Location": []string{"https://evil.invalid"}}, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + id + `","status":"delivery_unknown","recipient":"support@formae.ai","duplicate":false}`))}, nil
+				return &http.Response{StatusCode: status, Header: http.Header{"Location": []string{"https://evil.invalid"}}, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + id + `","status":"delivery_unknown","recipient":"support@platform.engineering","duplicate":false}`))}, nil
 			})
 			r, _, _ := s.handleSubmitBugReport(context.Background(), nil, submitBugReportInput{ReportID: id, Confirmed: true})
 			if (status == 202) == r.IsError {
@@ -182,7 +204,7 @@ func TestBugReportConcurrentSubmission(t *testing.T) {
 	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
 		calls.Add(1)
 		time.Sleep(5 * time.Millisecond)
-		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + id + `","status":"sent","recipient":"support@formae.ai","duplicate":false}`))}, nil
+		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + id + `","status":"sent","recipient":"support@platform.engineering","duplicate":false}`))}, nil
 	})
 	var wg sync.WaitGroup
 	for range 5 {
@@ -424,6 +446,9 @@ func TestBugReportUnknownRetryObservesSent(t *testing.T) {
 	id, preview := prepared(t, s, nil)
 	calls := 0
 	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodGet {
+			return reportRecipientResponse(), nil
+		}
 		calls++
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -438,7 +463,7 @@ func TestBugReportUnknownRetryObservesSent(t *testing.T) {
 			status = 200
 			delivery = "sent"
 		}
-		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"report_id":%q,"status":%q,"recipient":"support@formae.ai","duplicate":true}`, id, delivery)))}, nil
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"report_id":%q,"status":%q,"recipient":"support@platform.engineering","duplicate":true}`, id, delivery)))}, nil
 	})
 	for _, want := range []string{"delivery_unknown", "sent", "sent"} {
 		r, _, _ := s.handleSubmitBugReport(context.Background(), nil, submitBugReportInput{ReportID: id, Confirmed: true})
@@ -448,5 +473,88 @@ func TestBugReportUnknownRetryObservesSent(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("calls=%d", calls)
+	}
+}
+
+func TestBugReportDiscoversAndBindsRecipient(t *testing.T) {
+	s := reportServer(t)
+	gets, posts := 0, 0
+	const recipient = "helpdesk@example.org"
+	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() != consoleURL+"/api/v1/installations/3IzNhVWTOwLD9D8HtLtjq9Jb8ic/bug-reports" || r.Header.Get("Authorization") != "Bearer secret-token" {
+			t.Fatal("wrong destination or auth")
+		}
+		if r.Method == http.MethodGet {
+			gets++
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"recipient":"` + recipient + `"}`))}, nil
+		}
+		posts++
+		if r.Header.Get("X-Expected-Bug-Report-Recipient") != recipient {
+			t.Fatal("recipient not bound")
+		}
+		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + r.Header.Get("Idempotency-Key") + `","recipient":"` + recipient + `","status":"sent","duplicate":false}`))}, nil
+	})
+	r, _, _ := s.handlePrepareBugReport(context.Background(), nil, reportInput())
+	if r.IsError {
+		t.Fatal(r.Content)
+	}
+	var p struct {
+		ReportID  string `json:"report_id"`
+		Recipient string `json:"recipient"`
+	}
+	if err := json.Unmarshal([]byte(r.Content[0].(*mcp.TextContent).Text), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Recipient != recipient || gets != 1 || posts != 0 {
+		t.Fatalf("bad preview/discovery %v gets%d posts%d", p, gets, posts)
+	}
+	r, _, _ = s.handleSubmitBugReport(context.Background(), nil, submitBugReportInput{ReportID: p.ReportID, Confirmed: true})
+	if r.IsError || posts != 1 {
+		t.Fatal(r.Content)
+	}
+}
+func TestBugReportRecipientChangeRequiresNewPreview(t *testing.T) {
+	s := reportServer(t)
+	id, _ := prepared(t, s, nil)
+	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 409, Body: io.NopCloser(strings.NewReader(`{"error":"recipient_changed"}`))}, nil
+	})
+	r, _, _ := s.handleSubmitBugReport(context.Background(), nil, submitBugReportInput{ReportID: id, Confirmed: true})
+	if !r.IsError || !strings.Contains(textContent(t, r), "prepare a new preview") {
+		t.Fatal(r.Content)
+	}
+}
+
+func TestBugReportDiscoveryFailsClosed(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		body   string
+	}{{302, `{"recipient":"support@example.org"}`}, {503, `{}`}, {200, `{"recipient":"User <support@example.org>"}`}, {200, `{"recipient":"support@example.org\r\nBcc: other@example.org"}`}, {200, `{"recipient":""}`}} {
+		t.Run(fmt.Sprint(tc.status)+tc.body, func(t *testing.T) {
+			s := reportServer(t)
+			calls := 0
+			s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if r.Method != http.MethodGet || r.Body != nil {
+					t.Fatal("discovery sent report content")
+				}
+				return &http.Response{StatusCode: tc.status, Header: http.Header{"Location": []string{"https://other.example.org"}}, Body: io.NopCloser(strings.NewReader(tc.body))}, nil
+			})
+			r, _, _ := s.handlePrepareBugReport(context.Background(), nil, reportInput())
+			if !r.IsError || calls != 1 || len(s.reportState.reports) != 0 {
+				t.Fatalf("discovery should fail closed: %v", r.Content)
+			}
+		})
+	}
+}
+func TestBugReportReceiptMustMatchPreparedRecipient(t *testing.T) {
+	s := reportServer(t)
+	id, _ := prepared(t, s, nil)
+	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"report_id":"` + id + `","recipient":"different@example.org","status":"sent","duplicate":false}`))}, nil
+	})
+	r, _, _ := s.handleSubmitBugReport(context.Background(), nil, submitBugReportInput{ReportID: id, Confirmed: true})
+	if !r.IsError {
+		t.Fatal("mismatched recipient accepted")
 	}
 }

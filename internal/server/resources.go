@@ -681,7 +681,7 @@ const troubleshootingDoc = `# Formae Troubleshooting
 ## Reporting a likely product bug
 
 Hosted formae users can prepare a report with prepare_bug_report and send it to
-support@formae.ai with submit_bug_report. This covers any workflow, including
+the configured support recipient (default support@platform.engineering) with submit_bug_report. This covers any workflow, including
 local CLI errors before a command is submitted. First establish why the evidence
 points to a formae, plugin, or MCP defect. Expected drift rejections, invalid
 input, missing access, and cloud quotas normally need their usual recovery steps.
@@ -693,8 +693,10 @@ only relevant local CLI diagnostics, such as conversion errors, need to accompan
 the report. Missing diagnostics do not justify inventing details or repeating
 an apply or destroy to reproduce the failure.
 
-Review the full prepared report and its sanitized local diagnostics with the
-user. Submit only with their approval or explicit session authorization. Do not
+Preparation reads the support recipient from the authenticated console without
+uploading report contents. Review that recipient, the full prepared report and
+its sanitized local diagnostics with the user. If the recipient changes, prepare
+a new preview and obtain authorization for the new destination. Submit only with their approval or explicit session authorization. Do not
 claim a report was sent when the receipt says delivery_unknown; keep its report
 ID for follow-up. Reporting failures never justify retrying infrastructure.
 
