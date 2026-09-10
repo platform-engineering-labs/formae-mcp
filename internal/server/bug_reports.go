@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,7 +22,6 @@ import (
 	"github.com/platform-engineering-labs/formae-mcp/internal/version"
 )
 
-const supportRecipient = "support@formae.ai"
 const classicReportHelp = "Hosted reporting requires a hosted profile. For classic installations use https://github.com/platform-engineering-labs/formae/issues or https://discord.gg/hr6dHaW76k."
 
 // Stores are bounded across all sessions and expire after an hour. No disk persistence.
@@ -48,7 +48,7 @@ type prepareBugReportInput struct {
 }
 type submitBugReportInput struct {
 	ReportID  string `json:"report_id"`
-	Confirmed bool   `json:"confirmed" jsonschema:"True only when the user authorized sending this preview to support@formae.ai."`
+	Confirmed bool   `json:"confirmed" jsonschema:"True only when the user authorized sending this preview to its displayed support recipient."`
 }
 type bugReport struct {
 	SchemaVersion int               `json:"schema_version"`
@@ -75,12 +75,13 @@ type bugReceipt struct {
 	Duplicate bool   `json:"duplicate"`
 }
 type storedReport struct {
-	mu      sync.Mutex
-	session *mcp.ServerSession
-	created time.Time
-	ec      execctx.Context
-	body    []byte
-	receipt *bugReceipt
+	mu        sync.Mutex
+	session   *mcp.ServerSession
+	created   time.Time
+	ec        execctx.Context
+	body      []byte
+	receipt   *bugReceipt
+	recipient string
 }
 type reportState struct {
 	mu      sync.Mutex
@@ -278,6 +279,23 @@ func (s *Server) handlePrepareBugReport(ctx context.Context, req *mcp.CallToolRe
 	if in.Component != "formae" && in.Component != "plugin" && in.Component != "mcp" && in.Component != "unknown" {
 		return fail(fmt.Errorf("invalid component"))
 	}
+	// Events retain no credential. Resolve their original named profile for
+	// authenticated discovery, refusing any installation or origin change.
+	if ec.Credential.IsZero() {
+		fresh, err := s.ctxResolver.Resolve(ctx, ec.ProfileName, true)
+		if err != nil {
+			return fail(fmt.Errorf("could not resolve original profile for support recipient discovery"))
+		}
+		next, ok := fresh.Conn.(config.Hosted)
+		if !ok || next != h || fresh.ProfileName != ec.ProfileName {
+			return fail(errConnectionMoved)
+		}
+		ec = fresh
+	}
+	recipient, err := s.discoverBugReportRecipient(ctx, ec)
+	if err != nil {
+		return fail(err)
+	}
 	r := bugReport{SchemaVersion: 1, ReportID: reportUUID(), OccurredAt: occurred.Format(time.RFC3339), Tool: in.Tool, Component: in.Component, Summary: in.Summary, Expected: in.Expected, Actual: in.Actual, Evidence: in.Evidence + "\n" + provenance, Outcome: outcome, CommandID: in.CommandID, ResourceType: in.ResourceType, Plugin: in.Plugin, ProfileName: ec.ProfileName, Versions: map[string]string{"mcp": version.String()}, Diagnostics: in.Diagnostics}
 	for k, v := range in.Versions {
 		if k != "cli" && k != "agent" && k != "plugin" {
@@ -346,7 +364,7 @@ func (s *Server) handlePrepareBugReport(ctx context.Context, req *mcp.CallToolRe
 	if s.reportState.reports == nil {
 		s.reportState.reports = make(map[string]*storedReport)
 	}
-	s.reportState.reports[r.ReportID] = &storedReport{session: reportSession(req), created: time.Now(), ec: ec, body: body}
+	s.reportState.reports[r.ReportID] = &storedReport{session: reportSession(req), created: time.Now(), ec: ec, body: body, recipient: recipient}
 	preview, _ := json.Marshal(struct {
 		ReportID        string          `json:"report_id"`
 		Recipient       string          `json:"recipient"`
@@ -354,7 +372,7 @@ func (s *Server) handlePrepareBugReport(ctx context.Context, req *mcp.CallToolRe
 		Lifetime        string          `json:"lifetime"`
 		InstallationID  string          `json:"installation_id"`
 		ContactMetadata string          `json:"contact_metadata"`
-	}{r.ReportID, supportRecipient, body, "This MCP session only; expires after one hour.", h.Installation, "Support also receives authenticated account contact and installation metadata."})
+	}{r.ReportID, recipient, body, "This MCP session only; expires after one hour.", h.Installation, "Support also receives authenticated account contact and installation metadata."})
 	return jsonResult(preview), nil, nil
 }
 func (s *Server) handleSubmitBugReport(ctx context.Context, req *mcp.CallToolRequest, in submitBugReportInput) (*mcp.CallToolResult, any, error) {
@@ -407,12 +425,16 @@ func (s *Server) handleSubmitBugReport(ctx context.Context, req *mcp.CallToolReq
 	request.Header.Set("Authorization", ec.Credential.Reveal())
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", in.ReportID)
+	request.Header.Set("X-Expected-Bug-Report-Recipient", r.recipient)
 	client := &http.Client{Timeout: 30 * time.Second, Transport: s.reportTransport, CheckRedirect: refuseRedirects}
 	resp, err := client.Do(request)
 	if err != nil {
 		return fail(fmt.Errorf("report delivery could not be confirmed; prepared report retained; retry only this report_id"))
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusConflict {
+		return fail(fmt.Errorf("support recipient or report configuration changed; prepare a new preview and confirm its recipient before sending"))
+	}
 	if resp.StatusCode != 200 && resp.StatusCode != 201 && resp.StatusCode != 202 {
 		return fail(fmt.Errorf("support endpoint returned HTTP %d; prepared report retained", resp.StatusCode))
 	}
@@ -421,7 +443,7 @@ func (s *Server) handleSubmitBugReport(ctx context.Context, req *mcp.CallToolReq
 		return fail(fmt.Errorf("report receipt unavailable; delivery unknown; prepared report retained"))
 	}
 	var receipt bugReceipt
-	if json.Unmarshal(body, &receipt) != nil || receipt.ReportID != in.ReportID || receipt.Recipient != supportRecipient || (resp.StatusCode == 202 && receipt.Status != "delivery_unknown") || (resp.StatusCode != 202 && receipt.Status != "sent") {
+	if json.Unmarshal(body, &receipt) != nil || receipt.ReportID != in.ReportID || receipt.Recipient != r.recipient || (resp.StatusCode == 202 && receipt.Status != "delivery_unknown") || (resp.StatusCode != 202 && receipt.Status != "sent") {
 		return fail(fmt.Errorf("invalid support receipt; delivery unknown; prepared report retained"))
 	}
 	if receipt.Status == "sent" {
@@ -429,4 +451,41 @@ func (s *Server) handleSubmitBugReport(ctx context.Context, req *mcp.CallToolReq
 	}
 	b, _ := json.Marshal(receipt)
 	return jsonResult(b), nil, nil
+}
+
+// Discovery sends authentication only: no report, diagnostics or mutation.
+func (s *Server) discoverBugReportRecipient(ctx context.Context, ec execctx.Context) (string, error) {
+	if ec.Credential.IsZero() {
+		return "", fmt.Errorf("no hosted credential for support recipient discovery")
+	}
+	hosted := ec.Conn.(config.Hosted)
+	req, err := newBugReportConfigRequest(ctx, hosted.Installation)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", ec.Credential.Reveal())
+	client := &http.Client{Timeout: 30 * time.Second, Transport: s.reportTransport, CheckRedirect: refuseRedirects}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("support recipient discovery failed; no report was submitted")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("support recipient discovery returned HTTP %d; no report was submitted", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4097))
+	if err != nil || len(body) > 4096 {
+		return "", fmt.Errorf("support recipient discovery returned an invalid response")
+	}
+	var config struct {
+		Recipient string `json:"recipient"`
+	}
+	if json.Unmarshal(body, &config) != nil {
+		return "", fmt.Errorf("support recipient discovery returned an invalid response")
+	}
+	address, err := mail.ParseAddress(config.Recipient)
+	if err != nil || address.Name != "" || address.Address != config.Recipient || len(config.Recipient) > 320 {
+		return "", fmt.Errorf("support recipient discovery returned an invalid email address")
+	}
+	return config.Recipient, nil
 }
