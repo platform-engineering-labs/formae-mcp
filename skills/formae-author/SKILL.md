@@ -18,6 +18,8 @@ Use the returned selection:
 - `selection_required`: present the registered candidates once and let the user choose one or explicitly choose none. Missing directories remain visible; never silently switch away and claim source synchronization.
 - `unconfigured`: classic installations preserve the choice of an existing project or explicit none. The latter requires connected `desired-stack-extraction` and `shared-drift-resolution` capabilities.
 
+Inspect `prepare_authoring` diagnostics before changing the extracted source. Desired declarations can retain failed intent and broken references. Explain unresolved references and repair them according to the user's request: remove the owning declaration, rewire its reference, or explicitly restore its dependency. Ask when the intended repair is unclear. Preserve original resource identity; never bind a broken reference to a same-name replacement automatically. Repair placeholders deliberately prevent Pkl evaluation until resolved. Keep unrelated declarations and drift unchanged.
+
 A corrupt registry is an actionable error, not an empty registry. Do not scan arbitrary directories for projects. A server lacking the new capabilities requires an existing complete codebase; a newer local CLI alone does not establish capability.
 
 If the user says they want to keep IaC locally, hand off to `formae-project-init`. This opt-in can happen at any time. Initialize their selected project, extract selected managed stacks completely (or initialize with the target on an empty installation), verify it and register it only after successful initialization. Do not ask about a maintained project as a prerequisite for hosted authoring.
