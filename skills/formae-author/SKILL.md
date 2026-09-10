@@ -7,23 +7,26 @@ description: "Use when the user wants to start authoring formae infrastructure o
 
 This skill is a thin dispatcher. It triages the user's authoring intent, locates (or creates) the code workspace, infers the right schema plugins, and hands off to the focused skills that carry the deep procedures. Do not duplicate those procedures here.
 
-## Step 1 — Locate the code
+## Step 1 — Select the source context
 
-Determine where the authoring will happen. Three branches:
+Call `get_codebase_context` with the chosen `profile` and the actual harness `working_directory`. Never assume the MCP process directory is the workspace. An explicit existing project supplied by the user is an opt-in: validate it and call `register_codebase`, then select its binding. An explicit `mode: none` wins even when projects are registered.
 
-**(a) Already in a formae project** — if the current working directory or any ancestor contains a `PklProject` that declares a `@formae/` dependency, OR a `.pkl` file that starts with `extends "@formae/forma.pkl"` (or the legacy `amends "@formae/forma.pkl"`), work in place. Confirm the project root to the user and continue to Step 2.
+Use the returned selection:
 
-**(b) User knows a path** — if there is no formae project here, ask: *"Do you have an existing formae project elsewhere?"* If the user provides a path, verify it is a real formae project (same checks as above). If it is, `cd` there and continue to Step 2. If it is not a formae project, say so and ask whether to create a new project there instead (offer Step 1c).
+- `codebase`: work only in that selected registered project; carry `context: {mode: "codebase", binding_id: ...}` on apply and policy planning calls. Preserve its abstractions and unrelated edits. Profile names can change; bindings identify the resolved installation.
+- `none`: hosted users with no registered codebase start here naturally. Continue authoring without asking for a project directory. Pkl is still the code interface: create a harness-owned empty disposable directory, call `prepare_authoring` with complete existing `stacks` and/or `new_stacks`, plus configured `targets` needed for new resources. Use returned full source files, PklProject and `context`. Wire any new schema dependencies from the reported installed versions and resolve the project. Keep the directory through preview, decisions and command outcome; remove after terminal outcome or abandoning a preview with no real submission. Never create a persistent hidden project or register this temporary directory.
+- `selection_required`: present the registered candidates once and let the user choose one or explicitly choose none. Missing directories remain visible; never silently switch away and claim source synchronization.
+- `unconfigured`: classic installations preserve the choice of an existing project or explicit none. The latter requires connected `desired-stack-extraction` and `shared-drift-resolution` capabilities.
 
-If the user is **unsure** whether a project exists, offer to scan `~/dev` for `PklProject` files that declare a formae dependency. Present only verified hits from that scan — never invent or guess paths.
+A corrupt registry is an actionable error, not an empty registry. Do not scan arbitrary directories for projects. A server lacking the new capabilities requires an existing complete codebase; a newer local CLI alone does not establish capability.
 
-**(c) No project exists** — hand off to the `formae-project-init` skill. That skill handles directory selection, collision safety, running `formae project init`, and scaffolding. Return here after init completes.
+If the user says they want to keep IaC locally, hand off to `formae-project-init`. This opt-in can happen at any time. Initialize their selected project, extract selected managed stacks completely (or initialize with the target on an empty installation), verify it and register it only after successful initialization. Do not ask about a maintained project as a prerequisite for hosted authoring.
 
 ## Step 2 — Existing-cloud-resources branch (orthogonal to Step 1)
 
 Before authoring new resources, ask: is the intent to bring **existing** cloud resources under management (resources that already exist in the cloud), or to author new ones?
 
-If the intent is "bring existing cloud resources under management", hand off to the `formae-import` skill. That skill still needs a code location — complete Step 1 first. After import, return here if the user also wants to author additional new resources.
+If the intent is "bring existing cloud resources under management", hand off to the `formae-import` skill. Carry the selected context; a disposable workspace also supports explicit import. After import, return here if the user also wants to author additional new resources.
 
 ## Step 3 — Establish what plugins are available
 
@@ -43,7 +46,7 @@ If the intent is "bring existing cloud resources under management", hand off to 
 Make clear in both branches: these are **schema packages only** — they provide PKL types and IDE completion. They do not install resource plugins on the agent.
 
 **Dependency wiring** — do not wire deps yourself:
-- New project: `formae-project-init` sets up the initial schema package deps.
+- Opted-in maintained project: `formae-project-init` sets up the initial schema package deps. Disposable project: use the files and installed schema metadata from `prepare_authoring`, adding needed dependencies with `formae-deps`.
 - Existing project needing additional packages: hand off to the `formae-deps` skill to add them.
 
 ## Step 4 — Trust gate (self-hosted only)
@@ -100,6 +103,6 @@ Auto-activation from this skill's `description` field is a Claude Code behavior;
 - **Never write the flat forma form.** Do not write `stack = ...`, `targets = ...`, `resources = ...` at the top level. Always use the `forma {}` block pattern.
 - **Always use `formae eval --output-consumer machine`.** Never use `pkl eval` — forma files use formae-specific extensions that only the formae CLI resolves correctly, and `--output-consumer machine` produces parseable output.
 - **This skill dispatches — it does not duplicate.** The full procedures for init, deps, stack design, import, policy, and apply live in their respective skills. Stay thin: triage, confirm, hand off.
-- **Never invent project paths.** Only present `~/dev` scan results that are verified formae projects. Never guess or fabricate paths.
+- **Use explicit context.** Discover only registered projects using the supplied harness directory; never scan arbitrary disk or invent paths.
 - **Never silently depend on unverified plugins** (self-hosted). Always surface `originatorVerified: false` and get explicit user confirmation. On hosted formae the question does not arise: the set is first-party and already installed.
 - **Never offer a hosted user a plugin their installation does not have.** Not from the hub, and not by authoring one. The reported set is the catalogue, and anything outside it cannot be applied.

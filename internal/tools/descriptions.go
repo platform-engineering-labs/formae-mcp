@@ -46,7 +46,7 @@ const GetCommandStatusDescription = `Get the detailed status of a specific forma
 
 Use this tool to check on the progress of a previously submitted apply or destroy command. Commands execute asynchronously in the formae agent.
 
-A resource update in state Rejected means the pre-update cloud read detected an out-of-band change not yet synchronized into inventory. The observed state has been saved and that update was stopped to protect it. The overall command can be Failed without a provider error. Compare refreshed resource state with the forma, re-simulate, and explicitly resolve drift before retrying: absorb it or obtain approval to overwrite it. A successful simulation does not establish approval; do not rely on a ReconcileRejected response to enforce the decision. Other resources may have succeeded; Failed dependents with empty errors may have been skipped due to the rejection. See formae://docs/troubleshooting.`
+A resource update in state Rejected means the pre-update cloud read detected an out-of-band change not yet synchronized into inventory. The observed state has been saved and that update was stopped to protect it. The overall command can be Failed without a provider error. Compare refreshed resource state with the forma, re-simulate, and explicitly resolve drift before retrying: use the central absorb/revert review and submission workflow in apply_forma, retaining the original declaration through review and obtaining approval for overwrite. Catch up an explicitly selected maintained project only after central acceptance. A successful simulation does not establish approval; do not rely on a ReconcileRejected response to enforce the decision. Other resources may have succeeded; Failed dependents with empty errors may have been skipped due to the rejection. See formae://docs/troubleshooting.`
 
 const ListCommandsDescription = `List recent formae commands and their statuses. Returns command history with state, timestamps, and resource update summaries.
 
@@ -79,9 +79,13 @@ This tool evaluates the forma file (PKL -> JSON if needed) and submits it to the
 - patch: Only applies the changes explicitly specified in the forma file. Other resources are untouched. Use this for urgent targeted fixes (e.g., scaling up a cluster during an incident). Patches create drift that should later be reconciled.
 
 Use simulate=true to preview changes without modifying infrastructure.
-Use force=true (reconcile only) to overwrite detected drift.
+Select source with get_codebase_context. For a maintained project pass context {mode:codebase,binding_id}; for no-codebase authoring use prepare_authoring and its full files/dependencies/context. New workflows require the connected agent capabilities, not just a local CLI version.
 
-Simulation uses agent inventory, not a fresh cloud read. If an in-place update's cloud read detects an unsynchronized out-of-band change, it saves the new state and stops with resource state Rejected, even with force=true. Compare refreshed resource state with the forma and re-simulate the same apply. Absorb the drift or overwrite only with explicit user approval, even if simulation succeeds: a retry is not guaranteed to raise ReconcileRejected, and patch mode has no soft-reconcile gate. Do not automatically retry with force=true. This rejection is expected drift protection, not a reason by itself to debug plugins or credentials. See formae://docs/troubleshooting.
+Resolve actionable drift with all explicit absorb/revert choices keyed by ResourceID: initial soft simulation returns ObservationID; simulate resolution Decisions to obtain the final combined ReviewID; after confirmation submit it with a stable IdempotencyKey. Retain exact input and key for uncertain-outcome retry. stale-review needs a fresh observation, plan and confirmation, never silent force. Pure acceptance is finished centrally by a real command; source catch-up is a separate harness edit using the partial get_command_desired_delta guidance for only the selected project.
+
+Suggest a factual optional message in the ordinary final confirmation; allow editing or clearing with an empty string without another round trip. Command history preserves available user, inputs, message, resolution receipt and actual outcome. Never put secrets in a message.
+
+Simulation uses agent inventory, not a fresh cloud read. If an in-place update's cloud read detects an unsynchronized out-of-band change, it saves the new state and stops with resource state Rejected, even with force=true. Compare refreshed resource state with the forma and re-simulate the same apply. Use the central absorb/revert review and submission workflow above, with source catch-up afterward only for the selected maintained project. Overwrite requires explicit user approval even if simulation succeeds: a retry is not guaranteed to raise ReconcileRejected, and patch mode has no soft-reconcile gate. Do not automatically retry with force=true. This rejection is expected drift protection, not a reason by itself to debug plugins or credentials. See formae://docs/troubleshooting.
 
 IMPORTANT: Always simulate first and confirm with the user before applying changes to infrastructure.`
 
@@ -113,7 +117,7 @@ Returns 202 with a command_id when the reconcile starts (poll get_command_status
 
 Primarily useful for test harnesses and incident response. For normal operation the agent runs scheduled reconciles based on the policy interval.`
 
-const CreateInlinePolicyDescription = `Plan a TTL or auto-reconcile policy edit for a stack. The tool locates the stack in the workspace's PKL files, computes the snippet to insert/replace/remove, and returns the plan. The tool does NOT modify the file — the caller must apply the returned snippet at the returned line range using the Edit tool.
+const CreateInlinePolicyDescription = `Plan a TTL or auto-reconcile policy edit for a stack. The tool locates the stack in the workspace's PKL files, computes the snippet to insert/replace/remove, and returns the plan. Pass profile and explicit forma_file with the selected context; searches stay in that project or disposable workspace. The tool does NOT modify the file — the caller must apply the returned snippet at the returned line range using the Edit tool.
 
 Output fields:
 - file_path: which PKL file declares the stack
@@ -177,11 +181,11 @@ Use this tool when you need to see the PKL representation of existing resources 
 
 The query parameter selects which resources to extract. Always include at least one filter to avoid extracting the entire inventory.
 
-Returns the extracted PKL source code as text.`
+Returns an actual-inventory PKL fragment as text for explicit import. It is never a complete desired-stack declaration or acceptance record. Use prepare_authoring for full desired authoring; merge selected import fragments into that complete workspace or the selected maintained project.`
 
 const CreateStandalonePolicyDescription = `Plan the declaration of a standalone (reusable) policy in a forma file. A standalone policy is declared once at the top level of the forma block and can then be attached to any number of stacks with attach_standalone_policy. Use this instead of create_inline_policy when the same policy should govern more than one stack.
 
-The tool does NOT modify the file — apply the returned snippet at the returned line range using the Edit tool.
+Pass profile and explicit forma_file with the selected context; searches stay in that project or disposable workspace. The tool does NOT modify the file — apply the returned snippet at the returned line range using the Edit tool.
 
 Output fields:
 - file_path: the forma file that should carry the declaration (the workspace's main forma file unless forma_file was given)
@@ -197,7 +201,7 @@ Errors when: no single main forma file can be identified (pass forma_file to dis
 
 const AttachStandalonePolicyDescription = `Plan the attachment of an existing standalone (reusable) policy to a stack. Inserts a PolicyResolvable reference into the stack's policies listing, creating the listing if the stack has none.
 
-The tool does NOT modify the file — apply the returned snippet at the returned line range using the Edit tool, then simulate and apply with apply_forma in reconcile mode.
+Pass profile and explicit forma_file with the selected context; searches stay in that project or disposable workspace. The tool does NOT modify the file — apply the returned snippet at the returned line range using the Edit tool, then simulate and apply with apply_forma in reconcile mode.
 
 Output fields:
 - file_path: the PKL file declaring the stack
@@ -213,7 +217,7 @@ Errors when: the standalone policy is unknown to the agent, the stack is unknown
 
 const DetachStandalonePolicyDescription = `Plan the detachment of a standalone (reusable) policy from a stack. Locates the PolicyResolvable entry in the stack's policies listing — both the direct 'new formae.PolicyResolvable { label = "X" }' form and the '<binding>.res' form are recognised — and returns the line range to delete.
 
-The tool does NOT modify the file — delete the returned line range using the Edit tool, then simulate and apply with apply_forma in reconcile mode. Detaching does not delete the policy; it stays declared and stays attached to any other stacks.
+Pass profile and explicit forma_file with the selected context; searches stay in that project or disposable workspace. The tool does NOT modify the file — delete the returned line range using the Edit tool, then simulate and apply with apply_forma in reconcile mode. Detaching does not delete the policy; it stays declared and stays attached to any other stacks.
 
 Output fields:
 - file_path: the PKL file declaring the stack

@@ -1,0 +1,104 @@
+[
+  {
+    "scenario": "Fresh hosted installation; user says deploy a new app and never mentions code",
+    "required": [
+      "get_codebase_context",
+      "prepare_authoring",
+      "none"
+    ],
+    "forbidden": [
+      "ask: *\"Do you have an existing formae project",
+      "scan `~/dev`"
+    ],
+    "skill": "formae-author"
+  },
+  {
+    "scenario": "User absorbs capacity drift; preview is no-op but no command was admitted",
+    "required": [
+      "ObservationID",
+      "ReviewID",
+      "IdempotencyKey",
+      "get_command_desired_delta"
+    ],
+    "forbidden": [
+      "Absorb = Edit + Simulate",
+      "**Skip**",
+      "An absorption is only complete when the simulation"
+    ],
+    "skill": "formae-fix-code-drift"
+  },
+  {
+    "scenario": "Existing project has abstractions and unrelated edits; central acceptance succeeded",
+    "required": [
+      "get_command_desired_delta",
+      "unrelated edits",
+      "conflicts"
+    ],
+    "forbidden": [],
+    "skill": "formae-apply"
+  },
+  {
+    "scenario": "User opts into local IaC for already managed stacks",
+    "skill": "formae-project-init",
+    "required": [
+      "complete stacks",
+      "prepare_authoring",
+      "After successful initialization/population",
+      "register_codebase"
+    ],
+    "forbidden": []
+  },
+  {
+    "scenario": "Fresh hosted setup never asks for persistent project directory",
+    "skill": "setup",
+    "required": [
+      "get_codebase_context",
+      "without asking for a project directory",
+      "prepare_authoring"
+    ],
+    "forbidden": []
+  },
+  {
+    "scenario": "Explicit import into a stack that already has managed resources",
+    "skill": "formae-import",
+    "required": [
+      "prepare_authoring",
+      "full destination scope",
+      "explicit management choice"
+    ],
+    "forbidden": []
+  },
+  {
+    "scenario": "Incident patch must remain unaccepted until a later explicit decision",
+    "skill": "formae-patch",
+    "required": [
+      "Do not automatically absorb",
+      "never patch",
+      "context"
+    ],
+    "forbidden": []
+  },
+  {
+    "scenario": "Policy planner must edit complete selected temporary source and never force",
+    "skill": "formae-policy",
+    "required": [
+      "prepare_authoring",
+      "explicit `forma_file`",
+      "context",
+      "Planners return snippets"
+    ],
+    "forbidden": [
+      "`force: true`"
+    ]
+  },
+  {
+    "scenario": "Query destruction has no codebase context but file destruction is scoped",
+    "skill": "formae-destroy",
+    "required": [
+      "Query destruction has no local source context",
+      "File-based destruction carries",
+      "reporting conflicts separately"
+    ],
+    "forbidden": []
+  }
+]

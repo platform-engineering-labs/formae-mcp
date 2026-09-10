@@ -10,6 +10,14 @@ Use this skill to manage formae stack policies via natural language. Two policy 
 - **TTL** — destroys a stack after a duration (`TTLPolicy`).
 - **Auto-reconcile** — periodically reverts out-of-band changes (`AutoReconcilePolicy`).
 
+## Source and installation context
+
+Pass the chosen `profile` on every policy planner and agent call. Call `get_codebase_context` with the actual harness working directory or reuse the selected context. For `none`, use `prepare_authoring` to retrieve the complete affected stacks into an empty disposable directory, preserving existing policies, targets, references and generators. A maintained project is optional.
+
+Every planner call carries the selected `context` plus explicit `forma_file` inside that project or disposable directory, including `delete_standalone_policy`. Planners return snippets and anchors; the harness edits those files. Scans stay in that one selected root. Always pass that context on later apply/destroy calls. For shared policies affecting multiple stacks, prepare the complete set and review all affected stacks. Never switch global profiles or search the MCP process directory.
+
+Use `formae-apply` for soft reconcile, drift decisions and the final combined confirmation. Suggest the optional message in that confirmation, allowing edit or clear. Keep disposable source and dependencies until outcome/retry inspection is complete, then remove the directory. Older agents without the required capabilities need a maintained complete source project.
+
 ## Inline vs standalone — pick the right kind
 
 - **Inline policy** — declared inside a single stack block. Use when the policy is one-off and applies to exactly one stack.
@@ -44,7 +52,7 @@ User says something like "expire lifeline in 20 minutes" or "auto-reconcile prod
 6. **Apply the edit.** For `create` insert the snippet before the anchor line; for `update` replace the lines covered by the anchor range. Add any missing imports near the top of the file. Indent the snippet to match the surrounding context (the snippet is emitted unindented).
 7. **Show the diff** to the user.
 8. **Ask whether to apply to infrastructure.** Default phrasing: *"Apply this change with `reconcile` (simulate first)?"* If the user declines, stop — the file edit stands and the policy will activate on the next manual apply.
-9. **Simulate.** Call `apply_forma` with `mode: "reconcile"`, `simulate: true`, `force: true`, `file_path: <returned file_path>`.
+9. **Simulate.** Call `apply_forma` with `mode: "reconcile"`, `simulate: true`, `file_path: <returned file_path>`.
 10. **Show the simulation, ask for explicit apply confirmation.**
 11. **Apply for real.** Call `apply_forma` with `simulate: false`. Then poll `get_command_status` every 5 seconds (with `sleep 5`); only report state transitions.
 
@@ -71,7 +79,7 @@ User says "create a 1-hour ephemeral policy and attach it to lifeline and dev".
    - An ambiguity error means several files tie for "most stacks". Present the candidates, ask the user once which to use, and pass it as `forma_file` for the rest of the session.
 4. **Read the file, apply the edit** with Edit, adding any missing imports near the top. Indent the snippet to match its surroundings.
 5. **Attach to each named stack.** For each, run the attach workflow below through its edit step. Collect the set of files touched.
-6. **Simulate.** Call `apply_forma` with `mode: "reconcile"`, `simulate: true`, `force: true` on the file carrying the declaration. If attach targets live in other files, simulate each of those too.
+6. **Simulate.** Call `apply_forma` with `mode: "reconcile"`, `simulate: true` on the file carrying the declaration. If attach targets live in other files, simulate each of those too.
 7. **Show the simulation, get explicit confirmation, apply for real**, then poll `get_command_status` every 5 seconds and report only state transitions.
 
 ## Workflow — attach a standalone policy to a stack
@@ -108,7 +116,7 @@ User says "delete the ephemeral-1h policy".
 3. **Show the plan and get confirmation before touching anything.**
 4. **Delete the source declaration first** with Edit. This ordering is deliberate: if a reconcile lands between the edit and the destroy, the agent sees no policy in any forma and does nothing. Reversed, a reconcile in between would recreate the policy.
    - If `notes` warns about a `local` binding, also remove the bare reference inside `forma { }` and any `<binding>.res` entries, or the file will not evaluate.
-5. **Write `destroy_forma_pkl` verbatim to a temp file** under the system temp directory.
+5. **Write `destroy_forma_pkl` verbatim to a temporary file inside the selected workspace**, so the existing PklProject/dependencies and source context remain available.
 6. Call `destroy_forma` with `file_path: <temp>`, `simulate: true`. Show the result, get explicit confirmation, then call it with `simulate: false` and poll.
 7. Delete the temp file.
 
@@ -129,7 +137,7 @@ User asks "what policies are on lifeline?".
 - NEVER use `pkl eval` — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions.
 - NEVER apply without simulating first.
 - NEVER apply without explicit user confirmation.
-- The user's PKL file is the source of truth — always edit the file, never bypass it by going directly to the agent.
+- Pkl is the code interface in both maintained and disposable workspaces. Central accepted desired intent is recorded by real reconcile; an edit or preview alone is not acceptance.
 - When the tool returns multiple candidate files (ambiguous stack), present the list to the user and ask which file to edit. Do not guess.
 - A stack holds at most one policy per type. Never work around a conflict error by editing the PKL directly — resolve it by removing or detaching the conflicting policy.
 - Standalone policies are created and deleted, never updated in place. To change one, delete it and recreate it, or convert the stack to an inline policy.

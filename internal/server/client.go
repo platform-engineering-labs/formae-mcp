@@ -12,6 +12,7 @@ import (
 
 	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
+	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
 
 // FormaeClient is a lightweight HTTP client for the formae agent REST API.
@@ -365,10 +366,22 @@ func (c *FormaeClient) CheckHealth(ctx context.Context) error {
 }
 
 // SubmitCommand submits a forma command (apply/destroy) to the agent.
-func (c *FormaeClient) SubmitCommand(ctx context.Context, command string, mode string, simulate bool, force bool, formaJSON []byte, clientID string) (json.RawMessage, error) {
+func (c *FormaeClient) SubmitCommand(ctx context.Context, command string, mode string, simulate bool, force bool, formaJSON []byte, clientID string, messages ...*string) (json.RawMessage, error) {
+	return c.submitCommand(ctx, command, mode, simulate, force, formaJSON, clientID, nil, messages...)
+}
+
+func (c *FormaeClient) submitCommand(ctx context.Context, command string, mode string, simulate bool, force bool, formaJSON []byte, clientID string, resolution *tools.DriftResolution, messages ...*string) (json.RawMessage, error) {
 	fields := map[string]string{
 		"command":  command,
 		"simulate": fmt.Sprintf("%t", simulate),
+	}
+	if len(messages) > 0 && messages[0] != nil {
+		if *messages[0] != "" {
+			if err := c.requireCapability(ctx, "command-metadata"); err != nil {
+				return nil, err
+			}
+		}
+		fields["message"] = *messages[0]
 	}
 	if mode != "" {
 		fields["mode"] = mode
@@ -377,6 +390,22 @@ func (c *FormaeClient) SubmitCommand(ctx context.Context, command string, mode s
 		fields["force"] = "true"
 	}
 
+	if resolution != nil {
+		if command != "apply" || mode != "reconcile" || force {
+			return nil, fmt.Errorf("resolution requires soft reconcile without force")
+		}
+		if err := c.requireCapability(ctx, "shared-drift-resolution"); err != nil {
+			return nil, err
+		}
+		if !simulate && (resolution.ReviewID == "" || resolution.IdempotencyKey == "") {
+			return nil, fmt.Errorf("real resolution requires the final ReviewID and a stable IdempotencyKey")
+		}
+		encoded, err := json.Marshal(resolution)
+		if err != nil {
+			return nil, err
+		}
+		fields["resolution"] = string(encoded)
+	}
 	var fileContent []byte
 	var fileField, fileName string
 	if formaJSON != nil {
@@ -392,7 +421,7 @@ func (c *FormaeClient) SubmitCommand(ctx context.Context, command string, mode s
 	if err := c.unroutedIf(status); err != nil {
 		return nil, err
 	}
-	if !isCommandStatusOK(status, simulate) {
+	if !isCommandStatusOK(status, simulate) && (command != "apply" || status != http.StatusOK) {
 		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
 	}
 
@@ -579,4 +608,25 @@ func (c *FormaeClient) unroutedIf(status int) error {
 		return nil
 	}
 	return c.route.unrouted()
+}
+
+// requireCapability checks the connected agent, not the local binary or a
+// global cache that could belong to another installation.
+func (c *FormaeClient) requireCapability(ctx context.Context, capability string) error {
+	raw, err := c.GetAgentStats(ctx)
+	if err != nil {
+		return err
+	}
+	var stats struct {
+		Capabilities []string `json:"Capabilities"`
+	}
+	if err := json.Unmarshal(raw, &stats); err != nil {
+		return fmt.Errorf("decode agent capabilities: %w", err)
+	}
+	for _, supported := range stats.Capabilities {
+		if supported == capability {
+			return nil
+		}
+	}
+	return fmt.Errorf("connected agent does not support %s; upgrade the agent before submitting this request", capability)
 }

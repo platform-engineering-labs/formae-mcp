@@ -5,7 +5,9 @@ description: "Use when the user wants to start a brand-new formae project from s
 
 # Initialize a New Formae Project
 
-Scaffold a brand-new formae project from zero: infer schema plugin dependencies, preflight the target directory, run `formae project init`, and set up the standard file structure.
+This is the maintained-codebase opt-in. Invoke it when the user asks to keep IaC locally or create a project. Ordinary hosted authoring uses `prepare_authoring` in a disposable workspace and does not need this step.
+
+Call `get_codebase_context` with the chosen profile and actual harness working directory first. A selected existing project should be adopted explicitly with `register_codebase`, not reinitialized. Otherwise choose the persistent directory from the user's intent and initialize it safely. Keep passing the profile per call; never switch the global active profile.
 
 ## Step 1 — Confirm there is no existing formae project
 
@@ -97,7 +99,13 @@ Inform the user:
 
 Note: the above "no resource plugins needed" statements apply to authoring, eval, and simulate *after* the project exists; `formae project init` with a non-`@local` `--include` is the exception — it queries the agent for the plugin version, so that plugin must already be installed (see Step 4).
 
-## Step 7 — Hand back
+## Step 7 — Populate and register the selected project
+
+If this installation already has managed stacks, select which complete stacks this project will maintain. Use `prepare_authoring` in a separate empty disposable directory with those `stacks`. Read its complete Pkl and dependency files, then incorporate them into the newly initialized project preserving the selected targets, policies, references and generators. Never bootstrap from actual inventory or a partial command delta. An empty installation needs only project initialization with the selected target and schema dependencies; it does not require an extraction of nonexistent stacks.
+
+Verify the project's complete main forma evaluates and includes exactly the selected scope. After successful initialization/population, call `register_codebase` with the canonical persistent `path`, `profile`, and optional exact `stacks` scope. Carry its returned binding ID as `context: {mode: "codebase", binding_id: ...}` on subsequent apply and policy calls. Registration is local and installation-bound; it stores no tokens and never changes the active profile. Remove the bootstrap disposable directory after its files have been safely incorporated and verified. Never register a disposable authoring directory.
+
+## Step 8 — Hand back
 
 Once the scaffold is in place:
 

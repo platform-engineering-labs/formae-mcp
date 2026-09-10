@@ -12,9 +12,16 @@ Install via the
 
 ## [Unreleased]
 
+### Added
+
+- Work with infrastructure without maintaining a local IaC project. Hosted authoring uses disposable complete desired Pkl source and schema dependencies; keeping a project is an explicit opt-in. Local project registration and per-call selection keep concurrent projects and installations independent.
+- Resolve drift centrally with explicit absorb/revert choices, a combined final preview, recorded review identity and idempotent submission. Maintained-source catch-up uses the command's recorded desired contributions and reports local conflicts separately from the infrastructure outcome. These workflows require support from the connected agent.
+- Policy planners accept a per-call profile and selected source context, including disposable Pkl workspaces. Command intent messages can be edited or deliberately cleared during ordinary final confirmation.
+
 ### Fixed
 
-- A hosted sign-in works with a formae that was already installed before the plugin. The launcher adopts an existing `formae` rather than downloading its own, but only installed the `oidc` auth plugin beside a copy it had downloaded itself, so on a machine with its own formae the sign-in failed and told the user to run `pelmgr install oidc`: a tool the launcher never leaves on PATH, against a plugin directory that needs sudo for a system install. The launcher now installs the plugin into `~/.pel/formae/plugins`, the user-writable directory formae also searches, and the sign-in failure says to restart the assistant instead of naming a command. The plugin is also no longer reinstalled on every launch of a downloaded formae.
+- A hosted sign-in works with a formae that was already installed before the plugin. The launcher adopts an existing `formae` rather than downloading its own, but only installed the `oidc` auth plugin beside a copy it had downloaded itself. The launcher now installs the plugin into the user-writable plugin directory and tells the user to restart the assistant.
+- Real apply commands with a synchronous no-change response are accepted instead of reported as failures.
 
 ### Changed
 

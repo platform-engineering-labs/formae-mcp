@@ -42,7 +42,8 @@ func (s *Server) handleCreateInlinePolicy(ctx context.Context, _ *mcp.CallToolRe
 		}
 	}
 
-	cwd, err := os.Getwd()
+	ctx, cwd, d, err := s.policyWorkspace(ctx, input.Profile, input.Context, input.FormaFile)
+	dest = d
 	if err != nil {
 		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
 	}
@@ -80,7 +81,7 @@ func (s *Server) handleCreateInlinePolicy(ctx context.Context, _ *mcp.CallToolRe
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc(s.formaeBin()))
+		resolved, err := resolveStackFile(cwd, input.Stack, s.policyEval(ctx))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -100,7 +101,11 @@ func (s *Server) handleCreateInlinePolicy(ctx context.Context, _ *mcp.CallToolRe
 	// attached to this stack in source but not yet applied.
 	if input.Operation == "set" {
 		for _, lbl := range resolvableLabelsInPoliciesBlock(string(source), input.Stack) {
-			if t, ok := s.standaloneTypeOf(lbl, inventory, cwd); ok && t == input.PolicyType {
+			typ, found, err := s.standaloneTypeOf(ctx, lbl, inventory, cwd)
+			if err != nil {
+				return errorResult(err), nil, nil
+			}
+			if found && typ == input.PolicyType {
 				return errorResult(fmt.Errorf(
 					"stack %q already has standalone policy %q of type %s attached in source; a stack cannot "+
 						"hold both an inline and a standalone policy of the same type. Detach %q first "+
