@@ -26,6 +26,7 @@ For deeper coverage, read formae://docs/concepts.
 2. **Drift handling**: The agent continuously syncs with cloud state. Drift can be overwritten (force-reconcile) or absorbed.
 3. **Discovery**: The agent finds unmanaged resources that can be imported.
 4. **Commands are async**: Apply/destroy run asynchronously. Use get_command_status or list_commands to monitor.
+5. **Rejected resource updates are drift protection**: Simulation uses the agent's inventory, not a fresh cloud read. If the pre-update cloud read catches an out-of-band change that background synchronization has not picked up, formae saves the observed state and marks the update Rejected before performing it. This can make the overall command Failed without a provider error. Compare the refreshed resource state with the forma and re-simulate the same apply. Resolve the drift explicitly: absorb it into the forma, or overwrite only with the user's approval. Do not assume a successful simulation means drift was approved: a retry is not guaranteed to raise ReconcileRejected, and patch mode has no soft-reconcile gate. Do not blindly retry with force=true or hunt for a plugin, credential, or agent fault solely because of Rejected. Other resources may have succeeded; there is no implied rollback. Failed dependents with empty errors may have been skipped because of the rejection; distinguish these from independent failures. See formae://docs/troubleshooting.
 
 ## The IaC Language
 
