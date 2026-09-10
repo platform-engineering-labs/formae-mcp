@@ -35,7 +35,7 @@ type prepareBugReportInput struct {
 
 	EventID      string `json:"event_id,omitempty" jsonschema:"Reference from the original tool call. Freezes that call's installation; do not substitute a current profile."`
 	Profile      string `json:"profile,omitempty" jsonschema:"Explicit hosted profile only when no captured event exists. This fallback is recorded as assistant supplied provenance."`
-	Tool         string `json:"tool,omitempty"`
+	Tool         string `json:"tool,omitempty" jsonschema:"Required when using an explicit profile fallback; name the original tool or CLI operation. Captured events supply this automatically."`
 	Component    string `json:"component" jsonschema:"formae, plugin, mcp, or unknown"`
 	Summary      string `json:"summary"`
 	Expected     string `json:"expected"`
@@ -132,6 +132,17 @@ func scrubReport(v string, credential secret.Value) string {
 		}
 		return decoded
 	})
+	// Nested JSON in local logs can quote both the key and its delimiters.
+	// Inspect a flattened copy only to detect sensitive material; do not send
+	// a partially decoded value whose quoting boundaries may be ambiguous.
+	if strings.Contains(v, `\"`) || strings.Contains(v, `\u0022`) {
+		probe := strings.ReplaceAll(strings.ReplaceAll(v, `\u0022`, `"`), `\`, "")
+		for _, pattern := range reportSecrets {
+			if pattern.MatchString(probe) {
+				return "[redacted: encoded sensitive content omitted]"
+			}
+		}
+	}
 	// Decode escaped key names only. Decoding a value's escaped quotation mark
 	// before matching quoted values would turn that mark into a false delimiter.
 	v = reportJSONKey.ReplaceAllStringFunc(v, func(m string) string {
@@ -273,7 +284,13 @@ func (s *Server) handlePrepareBugReport(ctx context.Context, req *mcp.CallToolRe
 			return fail(fmt.Errorf("versions accepts cli, agent and plugin only"))
 		}
 		v = scrubReport(v, ec.Credential)
-		if strings.ContainsRune(v, 0) || strings.TrimSpace(v) == "" || len(v) > 128 {
+		if strings.ContainsRune(v, 0) {
+			return fail(fmt.Errorf("version must not contain NUL"))
+		}
+		if strings.TrimSpace(v) == "" {
+			return fail(fmt.Errorf("version must not be blank"))
+		}
+		if len(v) > 128 {
 			return fail(fmt.Errorf("version exceeds 128 bytes"))
 		}
 		if v != "" {
@@ -299,7 +316,13 @@ func (s *Server) handlePrepareBugReport(ctx context.Context, req *mcp.CallToolRe
 		if f.required && strings.TrimSpace(*f.p) == "" {
 			return fail(fmt.Errorf("tool, summary, expected, actual and evidence must be nonempty"))
 		}
-		if strings.ContainsRune(*f.p, 0) || (*f.p != "" && f.p != &r.Diagnostics && strings.TrimSpace(*f.p) == "") || len(*f.p) > f.n {
+		if strings.ContainsRune(*f.p, 0) {
+			return fail(fmt.Errorf("report fields must not contain NUL"))
+		}
+		if *f.p != "" && f.p != &r.Diagnostics && strings.TrimSpace(*f.p) == "" {
+			return fail(fmt.Errorf("report metadata must not be blank"))
+		}
+		if len(*f.p) > f.n {
 			return fail(fmt.Errorf("report field exceeds %d UTF-8 bytes", f.n))
 		}
 	}
@@ -401,7 +424,9 @@ func (s *Server) handleSubmitBugReport(ctx context.Context, req *mcp.CallToolReq
 	if json.Unmarshal(body, &receipt) != nil || receipt.ReportID != in.ReportID || receipt.Recipient != supportRecipient || (resp.StatusCode == 202 && receipt.Status != "delivery_unknown") || (resp.StatusCode != 202 && receipt.Status != "sent") {
 		return fail(fmt.Errorf("invalid support receipt; delivery unknown; prepared report retained"))
 	}
-	r.receipt = &receipt
+	if receipt.Status == "sent" {
+		r.receipt = &receipt
+	}
 	b, _ := json.Marshal(receipt)
 	return jsonResult(b), nil, nil
 }

@@ -377,3 +377,76 @@ func TestBugReportEncodedOriginalCredential(t *testing.T) {
 		t.Fatal("changed preview")
 	}
 }
+
+func TestBugReportNestedEncodedSecrets(t *testing.T) {
+	for _, raw := range []string{`level=ERROR body={\"password\":\"hunter2\"}`, `{\u0022password\u0022:\u0022hunter2\u0022}`, `body={\\\"password\\\":\\\"hunter2\\\"}`, `body={\"pass\\u0077ord\":\"hunter2\"}`} {
+		got := scrubReport(raw, secret.Value{})
+		if strings.Contains(got, "hunter2") {
+			t.Fatalf("nested secret leaked: %s", got)
+		}
+		if again := scrubReport(got, secret.Value{}); again != got {
+			t.Fatalf("not idempotent: %s => %s", got, again)
+		}
+	}
+}
+
+func TestBugReportStatusEventsOnlyForSingleCommandStatus(t *testing.T) {
+	single := `{"Commands":[{"CommandId":"old-failure","State":"Failed"}]}`
+	multi := `{"Commands":[{"CommandId":"old-failure","State":"Failed"},{"CommandId":"other","State":"Success"}]}`
+	for _, tc := range []struct {
+		name, payload      string
+		isError, wantEvent bool
+	}{{"list_commands", single, false, false}, {"list_resources", single, false, false}, {"get_command_status", multi, false, false}, {"get_command_status", single, false, true}, {"list_resources", "local failure", true, true}} {
+		t.Run(tc.name+fmt.Sprint(tc.isError)+tc.payload, func(t *testing.T) {
+			s := reportServer(t)
+			handler := s.captureReportEvent(func(ctx context.Context, _ string, _ mcp.Request) (mcp.Result, error) {
+				if _, err := s.resolveCtx(ctx, ""); err != nil {
+					t.Fatal(err)
+				}
+				r := textResult(tc.payload)
+				r.IsError = tc.isError
+				return r, nil
+			})
+			result, err := handler(context.Background(), "tools/call", &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tc.name}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := result.(*mcp.CallToolResult)
+			if (len(r.Content) > 1) != tc.wantEvent {
+				t.Fatalf("event=%v want=%v", len(r.Content) > 1, tc.wantEvent)
+			}
+		})
+	}
+}
+
+func TestBugReportUnknownRetryObservesSent(t *testing.T) {
+	s := reportServer(t)
+	id, preview := prepared(t, s, nil)
+	calls := 0
+	s.reportTransport = reportTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != string(preview) || r.Header.Get("Idempotency-Key") != id {
+			t.Fatal("retry identity changed")
+		}
+		status := 202
+		delivery := "delivery_unknown"
+		if calls > 1 {
+			status = 200
+			delivery = "sent"
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"report_id":%q,"status":%q,"recipient":"support@formae.ai","duplicate":true}`, id, delivery)))}, nil
+	})
+	for _, want := range []string{"delivery_unknown", "sent", "sent"} {
+		r, _, _ := s.handleSubmitBugReport(context.Background(), nil, submitBugReportInput{ReportID: id, Confirmed: true})
+		if r.IsError || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, `"status":"`+want+`"`) {
+			t.Fatal(r.Content)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("calls=%d", calls)
+	}
+}

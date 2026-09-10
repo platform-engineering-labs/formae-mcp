@@ -155,5 +155,5 @@ func (c *FormaeClient) advance(r reach) {
 // newBugReportRequest addresses the hosted support control plane, independently
 // of agent routing or health. The origin is deliberately not configurable.
 func newBugReportRequest(ctx context.Context, installation string, body []byte) (*http.Request, error) {
-	return http.NewRequestWithContext(ctx, http.MethodPost, "https://console.formae.ai/api/v1/installations/"+installation+"/bug-reports", bytes.NewReader(body))
+	return http.NewRequestWithContext(ctx, http.MethodPost, consoleURL+"/api/v1/installations/"+installation+"/bug-reports", bytes.NewReader(body))
 }

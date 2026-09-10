@@ -224,10 +224,22 @@ func (s *Server) captureReportEvent(next mcp.MethodHandler) mcp.MethodHandler {
 		if err != nil {
 			diagnostics = err.Error()
 		}
-		if res != nil && len(res.Content) > 0 {
+		if res != nil && len(res.Content) > 0 && (failed || req.Params.Name == "get_command_status") {
 			if first, ok := res.Content[0].(*mcp.TextContent); ok {
 				var value any
 				if json.Unmarshal([]byte(first.Text), &value) == nil {
+					// Successful tool results are evidence of failure only when a
+					// status lookup describes exactly one command, never history pages.
+					if !failed {
+						m, ok := value.(map[string]any)
+						if !ok {
+							return result, err
+						}
+						commands, ok := reportField(m, "Commands").([]any)
+						if !ok || len(commands) != 1 {
+							return result, err
+						}
+					}
 					f, id, e := reportFailureFields(value)
 					statusFailed = f
 					partial = reportPartialFailure(value)
