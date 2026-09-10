@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -72,6 +73,8 @@ type Server struct {
 	// auth plugin's pending login is in-process memory that no second process
 	// could resume.
 	loginState
+	reportState     reportState
+	reportTransport http.RoundTripper
 }
 
 // New creates a new formae MCP server connected to the given agent endpoint.
@@ -93,6 +96,7 @@ func New(endpoint string) *Server {
 	}
 	s.newClient = s.clientFrom
 
+	s.mcpServer.AddReceivingMiddleware(s.captureReportEvent)
 	s.registerTools()
 	s.registerResources()
 	s.registerPrompts()
@@ -168,6 +172,7 @@ func (s *Server) resolveCtx(ctx context.Context, profileName string) (execctx.Co
 	if err != nil {
 		return execctx.Context{}, explainLapsedSession(s.explainIfTooOld(err))
 	}
+	captureResolvedReportContext(ctx, ec)
 	return ec, nil
 }
 
@@ -211,6 +216,8 @@ func (s *Server) Run(ctx context.Context, transport mcp.Transport) error {
 
 func (s *Server) registerTools() {
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "prepare_bug_report", Description: tools.PrepareBugReportDescription, Annotations: readOnly}, s.handlePrepareBugReport)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "submit_bug_report", Description: tools.SubmitBugReportDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true}}, s.handleSubmitBugReport)
 
 	// Read-only tools
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
@@ -797,8 +804,10 @@ func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequ
 	// It creates, changes and destroys nothing, so "might this have acted?"
 	// has one answer however it fails, and neither wording can send an operator
 	// looking for work that cannot exist. Do not copy this to a mutation.
+	clientLog := snapshotClientLog(ctx, ec)
 	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
+		clientLog.capture(ctx)
 		return attribute(resolved(ec),
 			errorResult(fmt.Errorf("formae extract failed: %w\noutput: %s",
 				err, safeSubprocessOutput(output, ec.Credential)))), nil, nil
@@ -1087,9 +1096,11 @@ func evalFormaFile(ctx context.Context, ec execctx.Context, filePath string) ([]
 	if ec.ProfileName != "" {
 		args = append(args, "--profile", ec.ProfileName)
 	}
+	clientLog := snapshotClientLog(ctx, ec)
 	cmd := commandWithContext(ctx, ec.FormaeBin, args...)
 	output, err := cmd.Output()
 	if err != nil {
+		clientLog.capture(ctx)
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return nil, fmt.Errorf("formae eval failed: %s", string(exitErr.Stderr))
 		}

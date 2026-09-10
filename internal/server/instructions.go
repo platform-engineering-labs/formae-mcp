@@ -69,6 +69,18 @@ Queries use field:value pairs separated by spaces (AND-combined). See formae://d
 
 For common error messages and what they mean: formae://docs/troubleshooting.
 
+## Reporting product bugs
+
+For **hosted formae only**, use prepare_bug_report and submit_bug_report to report a likely formae, plugin, or MCP defect to support@formae.ai. This applies across tools, including local CLI failures before a command reaches the agent, such as JSON-to-Pkl conversion failures.
+
+- Establish evidence: describe expected versus actual behavior and why the failure appears to be a product defect. An unfamiliar error alone is not enough. Handle invalid input, missing permissions, expired credentials, quotas, Rejected updates protecting drift, and skipped dependents through their normal workflows unless there is separate evidence of a bug. Do not repeat an apply or destroy just to reproduce an error.
+- Prepare a report using the original operation's diagnostic reference when available, so the report retains its installation and profile even if the active profile changes. Include command ID and failure timestamp when known. Be explicit about partial success or an unknown operation outcome; never invent missing diagnostics or versions.
+- Hosted agent and plugin logs are already available to support. Supply their correlation identifiers rather than fetching those logs. Include only relevant, bounded local CLI diagnostic excerpts, with secrets redacted. Do not attach whole inventories, profiles, forma files, or conversation transcripts.
+- Show the complete prepared report, including the local diagnostics, before submission. Set confirmed=true only after the user approves sending that report or has explicitly authorized bug reporting for this session. Preparation does not send email; submission sends the stored report unchanged.
+- A submission receipt confirms only the status it names. If delivery is unknown, retain the report ID and say so; do not claim email was delivered. Do not generate another report about a reporting failure or retry infrastructure because a report could not be sent.
+
+For **self-hosted/OSS formae**, use https://github.com/platform-engineering-labs/formae/issues or https://discord.gg/hr6dHaW76k for support. Do not select an unrelated hosted profile to bypass this restriction.
+
 ## Authoring Infrastructure
 
 Use these tools when helping a user write or scaffold a new plugin or forma project:
