@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,5 +65,42 @@ func TestSetupSkill_HoldsItsOwnOrdering(t *testing.T) {
 	if !strings.Contains(text[console:], "Only call `complete_login` if") {
 		t.Error("the return leg does not make complete_login conditional; " +
 			"an already-signed-in login leaves nothing for it to complete")
+	}
+}
+
+// These workflow fixtures guard concrete protocol and source-lifecycle guidance.
+// They are not a substitute for model pressure tests or actual command tests.
+func TestOptionalCodebaseWorkflowContracts(t *testing.T) {
+	raw, err := os.ReadFile("../../testdata/workflows/optional-codebase.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures []struct {
+		Scenario  string
+		Skill     string
+		Required  []string
+		Forbidden []string
+	}
+	if err := json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range fixtures {
+		t.Run(fixture.Scenario, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("..", "..", "skills", fixture.Skill, "SKILL.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body := string(raw)
+			for _, required := range fixture.Required {
+				if !strings.Contains(body, required) {
+					t.Errorf("missing workflow contract %q", required)
+				}
+			}
+			for _, forbidden := range fixture.Forbidden {
+				if strings.Contains(body, forbidden) {
+					t.Errorf("obsolete unsafe workflow %q", forbidden)
+				}
+			}
+		})
 	}
 }

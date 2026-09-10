@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [Unreleased]
+
+### Added
+
+- Work with infrastructure without maintaining a local IaC project. Hosted authoring uses disposable complete desired Pkl source and schema dependencies; keeping a project is an explicit opt-in. Local project registration and per-call selection keep concurrent projects and installations independent.
+- Resolve drift centrally with explicit absorb/revert choices, a combined final preview, recorded review identity and idempotent submission. Maintained-source catch-up uses the command's recorded desired contributions and reports local conflicts separately from the infrastructure outcome. These workflows require support from the connected agent.
+- Policy planners accept a per-call profile and selected source context, including disposable Pkl workspaces. Command intent messages can be edited or deliberately cleared during ordinary final confirmation.
+
+### Fixed
+
+- Real apply commands with a synchronous no-change response are accepted instead of reported as failures.
+
 ## [0.9.2]
 
 ### Added

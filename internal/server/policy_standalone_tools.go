@@ -60,32 +60,23 @@ func mcpPolicyType(agentType string) string {
 	return agentType
 }
 
-// fetchPolicies reads the agent's standalone policy inventory from the
-// active/default profile's agent (empty profile = active/default, matching the
-// server's per-call client resolution).
-//
-// It reports the destination alongside the inventory because callers
-// deliberately swallow its error: a planner's real work is local file
-// planning, so an unreachable agent downgrades to "no policies known" rather
-// than failing the tool. That makes "the agent answered" underivable from the
-// planner's result, and a clean plan claiming an installation had answered
-// would assert something false about a real installation.
-//
-// Under hosted this makes a second thing visible. These tools take no profile
-// argument, so the inventory read resolves the active profile; with more than
-// one profile that is ambiguous, and the ambiguity is swallowed like any other
-// failure. The attribution is what says the installation was never reached.
-// Giving the policy tools a profile argument is the actual fix, and belongs
-// with whatever revisits that tool surface.
+// fetchPolicies reuses the policy call's resolved client. Legacy context-free
+// calls retain active/default routing. Destination evidence survives a planner
+// choosing to continue from local source after an inventory read error.
 func (s *Server) fetchPolicies(ctx context.Context) ([]policyInventoryItem, destination, error) {
-	ec, err := s.resolveCtx(ctx, "")
-	if err != nil {
-		return nil, destination{}, err
+	call, ok := ctx.Value(policyCallKey{}).(*policyCall)
+	if !ok {
+		ec, err := s.resolveCtx(ctx, "")
+		if err != nil {
+			return nil, destination{}, err
+		}
+		c, err := s.newClient(ec)
+		if err != nil {
+			return nil, resolved(ec), err
+		}
+		call = &policyCall{ec: ec, client: c}
 	}
-	c, err := s.newClient(ec)
-	if err != nil {
-		return nil, resolved(ec), err
-	}
+	ec, c := call.ec, call.client
 	body, err := c.ListPolicies(ctx)
 	if err != nil {
 		return nil, reached(ec, c), fmt.Errorf("list policies from agent: %w", err)
@@ -101,15 +92,18 @@ func (s *Server) fetchPolicies(ctx context.Context) ([]policyInventoryItem, dest
 // consulting the agent inventory first and falling back to the workspace source
 // (for policies declared but not yet applied). Returns ok=false when the label
 // resolves nowhere.
-func (s *Server) standaloneTypeOf(label string, items []policyInventoryItem, cwd string) (string, bool) {
+func (s *Server) standaloneTypeOf(ctx context.Context, label string, items []policyInventoryItem, cwd string) (string, bool, error) {
 	if item, known := findPolicyByLabel(items, label); known {
-		return mcpPolicyType(item.Type), true
+		return mcpPolicyType(item.Type), true, nil
 	}
-	t, found, err := standalonePolicyTypeFromWorkspace(cwd, label, currentEvalFunc(s.formaeBin()))
+	t, found, err := standalonePolicyTypeFromWorkspace(cwd, label, s.policyEval(ctx))
+	if isSourceContextError(err) {
+		return "", false, err
+	}
 	if err != nil || !found {
-		return "", false
+		return "", false, nil
 	}
-	return t, true
+	return t, true, nil
 }
 
 // findPolicyByLabel returns the inventory entry for a label.
@@ -167,7 +161,8 @@ func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 		return errorResult(err), nil, nil
 	}
 
-	cwd, err := os.Getwd()
+	ctx, cwd, selected, err := s.policyWorkspace(ctx, input.Profile, input.Context, input.FormaFile)
+	dest = selected
 	if err != nil {
 		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
 	}
@@ -200,7 +195,7 @@ func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 	// sharing one is an invalid project state. Check the whole workspace before
 	// planning, since the declaration may live in a file other than the one we
 	// are about to edit.
-	if existing, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc(s.formaeBin())); err == nil {
+	if existing, err := resolveStandalonePolicyFile(cwd, input.Label, s.policyEval(ctx)); err == nil {
 		out := tools.CreateStandalonePolicyOutput{
 			FilePath:  existing,
 			Operation: "noop",
@@ -216,14 +211,14 @@ func (s *Server) handleCreateStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 		return jsonResult(body), nil, nil
 	} else {
 		var ambiguous *policySourceAmbiguousError
-		if errors.As(err, &ambiguous) {
+		if isSourceContextError(err) || errors.As(err, &ambiguous) {
 			return errorResult(err), nil, nil
 		}
 	}
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		resolved, err := resolveMainFormaFile(cwd, currentEvalFunc(s.formaeBin()))
+		resolved, err := resolveMainFormaFile(cwd, s.policyEval(ctx))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -282,7 +277,8 @@ func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 		return errorResult(err), nil, nil
 	}
 
-	cwd, err := os.Getwd()
+	ctx, cwd, selected, err := s.policyWorkspace(ctx, input.Profile, input.Context, input.FormaFile)
+	dest = selected
 	if err != nil {
 		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
 	}
@@ -302,7 +298,7 @@ func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 	if item, known := findPolicyByLabel(items, input.PolicyLabel); known {
 		policyType = mcpPolicyType(item.Type)
 	} else {
-		declType, found, err := standalonePolicyTypeFromWorkspace(cwd, input.PolicyLabel, currentEvalFunc(s.formaeBin()))
+		declType, found, err := standalonePolicyTypeFromWorkspace(cwd, input.PolicyLabel, s.policyEval(ctx))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -336,7 +332,7 @@ func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 
 	filePath := input.FormaFile
 	if filePath == "" {
-		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc(s.formaeBin()))
+		resolved, err := resolveStackFile(cwd, input.Stack, s.policyEval(ctx))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -367,7 +363,11 @@ func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 			if lbl == input.PolicyLabel {
 				continue
 			}
-			if t, ok := s.standaloneTypeOf(lbl, items, cwd); ok && t == policyType {
+			typ, found, err := s.standaloneTypeOf(ctx, lbl, items, cwd)
+			if err != nil {
+				return errorResult(err), nil, nil
+			}
+			if found && typ == policyType {
 				return errorResult(fmt.Errorf(
 					"stack %q already has standalone policy %q of type %s attached in source; a stack may "+
 						"hold only one policy per type. Detach %q first (detach_standalone_policy)",
@@ -392,7 +392,7 @@ func (s *Server) handleAttachStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 	return jsonResult(body), nil, nil
 }
 
-func (s *Server) handleDetachStandalonePolicy(_ context.Context, _ *mcp.CallToolRequest, input tools.DetachStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
+func (s *Server) handleDetachStandalonePolicy(ctx context.Context, _ *mcp.CallToolRequest, input tools.DetachStandalonePolicyInput) (*mcp.CallToolResult, any, error) {
 	if input.Stack == "" {
 		return errorResult(fmt.Errorf("stack is required")), nil, nil
 	}
@@ -403,13 +403,13 @@ func (s *Server) handleDetachStandalonePolicy(_ context.Context, _ *mcp.CallTool
 		return errorResult(err), nil, nil
 	}
 
+	ctx, cwd, _, err := s.policyWorkspace(ctx, input.Profile, input.Context, input.FormaFile)
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	filePath := input.FormaFile
 	if filePath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
-		}
-		resolved, err := resolveStackFile(cwd, input.Stack, currentEvalFunc(s.formaeBin()))
+		resolved, err := resolveStackFile(cwd, input.Stack, s.policyEval(ctx))
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -473,6 +473,11 @@ func (s *Server) handleDeleteStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 		return errorResult(err), nil, nil
 	}
 
+	ctx, cwd, selected, err := s.policyWorkspace(ctx, input.Profile, input.Context, input.FormaFile)
+	dest = selected
+	if err != nil {
+		return errorResult(err), nil, nil
+	}
 	inventory, d, err := s.fetchPolicies(ctx)
 	dest = d
 	if err != nil {
@@ -499,11 +504,6 @@ func (s *Server) handleDeleteStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 		return errorResult(err), nil, nil
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return errorResult(fmt.Errorf("getwd: %w", err)), nil, nil
-	}
-
 	// The agent's AttachedStacks only reflects APPLIED attachments. A stack may
 	// have attached this policy in source without applying yet, in which case
 	// the agent reports it unattached. Deleting the declaration then leaves a
@@ -521,9 +521,12 @@ func (s *Server) handleDeleteStandalonePolicy(ctx context.Context, _ *mcp.CallTo
 			input.Label, len(refs), refs)), nil, nil
 	}
 
-	filePath, err := resolveStandalonePolicyFile(cwd, input.Label, currentEvalFunc(s.formaeBin()))
-	if err != nil {
-		return errorResult(err), nil, nil
+	filePath := input.FormaFile
+	if filePath == "" {
+		filePath, err = resolveStandalonePolicyFile(cwd, input.Label, s.policyEval(ctx))
+		if err != nil {
+			return errorResult(err), nil, nil
+		}
 	}
 
 	source, err := os.ReadFile(filePath)

@@ -1,92 +1,35 @@
 ---
 name: formae-fix-code-drift
-description: "Use when the user wants to check for infrastructure drift, see what changed out-of-band, or absorb/overwrite out-of-band changes into their IaC codebase"
+description: "Use when the user wants to check infrastructure drift or explicitly absorb or revert out-of-band changes, with or without a maintained IaC codebase"
 ---
 
-# Drift Detection and Absorption
+# Resolve Infrastructure Drift
 
-## Targeting an environment (`profile`)
+Absorb records accepted desired intent centrally. Revert restores the previous eligible desired declaration. A preview or source edit alone does not finish acceptance.
 
-These tools hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on **every** agent call in this flow (`list_changes_since_last_reconcile`, `apply_forma`, `extract_resources`, `get_command_status`) so it targets that environment — for this session only, without changing global state. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
+## Select context
 
-## MANDATORY RULE: Absorb = Edit + Simulate
+Pass the selected `profile` on every agent call; never switch the global active profile to prepare a session. Call `get_codebase_context` with the actual harness `working_directory`, or reuse the explicit selection for this operation. Follow `formae-author` for selection and disposable source preparation. A hosted user with mode `none` needs no maintained project. Known candidates require selection once; missing directories and corrupt registration are actionable errors.
 
-When absorbing drift, you MUST run a reconcile simulation immediately after editing the PKL file — in the same turn, without asking, without pausing, without reporting success. An absorption is only complete when the simulation confirms no changes required. Telling the user "done" after an edit without simulating is WRONG.
+Check the connected installation's `shared-drift-resolution` and `desired-stack-extraction` capabilities. A local binary version does not establish server support. An old agent requires a complete existing codebase and cannot perform this recorded resolution workflow; explain that limitation without sending unsupported controls.
 
-## Workflow
+For mode `codebase`, read the selected main forma and preserve its original declaration. For mode `none`, create an empty disposable directory and call `prepare_authoring` for the complete affected stacks. Keep its returned `context`, PklProject, dependencies and full Pkl files. Desired extraction supplies accepted intent, not a claim that current drift is settled. Never prepare a full reconcile from filtered inventory or a command delta.
 
-### 1. Check for drift
+## Observe, decide, review, submit
 
-Ask the user whether they want to check a specific stack or all stacks. Then call `list_changes_since_last_reconcile` with the appropriate stack parameter (or omit it for all stacks).
+1. Call `apply_forma` with the original complete declaration, selected `context`, `mode: reconcile`, `simulate: true`, and no force or resolution. Inspect the structured rejection's `ObservationID`, stable `ResourceID`, and pinned observed origin. Present current actionable changes grouped by stack. Historical unavailable inputs or provenance remain unavailable.
+2. Obtain exactly one explicit `absorb` or `revert` choice for every actionable `ResourceID` in the observation. Coupled properties are one resource choice. There is no skip within that stack's resolution; the user can abandon the operation without submitting.
+3. Simulate the same original complete declaration with `resolution: {ObservationID, Decisions: [{ResourceID, Action}, ...]}`. Show the final combined plan: acceptance records, provider writes for reverts, compatible user edits/additions/deletions, dependency propagation, and warnings. Absorb can coexist with required provider work; never label the whole plan write-free just because it contains acceptance.
+4. Present a factual suggested `message` with the final plan and ask for confirmation. The user may accept, edit or clear the message in that same confirmation; clearing means `message: ""` and needs no separate approval. Do not include secrets.
+5. After confirmation, submit the same original declaration and decisions with `simulate: false`, the returned `ReviewID`, and a caller-generated stable `IdempotencyKey`. Retain the exact input, final message and key until outcome is known. Retry an uncertain request with that identical submission and key; changing it causes an idempotency conflict. Never silently retry with force.
+6. Use `get_command_status` with `wait: true`. Report the durable central outcome and command ID, distinguishing acceptance from provider changes. A terminal Failed command can contain desired contributions; report the actual failures.
 
-### 2. Verify drift against IaC code
+`stale-review` requires a fresh initial observation, complete choices, final simulation and confirmation. If infrastructure source changes, restart that review. Message editing before admission does not require another review; message changes after admission cannot reuse the same key. For `decision-edit-conflict`, resolve the source conflict and re-review. Keep the original full declaration through choice review; do not edit it to pre-absorb the observation.
 
-The drift endpoint reports modifications since the last reconcile. However, drift may have already been absorbed into the IaC code without a reconcile having been run since. To distinguish true drift from already-absorbed drift:
+If a literal secret exists only as an opaque hash, retain the explicit hashed-value diagnostic. Obtain the required plaintext from an authorized source or preserve a valid reference/generator declaration. Never paste the hash as a value, invent plaintext, strip classification or save secrets into context metadata. For `desired-intent-unavailable` naming a failed create, investigate the resource and failed command, recover/reapply its declaration, then consider removal. Discovery alone does not clear that intent; force does not bypass recovery.
 
-1. If `list_changes_since_last_reconcile` returns modifications, ask the user for the path to their main forma file
-2. Run `apply_forma` with `mode: reconcile`, `simulate: true`, `force: true` on that file
-3. Cross-reference the results:
-   - Resources in the drift list that also appear as **updates** in the simulation → **true drift** (code doesn't match cloud)
-   - Resources in the drift list but the simulation shows **no changes** for them → **already absorbed** (code was updated but no reconcile has been run yet)
+## Catch up the selected source
 
-Only present true drift to the user. For already-absorbed drift, mention that those resources were previously absorbed and will clear on the next reconcile.
+After the central command is terminal, mode `codebase` calls `get_command_desired_delta` for that command. This is **partial source-edit guidance**, including deleted declarations, not a complete reconcile file. Automatically update only the selected project through the harness's file editing tools, preserving abstractions, generators, references and unrelated edits. Validate the edited complete main forma with a soft reconcile simulation. Report source conflicts separately from central success; do not overwrite conflicting local work or say source is synchronized when it is not.
 
-### 3. Present results
-
-**If no true drift:** Report that all stacks are clean — any reported drift has already been absorbed and will clear on the next reconcile.
-
-**If true drift is detected:** Present the modifications grouped by stack, showing:
-- Resource type (e.g., `AWS::S3::Bucket`)
-- Resource label
-- Operation (`update` = properties changed, `delete` = resource was removed outside formae)
-
-### 4. Ask what to do
-
-For each drifted resource (or group of resources), ask the user what action to take:
-
-- **Absorb**: Incorporate the out-of-band change into the IaC codebase so the code matches what's actually deployed
-- **Overwrite**: Force-reconcile to push the desired IaC state back to the cloud, reverting the out-of-band change
-- **Skip**: Leave it for now
-
-### 5. Absorb workflow
-
-When the user chooses absorb, you MUST execute all of (a) through (e) in a single uninterrupted sequence:
-
-(a) Call `extract_resources` with a query matching the drifted resource
-
-(b) Read the existing IaC codebase to understand how the resource is currently defined
-
-(c) Edit the PKL source to match the extracted (actual) state — only change what drifted
-
-(d) In the SAME turn, without pausing: call `apply_forma` with `mode: reconcile`, `simulate: true`, `force: true` on the **main forma file**. Then call `get_command_status` to check the result.
-
-(e) Evaluate the simulation:
-   - **No changes required** → report success to the user with the simulation as evidence
-   - **Changes remain** → fix the PKL and loop back to (d) without asking
-   - **Unexpected side effects** → stop and ask the user
-
-### 6. Overwrite workflow
-
-For resources the user wants to overwrite:
-
-1. Run `apply_forma` with `mode: reconcile`, `simulate: true`, `force: true` on the main forma file
-2. Present the simulation showing what will be pushed back to the cloud
-3. **Ask for explicit confirmation** before proceeding
-4. Run `apply_forma` with `mode: reconcile`, `simulate: false`, `force: true`
-5. Poll `get_command_status` to monitor progress:
-   - **Wait 5 seconds between polls** (`sleep 5`). Do NOT poll in a tight loop.
-   - **Only report state transitions** — silently poll until a resource changes status.
-   - Summarize what changed rather than dumping the full JSON.
-
-### 7. Post-workflow
-
-After handling all drifted resources, re-run the verification from step 2 to confirm all remaining drift has been absorbed. Note that `list_changes_since_last_reconcile` alone may still report drift for absorbed resources — this is expected and will clear on the next reconcile.
-
-## Important
-
-- NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
-- NEVER report an absorption as complete without a simulation proving it is a no-op
-- NEVER overwrite without user confirmation
-- When absorbing, only modify the specific properties that drifted — do not restructure or rewrite unrelated code
-- Absorbing drift never renames a resource — leave each resource's `label` as-is. (Renaming is a separate, deliberate operation via `alias`; it is not part of drift absorption.)
-- If the user has multiple drifted resources, handle them one at a time or in logical groups as the user prefers
+Mode `none` performs no maintained-source synchronization. Keep the disposable directory while a submission might need replay or inspection. Remove it after terminal outcome or after abandoning a preview that made no real submission. A future operation prepares a fresh complete desired extraction. Patch remains incident work and is never automatically absorbed.

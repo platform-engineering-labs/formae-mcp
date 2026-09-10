@@ -74,8 +74,8 @@ type formaPredicate func(formaJSON []byte) bool
 
 // resolveFormaFileBy walks the workspace, evaluates each PKL file, and returns
 // every file whose forma satisfies pred, in walk order. Files that fail to
-// evaluate are skipped silently — a workspace routinely contains PKL modules
-// that are not standalone formae (vars, templates, partial imports).
+// evaluate are skipped when they are ordinary partial modules (vars, templates,
+// partial imports). Source context/path/scope failures stop the entire scan.
 func resolveFormaFileBy(root string, eval EvalFunc, pred formaPredicate) ([]string, error) {
 	files, err := walkPKLFiles(root)
 	if err != nil {
@@ -85,6 +85,9 @@ func resolveFormaFileBy(root string, eval EvalFunc, pred formaPredicate) ([]stri
 	for _, file := range files {
 		out, evalErr := eval(file)
 		if evalErr != nil {
+			if isSourceContextError(evalErr) {
+				return nil, evalErr
+			}
 			continue
 		}
 		if pred(out) {
@@ -261,6 +264,9 @@ func resolveMainFormaFile(root string, eval EvalFunc) (string, error) {
 	for _, file := range files {
 		out, evalErr := eval(file)
 		if evalErr != nil {
+			if isSourceContextError(evalErr) {
+				return "", evalErr
+			}
 			continue
 		}
 		count := countStacksInFormaJSON(out)

@@ -210,6 +210,14 @@ already, or just connected), tell them they can work with their
 infrastructure, and offer a first step: listing what they have, or authoring
 something new.
 
+## Local source context after connection
+
+Once the connection and cloud-account checks above are complete, call `get_codebase_context` with the selected `profile` and the actual harness `working_directory`. This is local context discovery, not an installation-wide preference. No global active codebase exists.
+
+A fresh hosted installation returns `none`: continue without asking for a project directory. Pkl authoring will use `prepare_authoring` in a disposable workspace when needed. If registered candidates need selection, present them once; report a missing directory or corrupt registry rather than silently switching away. Carry the explicit selection to authoring/apply. A user who wants to keep IaC locally can opt in naturally through `formae-project-init` and successful `register_codebase`; setup never creates or registers a hidden persistent project.
+
+Before no-codebase authoring, check the actual connected `desired-stack-extraction` and `shared-drift-resolution` capabilities. An older agent may be reachable and usable while still requiring an existing complete codebase for authoring. Do not infer new workflow support from local CLI version or declare an older installation upgraded.
+
 ## Step 7 — Self-hosted, only if they said so
 
 Reached only when the user volunteered that they run their own agent.
