@@ -30,6 +30,8 @@ A corrupt registry is an actionable error, not an empty registry. Do not scan ar
 
 If the user says they want to keep IaC locally, hand off to `formae-project-init`. This opt-in can happen at any time. Initialize their selected project, extract selected managed stacks completely (or initialize with the target on an empty installation), verify it and register it only after successful initialization. Do not ask about a maintained project as a prerequisite for hosted authoring.
 
+For ordinary resource edits, continue through `formae-apply` with the complete affected stack and selected context, even when editing one property. A small or quick edit does not select patch. Patch is reserved for an explicit patch request or stated incident/hotfix intent; drift leads to keep/revert decisions.
+
 ## Step 2 — Existing-cloud-resources branch (orthogonal to Step 1)
 
 Before authoring new resources, ask: is the intent to bring **existing** cloud resources under management (resources that already exist in the cloud), or to author new ones?

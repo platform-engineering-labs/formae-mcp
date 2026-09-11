@@ -31,6 +31,8 @@ For deeper coverage, read formae://docs/concepts.
 - **Reconcile** (default): Guarantees infrastructure matches the forma file exactly. Creates missing, destroys extra, updates differences. Use for planned deployments.
 - **Patch**: Only applies specified changes. Other resources untouched. Use for urgent fixes during incidents. Creates drift that should later be reconciled.
 
+Ordinary updates use a complete declaration of the affected stack with mode=reconcile and force=false (or omitted), even for one resource or one label. In no-codebase mode, prepare the complete desired stack, modify it, and carry the returned context on both simulation and real submission. In maintained-codebase mode, use the selected complete source and binding context. Small scope, 'quick' wording, a patch-named file, or detected drift does not authorize patch. Use patch only when the user explicitly requests patch mode or their stated incident/hotfix intent calls for a temporary intervention that defers reconciliation. Never switch to patch or force to bypass a drift rejection; follow the explicit keep/revert workflow. If only partial source is available, retrieve the complete desired stack rather than changing the apply mode.
+
 ## Important Workflows
 
 1. **Always simulate before applying**: Use simulate=true to preview changes.

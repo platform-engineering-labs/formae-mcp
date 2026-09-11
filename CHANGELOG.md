@@ -14,6 +14,8 @@ Install via the
 
 ### Fixed
 
+- Ordinary resource edits, including a single label, consistently use complete-stack soft reconcile. Patch guidance now requires an explicit patch request or incident/hotfix intent, preserving drift decisions and selected source context.
+
 - Without a maintained codebase, setup and infrastructure workflows describe resources, changes and outcomes while keeping disposable source preparation internal. Initial target creation no longer requires a persistent project or placeholder stack. Maintained-codebase workflows continue to report source changes and conflicts.
 - Drift prompts distinguish changes detected outside formae from temporary patches made through formae, and separate keep/revert decisions from newly requested changes.
 - The MCP reports its selected formae executable to the assistant, including managed installations outside the shell PATH. Schema lookup guidance uses exact installed versions instead of broad searches through local caches.

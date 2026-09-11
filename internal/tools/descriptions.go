@@ -78,6 +78,8 @@ This tool evaluates the forma file (PKL -> JSON if needed) and submits it to the
 
 - patch: Only applies the changes explicitly specified in the forma file. Other resources are untouched. Use this for urgent targeted fixes (e.g., scaling up a cluster during an incident). Patches create drift that should later be reconciled.
 
+Ordinary updates use a complete declaration of the affected stack with mode=reconcile and force=false (or omitted), even for one resource or one label. In no-codebase mode, prepare the complete desired stack, modify it, and carry the returned context on both simulation and real submission. In maintained-codebase mode, use the selected complete source and binding context. Small scope, 'quick' wording, a patch-named file, or detected drift does not authorize patch. Use patch only when the user explicitly requests patch mode or their stated incident/hotfix intent calls for a temporary intervention that defers reconciliation. Never switch to patch or force to bypass a drift rejection; follow the explicit keep/revert workflow. If only partial source is available, retrieve the complete desired stack rather than changing the apply mode.
+
 Use simulate=true to preview changes without modifying infrastructure.
 Select source with get_codebase_context. For a maintained project pass context {mode:codebase,binding_id}; for no-codebase authoring use prepare_authoring and its full files/dependencies/context. New workflows require the connected agent capabilities, not just a local CLI version.
 
