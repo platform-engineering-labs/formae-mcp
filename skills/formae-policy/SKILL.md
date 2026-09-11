@@ -17,7 +17,7 @@ duration, affected resources and outcomes. Treat file paths, snippets, anchors
 and edits in the steps below as internal authoring details; ask about policy
 choices rather than files. Mode `codebase` retains selected-source reporting.
 
-Pass the chosen `profile` on every policy planner and agent call. Call `get_codebase_context` with the actual harness working directory or reuse the selected context. For `none`, use `prepare_authoring` to retrieve the complete affected stacks into an empty disposable directory, preserving existing policies, targets, references and generators. A maintained project is optional.
+Pass the chosen `profile` on every policy planner and agent call. Call `get_codebase_context` with the actual harness working directory or reuse the selected context. For `none`, use `prepare_authoring` to retrieve the complete affected stacks into a fresh `~/.formae-ai/scratch/<operation-id>/` directory, preserving existing policies, targets, references and generators. A maintained project is optional.
 
 Every planner call carries the selected `context` plus explicit `forma_file` inside that project or disposable directory, including `delete_standalone_policy`. Planners return snippets and anchors; the harness edits those files. Scans stay in that one selected root. Always pass that context on later apply/destroy calls. For shared policies affecting multiple stacks, prepare the complete set and review all affected stacks. Never switch global profiles or search the MCP process directory.
 

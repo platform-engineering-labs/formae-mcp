@@ -242,7 +242,7 @@ target names the subscription and authenticates through the tenant and client
 id from the registration, and the config carries no region field the way AWS's
 and GCP's do.
 
-**Mode `none`:** create a unique empty directory under the OS temporary directory
+**Mode `none`:** create a unique empty operation directory under `~/.formae-ai/scratch/`
 and call `prepare_authoring` with that `temporary_directory` and `profile`,
 omitting `stacks` and `new_stacks`. It returns an empty complete-stack scope for
 target-only authoring. Use its `main.pkl`, `PklProject` and returned `context`;
