@@ -9,7 +9,7 @@ import (
 func TestDriftPreferencePersistsAndIsInstallationScoped(t *testing.T) {
 	ctx := context.Background()
 	r := Registry{Path: filepath.Join(t.TempDir(), "codebases.json")}
-	a, b := hosted("00000000000000000000000000001"), hosted("00000000000000000000000000002")
+	a, b := hosted("000000000000000000000000001"), hosted("000000000000000000000000002")
 	initial, err := r.DriftPreference(ctx, a)
 	if err != nil || initial.Mode != "prompt" || initial.Explicit {
 		t.Fatalf("default: %+v %v", initial, err)
