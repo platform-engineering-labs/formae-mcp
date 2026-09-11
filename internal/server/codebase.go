@@ -15,8 +15,9 @@ import (
 )
 
 type codebaseContextResult struct {
-	Identity  codebase.Identity  `json:"identity"`
-	Selection codebase.Selection `json:"selection"`
+	Identity        codebase.Identity        `json:"identity"`
+	Selection       codebase.Selection       `json:"selection"`
+	DriftPreference codebase.DriftPreference `json:"drift_preference"`
 }
 
 type codebaseListResult struct {
@@ -63,7 +64,26 @@ func (s *Server) handleCodebaseContext(ctx context.Context, _ *mcp.CallToolReque
 	selection, err := registry.Select(ctx, identity, codebase.Request{
 		Mode: input.Mode, BindingID: input.BindingID, WorkingDirectory: input.WorkingDirectory, Stacks: input.Stacks,
 	})
-	return codebaseReply(ec, codebaseContextResult{Identity: identity, Selection: selection}, err)
+	if err != nil {
+		return codebaseReply(ec, nil, err)
+	}
+	preference, err := registry.DriftPreference(ctx, identity)
+	if err == nil {
+		s.workflowTelemetry.capture(ctx, ec, identity, selection.Mode, preference, "mcp_workflow_context")
+	}
+	return codebaseReply(ec, codebaseContextResult{Identity: identity, Selection: selection, DriftPreference: preference}, err)
+}
+
+func (s *Server) handleSetDriftPreference(ctx context.Context, _ *mcp.CallToolRequest, input tools.DriftPreferenceInput) (*mcp.CallToolResult, any, error) {
+	registry, identity, ec, err := s.localCodebaseContext(ctx, input.Profile)
+	if err != nil {
+		return codebaseReply(ec, nil, err)
+	}
+	preference, err := registry.SetDriftPreference(ctx, identity, input.Mode)
+	if err == nil {
+		s.workflowTelemetry.capture(ctx, ec, identity, "", preference, "mcp_drift_preference_changed")
+	}
+	return codebaseReply(ec, preference, err)
 }
 
 func (s *Server) handleListCodebases(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {

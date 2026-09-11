@@ -69,7 +69,8 @@ type Server struct {
 	// already has formae configured. Production never replaces it.
 	gate func() error
 	// codebaseRegistry resolves local storage, never an active project.
-	codebaseRegistry func() (codebase.Registry, error)
+	codebaseRegistry  func() (codebase.Registry, error)
+	workflowTelemetry *workflowTelemetry
 
 	// loginState holds the sign-in a user is part-way through. It is the one
 	// piece of state this server keeps between calls, and it exists because the
@@ -91,13 +92,14 @@ func New(endpoint string) *Server {
 	)
 
 	s := &Server{
-		mcpServer:        mcpServer,
-		hub:              NewHubClient(),
-		forcedEndpoint:   endpoint,
-		ctxResolver:      resolver,
-		clientID:         clientid.NewResolver(),
-		gate:             gateStore,
-		codebaseRegistry: codebase.Default,
+		mcpServer:         mcpServer,
+		hub:               NewHubClient(),
+		forcedEndpoint:    endpoint,
+		ctxResolver:       resolver,
+		clientID:          clientid.NewResolver(),
+		gate:              gateStore,
+		codebaseRegistry:  codebase.Default,
+		workflowTelemetry: newWorkflowTelemetry(),
 	}
 	s.newClient = s.clientFrom
 
@@ -220,6 +222,7 @@ func (s *Server) Run(ctx context.Context, transport mcp.Transport) error {
 }
 
 func (s *Server) registerTools() {
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "set_drift_preference", Description: tools.DriftPreferenceDescription, Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(false)}}, s.handleSetDriftPreference)
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "prepare_bug_report", Description: tools.PrepareBugReportDescription, Annotations: readOnly}, s.handlePrepareBugReport)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "submit_bug_report", Description: tools.SubmitBugReportDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true}}, s.handleSubmitBugReport)
@@ -941,9 +944,13 @@ func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, i
 	}
 	result, err := c.submitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, clientID, input.Resolution, input.Message)
 	if err != nil {
-		return attribute(reached(ec, c), errorResult(err)), nil, nil
+		return attribute(reached(ec, c), s.applyErrorResult(ctx, ec, err)), nil, nil
 	}
-	return attribute(reached(ec, c), withNotice(jsonResult(result), s.buildSkewNotice(ctx, ec.FormaeBin, c))), nil, nil
+	reply := jsonResult(result)
+	if input.Simulate && input.Message == nil {
+		reply = withNotice(reply, "In the final apply confirmation, suggest a concise factual command message describing the requested change and any accepted or reverted drift. The user can accept, edit or omit it in that same response. Pass the agreed message on real submission; an explicitly omitted message is an empty string. Do not infer apply confirmation solely from a message edit.")
+	}
+	return attribute(reached(ec, c), withNotice(reply, s.buildSkewNotice(ctx, ec.FormaeBin, c))), nil, nil
 }
 
 func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {

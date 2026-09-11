@@ -48,6 +48,25 @@ func TestCodebaseContextToolIsLocalAndExplicit(t *testing.T) {
 	}
 }
 
+func TestDriftPreferenceToolPersistsExplicitChoice(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	conn := config.Classic{URL: "http://localhost", Port: 49684}
+	session := codebaseTestSession(t, conn, path)
+	var initial map[string]any
+	codebaseCall(t, session, "get_codebase_context", map[string]any{}, &initial)
+	if initial["drift_preference"] == nil {
+		t.Fatal("context omitted preference")
+	}
+	var saved map[string]any
+	codebaseCall(t, session, "set_drift_preference", map[string]any{"mode": "auto_absorb_external"}, &saved)
+	restarted := codebaseTestSession(t, conn, path)
+	codebaseCall(t, restarted, "get_codebase_context", map[string]any{}, &initial)
+	p := initial["drift_preference"].(map[string]any)
+	if p["mode"] != "auto_absorb_external" || p["explicit"] != true {
+		t.Fatalf("preference: %#v", p)
+	}
+}
+
 func codebaseTestSession(t *testing.T, conn config.Connection, registryPath string) *mcp.ClientSession {
 	t.Helper()
 	s := New("")

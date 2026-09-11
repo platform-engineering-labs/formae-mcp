@@ -12,7 +12,14 @@ Install via the
 
 ## [Unreleased]
 
+### Added
+
+- Local installation-scoped drift preferences: ask each time (default), or automatically keep nonconflicting external changes. Intentional patches and uncertain history still require a decision. The agent must supply proof of external-only history; older agents continue to prompt.
+- MCP workflow analytics for effective codebase mode and drift preference, using the existing PostHog destination and honoring the CLI usage-reporting opt-out. Events contain categorical settings and an installation-derived identifier, not source paths, resource properties or command messages.
+
 ### Fixed
+
+- Drift rejections now include keep/revert guidance and the current local preference in the tool response, in both codebase modes. Adding a resource property does not imply acceptance of unrelated drift. Combined changes use reviewed reconciliation; agents without that protocol produce an explicit limitation rather than a force workaround. Successful previews remind the harness to offer an editable or empty command message.
 
 - Inventory Pkl exports now carry explicit actual-state/partial-source metadata and a warning alongside the unchanged raw Pkl. Existing-stack authoring points to complete desired extraction, preserving unabsorbed drift as an explicit reconcile decision.
 
