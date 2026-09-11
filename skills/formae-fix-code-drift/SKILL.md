@@ -13,7 +13,7 @@ Pass the selected `profile` on every agent call; never switch the global active 
 
 Check the connected installation's `shared-drift-resolution` and `desired-stack-extraction` capabilities. A local binary version does not establish server support. An old agent requires a complete existing codebase and cannot perform this recorded resolution workflow; explain that limitation without sending unsupported controls.
 
-For mode `codebase`, read the selected main forma and preserve its original declaration. For mode `none`, create an empty disposable directory and call `prepare_authoring` for the complete affected stacks. Keep its returned `context`, PklProject, dependencies and full Pkl files. Desired extraction supplies accepted intent, not a claim that current drift is settled. Never prepare a full reconcile from filtered inventory or a command delta.
+For mode `codebase`, read the selected main forma and preserve its original declaration. For mode `none`, create a fresh `~/.formae-ai/scratch/<operation-id>/` directory and call `prepare_authoring` for the complete affected stacks. Keep its returned `context`, PklProject, dependencies and full Pkl files. Desired extraction supplies accepted intent, not a claim that current drift is settled. Never prepare a full reconcile from filtered inventory or a command delta.
 
 ## Observe, decide, review, submit
 

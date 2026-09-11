@@ -22,7 +22,7 @@ For ordinary configuration changes, prepare the complete affected stack and use 
 
 ## Source context
 
-Reuse the selected `get_codebase_context` result. For `codebase`, keep the incident snippet inside the selected project and carry its binding context. For `none`, call `prepare_authoring` for the affected stack in an empty disposable directory, then author a separate minimal patch Pkl file inside it using its schema dependencies. Carry the returned `context` on apply. This workspace is temporary; never register it. Keep it until outcome/retry inspection is complete, then remove it.
+Reuse the selected `get_codebase_context` result. For `codebase`, keep the incident snippet inside the selected project and carry its binding context. For `none`, call `prepare_authoring` for the affected stack in a fresh `~/.formae-ai/scratch/<operation-id>/` directory, then author a separate minimal patch Pkl file inside it using its schema dependencies. Carry the returned `context` on apply. This workspace is temporary; never register it. Keep it until outcome/retry inspection is complete, then remove it.
 
 ## Workflow
 

@@ -14,6 +14,8 @@ Install via the
 
 ### Fixed
 
+- Source selection precedes IaC file access and is reused for the same installation/workspace. No-codebase authoring uses a fresh operation project under `~/.formae-ai/scratch/` and desired extraction instead of repeatedly searching for local projects or treating stale files as desired intent.
+
 - Cloud inventory questions default to formae queries even when the user names only a provider. Results include managed and discovered resources unless narrowed, and empty inventory is distinguished from an empty cloud account.
 
 - Ordinary resource edits, including a single label, consistently use complete-stack soft reconcile. Patch guidance now requires an explicit patch request or incident/hotfix intent, preserving drift decisions and selected source context.

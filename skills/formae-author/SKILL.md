@@ -5,17 +5,21 @@ description: "Use when the user wants to start authoring formae infrastructure o
 
 # formae-author — Authoring Front Door
 
-This skill is a thin dispatcher. It triages the user's authoring intent, locates (or creates) the code workspace, infers the right schema plugins, and hands off to the focused skills that carry the deep procedures. Do not duplicate those procedures here.
+This skill is a thin dispatcher. It triages the user's authoring intent, selects the source context and prepares source within it, infers the right schema plugins, and hands off to the focused skills that carry the deep procedures. Do not duplicate those procedures here.
 
 ## Step 1 — Select the source context
 
+For infrastructure apply/authoring, resolve source context before any IaC file search or read: reuse the explicit selection already made for this installation and workspace, or call get_codebase_context with the actual harness working_directory and selected profile. This tool consults the registry; do not replace it with rg/find/glob scans. Mode none is a complete selection, not a missing project to recover. Keep that selection for subsequent operations; do not search again merely because the user asks for another resource change. Resolve again when the installation/workspace changes, the user changes their codebase choice, or a context-validation error requires it. In none mode, locate the affected stack through formae inventory if needed, then prepare_authoring for its complete desired declaration in a fresh disposable directory. Ignore old/unregistered Pkl folders, remembered paths, previous temporary files and Git status. A value in an unselected local file does not establish pending desired intent; inspect formae desired extraction and recorded commands. In codebase mode, read/search only the selected registered root; a missing file or source conflict is an error to resolve there, not permission to search elsewhere. Never register a discovered folder without explicit user opt-in. If selection is required, present registered candidates; do not search for additional candidates. A source-only question about a user-supplied local file can read that exact file without resolving or adopting an infrastructure context; do not broaden that into a project search.
+
 Follow the MCP conversation contract: in mode `none`, talk about infrastructure
 design, planned changes and outcomes. Temporary files, schema wiring and cleanup
-are internal work, including during skill handoffs. Use a unique OS temporary
-directory, not a named project beneath the user's working directory. Only an
+are internal work, including during skill handoffs. Use a unique operation directory under `~/.formae-ai/scratch/`,
+not a named project beneath the user's working directory. Only an
 explicit request to maintain IaC opts into a codebase.
 
-Call `get_codebase_context` with the chosen `profile` and the actual harness `working_directory`. Never assume the MCP process directory is the workspace. An explicit existing project supplied by the user is an opt-in: validate it and call `register_codebase`, then select its binding. An explicit `mode: none` wins even when projects are registered.
+Scratch-project convention: use ~/.formae-ai/scratch/<operation-id>/ for disposable authoring. Resolve the scratch root to a canonical absolute path, create it privately, and create a new unique empty operation directory (for example with mkdtemp); never reuse a fixed main.pkl across operations or search scratch siblings. Pass that exact directory to prepare_authoring, then use its returned file_path, project_path and context to work only inside that operation directory. Additional patch Pkl or evaluated JSON retry files may be created inside that same directory. Keep those paths with the current operation through edit, preview, confirmation, submission and uncertain-outcome retries. A later independent operation creates a fresh directory and extracts desired state again; scratch contents are never the system of record, a Git project, or a codebase registration. Delete only the current operation directory after terminal outcome/retry inspection or abandonment before submission. Do not sweep other sessions or tell no-codebase users about these files unless they ask. If scratch preparation fails, report that concrete failure; do not fall back to home/Library/Documents/Desktop scans or request broad filesystem access to locate IaC. Existing explicit temporary-directory callers remain supported.
+
+When no valid selection is already available for this installation/workspace, call `get_codebase_context` with the chosen `profile` and the actual harness `working_directory`. Never assume the MCP process directory is the workspace. An explicit existing project supplied by the user is an opt-in: validate it and call `register_codebase`, then select its binding. An explicit `mode: none` wins even when projects are registered.
 
 Use the returned selection:
 
