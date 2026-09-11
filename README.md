@@ -123,7 +123,7 @@ Run `/reload-plugins` to apply the change without restarting your session.
 | `get_agent_stats` | Retrieve agent statistics |
 | `check_health` | Health check for the formae agent |
 | `list_changes_since_last_reconcile` | List infrastructure changes since last reconcile |
-| `extract_resources` | Extract resources as PKL code |
+| `extract_resources` | Export partial actual inventory as Pkl for inspection/import; use `prepare_authoring` for complete desired source |
 | `list_policies` | List standalone (reusable) policies and the stacks they're attached to |
 | `search_hub_plugins` | Search the live formae hub plugin catalog by keyword or resource type |
 | `get_hub_plugin` | Get details for a specific plugin from the hub |
