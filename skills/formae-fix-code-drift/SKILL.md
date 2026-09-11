@@ -20,6 +20,17 @@ For mode `codebase`, read the selected main forma and preserve its original decl
 In mode `none`, explain the infrastructure decision, using the pinned observed
 origin rather than treating every difference as external:
 
+Read each resource's `ObservedCommand`, `ObservedMode`, `ObservedSource` and
+`ObservedCommandID` from the rejection's `ModifiedStacks[].ModifiedResources`
+(ModifiedStacks is keyed by stack). `ObservedCommand: "sync"` or
+`ObservedSource: "synchronizer"` identifies a sync observation;
+`ObservedCommand: "apply"` with `ObservedMode: "patch"` identifies
+a formae patch. `ObservedSource` describes the command source, not an actor's
+authenticated identity. These fields identify the pinned observation, not
+necessarily every earlier contribution to a cumulative diff. Do not attribute
+all properties to its latest command when multiple changes may have accumulated;
+explain mixed or unavailable history accurately.
+
 - **Sync:** "The bucket's oob label was added outside formae. Keep it or revert it?"
 - **Patch:** "An earlier formae patch changed the bucket's labels. Keep that
   change as the stack's desired state or revert it?"

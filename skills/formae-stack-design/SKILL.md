@@ -96,7 +96,7 @@ Walk through these questions with the user:
    - Recommended apply order.
    - Policy candidates per stack.
 
-6. **Hand off to authoring.** Once the design is agreed, reference `formae://docs/forma-structure` for file layout conventions and offer to continue with `formae-project-init` (new project) or `formae-patch` / `formae-apply` (existing project).
+6. **Hand off to authoring.** Once the design is agreed, continue through `formae-author` with the selected source context. In mode `none`, discuss implementing the agreed stacks and resources; source layout is internal. In mode `codebase`, follow `formae://docs/forma-structure` and the selected project's conventions. Use `formae-project-init` only when the user explicitly opts into maintaining a new codebase; ordinary stack design does not imply that choice.
 
 ---
 

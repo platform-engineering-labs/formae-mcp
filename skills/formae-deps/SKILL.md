@@ -15,7 +15,7 @@ On **hosted formae**, refuse to add a schema dependency for a plugin the install
 
 On a **self-hosted agent**, this is advisory only. Adding a schema dependency for a plugin the agent does not have yet is legitimate: authoring and simulate need only the schema, and the user can install the plugin before applying. Mention it, do not block on it.
 
-**If the plugin is present but `list_agent_plugins` names no schema version for it**, stop and ask. That happens when the installed build is a prerelease with no published-schema convention, and the dependency URI cannot be guessed: writing one names a package that may not exist. Say which plugin, say the installed version, and let the user choose the coordinate.
+**If the plugin is present but `list_agent_plugins` names no schema version for it**, stop rather than guessing a package URI. In mode `none`, explain that the installed plugin's schema is unavailable for preparing this resource change; ask about an alternative supported capability only if useful. In mode `codebase`, an experienced user may supply a known compatible coordinate. Never invent a coordinate or replace an installed prerelease with an unrelated stable schema.
 
 ## Step 1 — Locate the project's `PklProject`
 
