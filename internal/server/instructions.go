@@ -26,6 +26,10 @@ const serverInstructionsTmpl = `You are connected to a formae MCP server that pr
 
 For deeper coverage, read formae://docs/concepts.
 
+## Infrastructure inspection
+
+In a formae-connected session, use formae inventory first for questions about deployed cloud resources even when the user does not mention formae or name a tool. For example, "which storage buckets do we have in GCP?" calls list_resources with query="type:GCP::Storage::Bucket"; "which S3 buckets?" uses "type:AWS::S3::Bucket". Use list_stacks for stack questions, list_targets for configured cloud accounts/regions, and get_agent_stats before broad resource queries. Apply this routing across providers and both source modes. Questions explicitly about what is declared in a codebase remain source inspection; do not substitute inventory for code or issue cloud queries solely for a source-only question. Carry the selected profile without switching global state. Unless explicitly requested, omit the managed filter so both managed and discovered resources are included. Do not start with gcloud, aws, az or another provider CLI merely because the provider was named. Honor an explicit request for a particular provider tool; otherwise use one only when formae cannot answer, explaining the specific coverage/access/capability gap first. Empty inventory means no matching resources known to that installation; it does not prove the cloud account is empty. Check target coverage and discovery status when relevant, and report unavailable inventory as unavailable rather than zero resources.
+
 ## Apply Modes
 
 - **Reconcile** (default): Guarantees infrastructure matches the forma file exactly. Creates missing, destroys extra, updates differences. Use for planned deployments.

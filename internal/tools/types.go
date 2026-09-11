@@ -11,7 +11,7 @@ type ProfileInput struct {
 
 // ListResourcesInput is the input for the list_resources tool.
 type ListResourcesInput struct {
-	Query   string `json:"query,omitempty" jsonschema:"Bluge query string to filter resources. Supported fields: stack, type, label, managed (boolean). Examples: 'managed:false', 'type:AWS::S3::Bucket stack:production', 'managed:true label:my-bucket'. Leave empty to list all resources."`
+	Query   string `json:"query,omitempty" jsonschema:"Bluge query string to filter resources. Supported fields: stack, type, label, managed (boolean). Examples: 'type:GCP::Storage::Bucket', 'type:AWS::S3::Bucket stack:production', 'managed:false type:AWS::S3::Bucket'. Omit managed unless requested, to include both managed and discovered resources. Always narrow with a filter; use get_agent_stats first for broad questions."`
 	Profile string `json:"profile,omitempty" jsonschema:"Preferred way to target a named formae environment/agent for THIS call only, without changing global state. Use this in preference to use_profile for per-session targeting: the active profile is global and shared with the user's CLI and any other concurrent sessions, so switching it can hijack work elsewhere. Leave empty to use the active profile. See list_profiles for names. Requires formae >= 0.87.0."`
 }
 

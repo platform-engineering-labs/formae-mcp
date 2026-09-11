@@ -14,6 +14,8 @@ Install via the
 
 ### Fixed
 
+- Cloud inventory questions default to formae queries even when the user names only a provider. Results include managed and discovered resources unless narrowed, and empty inventory is distinguished from an empty cloud account.
+
 - Ordinary resource edits, including a single label, consistently use complete-stack soft reconcile. Patch guidance now requires an explicit patch request or incident/hotfix intent, preserving drift decisions and selected source context.
 
 - Without a maintained codebase, setup and infrastructure workflows describe resources, changes and outcomes while keeping disposable source preparation internal. Initial target creation no longer requires a persistent project or placeholder stack. Maintained-codebase workflows continue to report source changes and conflicts.

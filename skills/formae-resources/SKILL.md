@@ -1,11 +1,13 @@
 ---
 name: formae-resources
-description: "Use when the user asks about deployed infrastructure, what resources exist, resource counts, or wants to find specific resources by type, stack, label, or management status"
+description: "Use for cloud infrastructure inventory questions even without naming formae: which GCP storage buckets, AWS S3 buckets, Azure resources, deployed resources, counts, or resources by type, stack, label, or management status"
 ---
 
 # Query Infrastructure Resources
 
-Use the `list_resources` MCP tool to query the formae agent for infrastructure resources.
+Use the `list_resources` MCP tool to query formae inventory for infrastructure resources, including managed and discovered resources.
+
+In a formae-connected session, use formae inventory first for questions about deployed cloud resources even when the user does not mention formae or name a tool. For example, "which storage buckets do we have in GCP?" calls list_resources with query="type:GCP::Storage::Bucket"; "which S3 buckets?" uses "type:AWS::S3::Bucket". Use list_stacks for stack questions, list_targets for configured cloud accounts/regions, and get_agent_stats before broad resource queries. Apply this routing across providers and both source modes. Questions explicitly about what is declared in a codebase remain source inspection; do not substitute inventory for code or issue cloud queries solely for a source-only question. Carry the selected profile without switching global state. Unless explicitly requested, omit the managed filter so both managed and discovered resources are included. Do not start with gcloud, aws, az or another provider CLI merely because the provider was named. Honor an explicit request for a particular provider tool; otherwise use one only when formae cannot answer, explaining the specific coverage/access/capability gap first. Empty inventory means no matching resources known to that installation; it does not prove the cloud account is empty. Check target coverage and discovery status when relevant, and report unavailable inventory as unavailable rather than zero resources.
 
 ## Targeting an environment (`profile`)
 
@@ -29,9 +31,10 @@ The resources endpoint returns ALL matching resources with full properties. An e
 | User asks... | Approach |
 |---|---|
 | "What resources do we have?" | Use `get_agent_stats` for overview, then drill down |
+| "Which storage buckets do we have in GCP?" | `type:GCP::Storage::Bucket` (both managed and discovered) |
 | "How many S3 buckets?" | `type:AWS::S3::Bucket` |
 | "What's in production?" | `stack:production` |
-| "Show unmanaged resources" | `managed:false` |
+| "Show unmanaged resources" | `get_agent_stats` first, then `managed:false` combined with a type filter |
 | "S3 buckets in staging" | `type:AWS::S3::Bucket stack:staging` |
 | "Find my-api resources" | `label:my-api` |
 
@@ -43,3 +46,4 @@ Read the `formae://docs/query-syntax` resource for the full query syntax referen
 - Show resource type, label, and key properties
 - Highlight management status (managed vs unmanaged)
 - Summarize with counts before showing full details
+- Describe results as inventory known to the selected installation; do not claim complete live cloud coverage from an empty result or a stale observation

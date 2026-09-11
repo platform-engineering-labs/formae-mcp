@@ -5,7 +5,7 @@ description: "Use when the user asks about their cloud targets, configured regio
 
 # Query Cloud Targets
 
-Use the `list_targets` MCP tool to query configured cloud targets (accounts/regions).
+Use `list_targets` first for configured cloud account/region questions in a formae-connected session, even when formae is not named. Report targets configured in this installation, not every account the user owns. Honor explicit requests for another tool and keep the selected profile.
 
 ## Workflow
 
