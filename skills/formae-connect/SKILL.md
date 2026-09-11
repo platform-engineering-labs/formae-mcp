@@ -355,10 +355,10 @@ azureTarget: formae.Target = new formae.Target {
 }
 ```
 
-**`discoverable` defaults to `true`.** The blocks above set it anyway, because
-this is a file the user is about to read and discovery is what will populate
-their inventory: worth naming rather than leaving to a default they cannot see.
-Say what it does when you show them the file.
+**`discoverable` defaults to `true`.** State explicitly in the target preview
+that discovery will populate the inventory. In mode `none`, this is an
+infrastructure setting to explain, not a file to show. In mode `codebase`, the
+explicit setting can also appear in the source diff.
 
 There is a `false` default, but it belongs to the agent's own configuration
 schema, which declares a different `Target` class. It is not the one a forma
@@ -373,8 +373,13 @@ would silently carry, the same reasoning that governs the account id on the
 local-credentials path in step 3. It is long and easy to mistype, which makes
 copying it rather than retyping it worth insisting on.
 
-`targets.pkl` in a maintained project, or the returned `main.pkl` in mode `none`,
-is the file that gets applied:
+In mode `none`, place the chosen target declaration directly inside the returned
+`main.pkl` forma block, adding the provider import there. Inline the config from
+the relevant template above; no separate `vars.pkl` is needed. Keep all of this
+source work internal.
+
+The following `vars.pkl` import illustrates a maintained project's `targets.pkl`
+entrypoint only; follow that project's existing structure:
 
 ```pkl
 amends "@formae/forma.pkl"
@@ -399,9 +404,9 @@ stacks; the no-codebase target-only workspace has an empty stack scope and must
 remain stackless. A maintained project's selected entrypoint may include stacks,
 so preserve their complete declarations and review all planned operations.
 
-**Do not add a separate "resolve the project" step:** formae's evaluation
-already runs `pkl project resolve` when `PklProject.deps.json` is absent,
-including the evaluation `apply_forma` performs itself.
+After changing schema dependencies, resolve the selected PklProject as described
+by `formae-deps`, including when a lockfile already exists. In mode `none`, this
+is internal preparation and needs no separate user-facing step or confirmation.
 
 Then go to step 7.
 
