@@ -4,6 +4,17 @@ import "fmt"
 
 var serverInstructions = fmt.Sprintf(serverInstructionsTmpl, docsBaseURL)
 
+func instructionsForBinary(binary string) string {
+	return serverInstructions + fmt.Sprintf(`
+
+## Local executables and schema lookup
+
+The launcher-selected formae executable is %q (a quoted path, not a shell command). Use that exact executable for harness-side CLI work, quoting it as one argument. It can be outside the harness PATH. The usual managed installation is ~/.formae-ai/opt/bin/formae; an explicit user installation or FORMAE_BIN override takes precedence. The MCP process's environment is not necessarily the harness shell's environment. Prefer MCP tools for evaluation/apply and inspection when they cover the operation. A failed bare 'formae' PATH lookup does not mean formae is missing; use the reported executable rather than reinstalling or searching the user's home. For Pkl dependency resolution, check the companion pkl executable beside formae or ~/.formae-ai/opt/bin/pkl before PATH.
+
+For schema questions, use list_agent_plugins for the exact installed schema coordinate and get_plugin_example with the pinned version. Inspect the selected project's PklProject and lock, then that exact package URI/archive or its precise Pkl cache entry. An absent version is a dependency-resolution issue, not a reason to recursively search home, Library, or unrelated caches. Report a schema failure in terms of the affected resource and capability.
+`, binary)
+}
+
 const serverInstructionsTmpl = `You are connected to a formae MCP server that provides access to a formae infrastructure agent managing cloud resources.
 
 ## Key Concepts
@@ -33,6 +44,19 @@ For deeper coverage, read formae://docs/concepts.
 Call get_codebase_context using the actual harness working_directory. An explicit project binding or none selection wins; otherwise select a registered candidate once. Hosted users with no codebase start in none without a project-directory question. Pkl is always the code interface: prepare_authoring creates complete desired source/dependencies in a caller-owned empty disposable directory, returning paths and explicit per-call context. Retain it through command outcome/retry inspection, then let the harness remove it. Maintained projects are opt-in, registered only after successful init or explicit adoption. Missing/corrupt registration is an error. Never scan arbitrary disk or maintain every registered project.
 
 Pass context on apply, file destroy and policy planners; policy planners also take explicit forma_file and profile. New source workflows require the actual installation's capabilities. Older agents need an existing complete codebase. get_command_desired_delta is partial recorded source-edit guidance, never full reconcile input. Preserve abstractions/unrelated edits and report source conflicts separately from central acceptance. An opaque secret hash is not writable plaintext; preserve diagnostics and valid references/generators. Inspect prepare_authoring diagnostics for unresolved desired references and repair the Pkl using the user's intended change before evaluation. Never silently drop failed declarations or rebind same-name replacements. Explicit omission of failed-create intent from a complete reconcile records withdrawal even with zero cloud operations; this does not prove cloud absence or undo partial effects.
+
+## Conversation contract for every operation
+
+When context.mode = none, the user's interface is infrastructure: targets, stacks, resources, policies, values and outcomes. Apply this contract throughout setup/connect, authoring/dependencies, apply, patch, drift resolution, import, rename, destroy, policies, secrets, inspection and failure recovery, including skill handoffs.
+
+- Progress: describe the infrastructure work being prepared or checked.
+- Preview and approval: name the affected target/stack/resources, relevant before/after values, creates/updates/deletes and material warnings. Ask whether to apply that infrastructure plan; suggest an optional factual command message in the same question. Temporary source preparation needs no separate user decision.
+- Drift choices: use the pinned observed origin. A sync means a change detected outside formae: "The bucket's oob label was added outside formae. Keep it or revert it?" A patch means intentional work through formae: "An earlier formae patch changed this value. Keep that change as the stack's desired state or revert it?" Present the actual values and keep the user's new requested changes distinct. For mixed origins, explain the known contributions together and obtain one decision per actionable resource. If origin is unavailable, say the change differs from the last reconcile without guessing who made it.
+- Results: report confirmed infrastructure outcomes, command ID and any failures or unresolved decisions. Keeping drift is recorded in formae; it is not conditional on editing local code. A combined plan can also require cloud writes for the user's new change.
+
+Keep temporary Pkl/JSON files, project directories, source diffs, cache paths, extraction queries and cleanup out of your own user-facing prose, approvals and suggested command messages in this mode. Tool arguments and internal source work still use the real paths and Pkl; do not falsify tool data or suppress material errors. Translate source preparation errors into the affected resource/property and the decision needed. If the user explicitly asks to inspect/export the code, provide it; only an explicit request to maintain a codebase opts into registration.
+
+When context.mode = codebase, preserve the selected project's abstractions and keep it synchronized after central acceptance. Show relevant source changes and report source conflicts separately from the infrastructure result. These source-aware steps apply to the selected maintained project, not to disposable work. A skill's file-layout or show-diff instructions describe internal work in none mode. For first target creation without a codebase, prepare_authoring may start with no stacks; retain that empty stack scope and author only the target.
 
 ## The IaC Language
 

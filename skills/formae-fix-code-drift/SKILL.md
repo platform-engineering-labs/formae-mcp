@@ -17,6 +17,23 @@ For mode `codebase`, read the selected main forma and preserve its original decl
 
 ## Observe, decide, review, submit
 
+In mode `none`, explain the infrastructure decision, using the pinned observed
+origin rather than treating every difference as external:
+
+- **Sync:** "The bucket's oob label was added outside formae. Keep it or revert it?"
+- **Patch:** "An earlier formae patch changed the bucket's labels. Keep that
+  change as the stack's desired state or revert it?"
+- **Mixed/unknown:** describe the known contributions together; when origin is
+  unavailable, say it differs from the last reconcile without guessing who made it.
+
+Name the actual property values and map keep to `absorb`, revert to `revert`.
+Keep the user's requested change distinct: "Keep oob=drift and add app=test" is
+a combined infrastructure plan. Obtain one decision per actionable resource,
+including any coupled properties. Source preparation, file paths and local
+code edits stay internal. Acceptance is recorded in formae; never frame keeping
+a change as adding it to a Pkl file. Mode `codebase` still synchronizes the
+selected maintained project after central acceptance.
+
 1. Call `apply_forma` with the original complete declaration, selected `context`, `mode: reconcile`, `simulate: true`, and no force or resolution. Inspect the structured rejection's `ObservationID`, stable `ResourceID`, and pinned observed origin. Present current actionable changes grouped by stack. Historical unavailable inputs or provenance remain unavailable.
 2. Obtain exactly one explicit `absorb` or `revert` choice for every actionable `ResourceID` in the observation. Coupled properties are one resource choice. There is no skip within that stack's resolution; the user can abandon the operation without submitting.
 3. Simulate the same original complete declaration with `resolution: {ObservationID, Decisions: [{ResourceID, Action}, ...]}`. Show the final combined plan: acceptance records, provider writes for reverts, compatible user edits/additions/deletions, dependency propagation, and warnings. Absorb can coexist with required provider work; never label the whole plan write-free just because it contains acceptance.

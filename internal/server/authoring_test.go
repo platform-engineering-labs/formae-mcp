@@ -605,3 +605,119 @@ func TestDesiredStacksPreservesQueryPhraseLabels(t *testing.T) {
 		})
 	}
 }
+
+func TestTargetOnlyDisposableAuthoring(t *testing.T) {
+	posts, inventoryReads := 0, 0
+	agent := mockAgent(t, map[string]http.HandlerFunc{
+		"GET /api/v1/stats": func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `{"Capabilities":["desired-stack-extraction","shared-drift-resolution"]}`)
+		},
+		"GET /api/v1/resources": func(w http.ResponseWriter, r *http.Request) {
+			inventoryReads++
+			http.Error(w, "target preparation must not extract inventory", 500)
+		},
+		"GET /api/v1/stacks": func(w http.ResponseWriter, r *http.Request) {
+			inventoryReads++
+			http.Error(w, "target preparation must not list stacks", 500)
+		},
+		"GET /api/v1/plugins": func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprint(w, `{"plugins":[]}`)
+		},
+		"POST /api/v1/commands": func(w http.ResponseWriter, r *http.Request) {
+			posts++
+			raw, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+			}
+			if !bytes.Contains(raw, []byte(`"initial-target"`)) {
+				t.Errorf("target missing from submission: %s", raw)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = fmt.Fprint(w, `{"CommandId":"target-created"}`)
+		},
+	})
+	defer agent.Close()
+	bin := filepath.Join(t.TempDir(), "formae")
+	// This renderer checks the actual preparation bundle; eval returns the
+	// authored document so the normal MCP submission scope guard is exercised.
+	script := `#!/usr/bin/env python3
+import sys,json,pathlib
+args=sys.argv[1:]
+if args[0]=='extract':
+ bundle=json.load(sys.stdin)
+ assert bundle['Forma']['Stacks']==[], bundle
+ assert bundle['Forma']['Resources']==[], bundle
+ assert bundle['Forma']['Targets']==[], bundle
+ assert bundle['Forma']['Extraction']['CompleteStacks']==[], bundle
+ path=pathlib.Path(args[-1]);path.write_text(json.dumps(bundle['Forma']))
+ (path.parent/'PklProject').write_text('amends "pkl:Project"\n')
+elif args[0]=='eval':
+ print(pathlib.Path(args[1]).read_text())
+elif args[0]=='--version':
+ print('formae version 0.0.0')
+else:
+ sys.exit(1)
+`
+	if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	registry := filepath.Join(t.TempDir(), "registry.json")
+	dir := t.TempDir()
+	conn := config.Hosted{Endpoint: config.HostedOrigin, Installation: "111111111111111111111111111"}
+	session := authoringSession(t, conn, agent.URL, bin, registry)
+	var prepared authoringResult
+	codebaseCall(t, session, "prepare_authoring", map[string]any{"temporary_directory": dir}, &prepared)
+	if len(prepared.CompleteStacks) != 0 || prepared.Context.Mode != "none" {
+		t.Fatalf("unexpected source context: %+v", prepared)
+	}
+	if inventoryReads != 0 || posts != 0 {
+		t.Fatalf("preparation read inventory %d times or submitted %d commands", inventoryReads, posts)
+	}
+	if _, err := os.Stat(registry); !os.IsNotExist(err) {
+		t.Fatalf("disposable preparation registered a project: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, authoringMetadataName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata authoringMetadata
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Version != 1 || len(metadata.Stacks) != 0 {
+		t.Fatalf("invalid target-only scope: %+v", metadata)
+	}
+	target := `{"Targets":[{"Label":"initial-target","Namespace":"AWS","Config":{"region":"us-east-1"}}]}`
+	if err := os.WriteFile(prepared.FilePath, []byte(target), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, simulate := range []bool{true, false} {
+		codebaseCall(t, session, "apply_forma", map[string]any{"file_path": prepared.FilePath, "context": prepared.Context, "mode": "reconcile", "simulate": simulate}, nil)
+	}
+	if posts != 2 {
+		t.Fatalf("target preview and apply submitted %d commands", posts)
+	}
+	for _, tc := range []struct{ name, forma string }{
+		{"explicit_stack", `{"Stacks":[{"Label":"surprise"}]}`},
+		{"resource", `{"Resources":[{"Label":"surprise","Stack":"surprise"}]}`},
+		{"default_resource", `{"Resources":[{"Label":"surprise"}]}`},
+		{"generator", `{"Generators":[{"Label":"surprise","Stack":"surprise"}]}`},
+		{"default_generator", `{"Generators":[{"Label":"surprise"}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(prepared.FilePath, []byte(tc.forma), 0600); err != nil {
+				t.Fatal(err)
+			}
+			response, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "apply_forma", Arguments: map[string]any{"file_path": prepared.FilePath, "context": prepared.Context, "mode": "reconcile", "simulate": false}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !response.IsError || !strings.Contains(textContent(t, response), "outside the prepared complete-stack scope") {
+				t.Fatalf("expanded scope accepted: %s", textContent(t, response))
+			}
+			if posts != 2 {
+				t.Fatalf("expanded scope reached the agent: %d posts", posts)
+			}
+		})
+	}
+}

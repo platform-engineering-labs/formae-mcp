@@ -82,10 +82,11 @@ type Server struct {
 
 // New creates a new formae MCP server connected to the given agent endpoint.
 func New(endpoint string) *Server {
+	resolver := execctx.NewResolver(formaebin.NewBinResolver())
 	mcpServer := mcp.NewServer(
 		implementation(),
 		&mcp.ServerOptions{
-			Instructions: serverInstructions,
+			Instructions: instructionsForBinary(resolver.Bin()),
 		},
 	)
 
@@ -93,7 +94,7 @@ func New(endpoint string) *Server {
 		mcpServer:        mcpServer,
 		hub:              NewHubClient(),
 		forcedEndpoint:   endpoint,
-		ctxResolver:      execctx.NewResolver(formaebin.NewBinResolver()),
+		ctxResolver:      resolver,
 		clientID:         clientid.NewResolver(),
 		gate:             gateStore,
 		codebaseRegistry: codebase.Default,
