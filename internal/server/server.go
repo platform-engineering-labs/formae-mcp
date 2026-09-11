@@ -291,7 +291,7 @@ func (s *Server) registerTools() {
 		Annotations: readOnly,
 	}, s.handleListChangesSinceLastReconcile)
 
-	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "prepare_authoring", Description: "Start here to edit an existing stack without a maintained codebase: extract its COMPLETE DESIRED Pkl and dependency project, then edit and apply with the returned context. Pass stacks as exact labels, never type/resource filters. This reads recorded desired state rather than actual inventory, so unabsorbed OOB changes and temporary patches remain decisions for soft reconcile. Do not substitute extract_resources, which exports partial actual inventory. Also supports new stacks and targets. Prepare source in an explicit empty disposable directory. The harness convention is a fresh canonical ~/.formae-ai/scratch/<operation-id>/ directory; use the returned paths and context, never search for a project or reuse another operation's scratch source. For authoring without a maintained codebase, including empty installations/new stacks. Retrieves desired declarations and exact installed plugin metadata through the resolved installation, then renders offline. Returns full file paths, never truncated source. Requires connected desired-stack-extraction and shared-drift-resolution capabilities. Local files remain until the harness removes them after outcome/retry inspection; never automatically registered.", Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(false)}}, s.handlePrepareAuthoring)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "prepare_authoring", Description: "Start here to edit an existing stack without a maintained codebase: extract its COMPLETE DESIRED Pkl and dependency project, then edit and apply with the returned context. Pass stacks as exact labels, never type/resource filters. This reads recorded desired state rather than actual inventory, so unabsorbed OOB changes and temporary patches remain decisions for soft reconcile. Do not substitute extract_resources, which exports partial actual inventory. Also supports new stacks and targets. Prepare source in an explicit empty disposable directory. The harness convention is a fresh canonical ~/.formae-ai/scratch/<operation-id>/ directory; use the returned paths and context, never search for a project or reuse another operation's scratch source. Retrieves desired declarations and exact installed plugin metadata through the resolved installation, then renders offline. Returns full file paths, never truncated source. Requires connected desired-stack-extraction and shared-drift-resolution capabilities. Local files remain until the harness removes them after outcome/retry inspection; never automatically registered.", Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(false)}}, s.handlePrepareAuthoring)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "extract_resources",
 		Description: tools.ExtractResourcesDescription,
@@ -843,7 +843,6 @@ func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequ
 	result.StructuredContent = map[string]any{
 		"state": "actual", "partial": true, "query": input.Query,
 		"recommended_tool": "prepare_authoring",
-		"instructions":     tools.ActualExtractionNotice,
 	}
 	withNotice(result, tools.ActualExtractionNotice)
 	return attribute(extracted, withNotice(result, notice)), nil, nil
