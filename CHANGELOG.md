@@ -14,6 +14,8 @@ Install via the
 
 ### Fixed
 
+- Inventory Pkl exports now carry explicit actual-state/partial-source metadata and a warning alongside the unchanged raw Pkl. Existing-stack authoring points to complete desired extraction, preserving unabsorbed drift as an explicit reconcile decision.
+
 - Source selection precedes IaC file access and is reused for the same installation/workspace. No-codebase authoring uses a fresh operation project under `~/.formae-ai/scratch/` and desired extraction instead of repeatedly searching for local projects or treating stale files as desired intent.
 
 - Cloud inventory questions default to formae queries even when the user names only a provider. Results include managed and discovered resources unless narrowed, and empty inventory is distinguished from an empty cloud account.
