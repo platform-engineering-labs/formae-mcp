@@ -7,6 +7,8 @@ description: "Use when the user wants to deploy infrastructure, apply a forma fi
 
 Use `apply_forma` in reconcile mode for planned changes. Each explicitly declared stack is a complete resource boundary: omitted resources are deleted, including when a stack contains only generators. Patch is the scoped incident path.
 
+Ordinary updates use a complete declaration of the affected stack with mode=reconcile and force=false (or omitted), even for one resource or one label. In no-codebase mode, prepare the complete desired stack, modify it, and carry the returned context on both simulation and real submission. In maintained-codebase mode, use the selected complete source and binding context. Small scope, 'quick' wording, a patch-named file, or detected drift does not authorize patch. Use patch only when the user explicitly requests patch mode or their stated incident/hotfix intent calls for a temporary intervention that defers reconciliation. Never switch to patch or force to bypass a drift rejection; follow the explicit keep/revert workflow. If only partial source is available, retrieve the complete desired stack rather than changing the apply mode.
+
 ## Source and installation
 
 Pass the chosen `profile` on every agent call; never change the global active profile for a session. Call `get_codebase_context` with the actual harness `working_directory` or reuse the explicit context already selected. Resolve known candidates once and surface missing/corrupt projects.

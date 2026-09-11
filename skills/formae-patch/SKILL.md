@@ -5,7 +5,7 @@ description: "Use when the user needs to make an urgent targeted infrastructure 
 
 # Patch Infrastructure (Patch Mode)
 
-Use the `apply_forma` MCP tool in **patch** mode for urgent targeted changes.
+Use the `apply_forma` MCP tool in **patch** mode only for an explicit patch-mode request or stated incident/hotfix intent requiring a temporary intervention. For ordinary updates, including one label, hand off to `formae-apply` for a complete-stack soft reconcile. Do not infer an incident from a small change, the word "quick", a `.patch.pkl` filename or existing drift.
 
 ## Targeting an environment (`profile`)
 
@@ -16,8 +16,9 @@ Use the `apply_forma` MCP tool in **patch** mode for urgent targeted changes.
 Patch only applies the changes explicitly specified in the forma file. Other resources are untouched. Use this for:
 - Incident response (scaling up during traffic spikes)
 - Urgent security fixes
-- Quick configuration changes
-- Any situation where a full reconcile is inappropriate
+- An explicit request to use patch mode and defer reconciliation
+
+For ordinary configuration changes, prepare the complete affected stack and use reconcile without force. Never choose patch to avoid resolving drift or because only a partial file is currently available. Keep the selected source context on both preview and real submission. Explain the temporary nature of a patch in its confirmation; do not automatically absorb it afterward.
 
 ## Source context
 
@@ -45,7 +46,7 @@ launcher-selected formae executable from MCP initialization for local CLI work.
 
 After a successful patch, always remind the user:
 
-> This change was made through formae as a temporary patch. After the incident,
+> This change was made through formae as a temporary patch. When reviewing this temporary intervention,
 > decide whether to keep it as the stack's desired state or revert it.
 
 Follow `formae-fix-code-drift` for that later decision. A patch is not a change
@@ -58,4 +59,4 @@ Do not automatically absorb the patch or update maintained desired source to mak
 - NEVER use `pkl eval` to evaluate forma files — ALWAYS use `formae eval --output-consumer machine`. Forma files use formae-specific extensions that only the formae CLI can resolve, and `--output-consumer machine` ensures parseable output instead of human-formatted text.
 - NEVER skip the simulation step
 - NEVER apply without user confirmation
-- Patches are for urgency. For planned changes, use the `formae-apply` skill
+- Patches are for explicit temporary interventions. For planned changes, use the `formae-apply` skill
