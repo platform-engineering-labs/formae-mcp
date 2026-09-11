@@ -19,15 +19,24 @@ On a **self-hosted agent**, this is advisory only. Adding a schema dependency fo
 
 ## Step 1 — Locate the project's `PklProject`
 
-Find the `PklProject` file in the current working directory or the path stated by the user. If it cannot be found, tell the user and stop — this skill requires an existing formae project. (If they need to create one from scratch, the `formae-project-init` skill applies.)
+Carry the source context from `formae-author`. In mode `none`, use the exact
+`project_path` returned by `prepare_authoring`; dependency edits and resolution
+are internal preparation. Discuss resource capabilities and any material
+compatibility issue, not temporary files, diffs or commands. In mode `codebase`,
+use the selected project's `PklProject` and show relevant source changes. If no
+source is prepared, return to `formae-author` to select context; a missing file
+does not opt the user into a maintained project. Never scan arbitrary disk.
 
 ## Step 2 — Add a dependency
 
 ### 2a — Resolve the package and version
 
-Use `get_hub_plugin` to look up the plugin by name. If the plugin name is ambiguous or unknown, use `search_hub_plugins` first to find candidates and present them to the user for confirmation.
+For hosted installations, retain the exact installed schema coordinate from
+Step 0; do not replace it with the hub's latest stable version. For self-hosted
+catalog lookup, use `get_hub_plugin`. If the name is ambiguous or unknown, use
+`search_hub_plugins` and confirm the intended plugin.
 
-From the resolved plugin record, extract the latest stable version.
+For self-hosted catalog lookup, use the resolved plugin record's selected version.
 
 **Trust gate.** Check the `originatorVerified` field. If it is `false`, surface the originator domain explicitly to the user and ask for confirmation before proceeding. Do not silently add an unverified package.
 
@@ -49,11 +58,16 @@ For example, for grafana at version 0.1.3:
 }
 ```
 
-Read the file first, then apply the edit. Show the diff to the user before proceeding.
+Read the file first, then apply the edit. In mode `codebase`, show the relevant
+diff. In mode `none`, keep this source edit internal.
 
 ### 2c — Resolve the deps lockfile
 
-After editing `PklProject`, the lockfile `PklProject.deps.json` must be updated. This is a **PKL** command — `formae` has no `project resolve` subcommand (`formae project` only has `init`). Show it to the user before running it, from the directory containing `PklProject`:
+After editing `PklProject`, update `PklProject.deps.json` with **PKL** (`formae`
+has no `project resolve`). Use the companion `pkl` executable beside the resolved
+formae binary, or `~/.formae-ai/opt/bin/pkl`, before falling back to PATH. Run from
+the selected project directory. Show the command for maintained-codebase work;
+in mode `none`, perform this preparation internally:
 
 ```
 pkl project resolve
@@ -65,9 +79,14 @@ When pulling examples for the plugin just added, pass the version pinned in `Pkl
 
 ## Step 3 — Remove a dependency
 
-Read `PklProject`, find the dependency block for the named plugin, and delete it. Show the diff to the user.
+Read `PklProject`, find the named dependency block, and delete it. Show the diff
+in mode `codebase`; keep disposable source edits internal in mode `none`.
 
-**Dangling import check.** Before confirming the removal, search all `.pkl` files in the project for `import "@<name>/` (and `extends "@<name>/` / `amends "@<name>/`). If any match is found, warn the user that removing the dependency will leave dangling imports that will cause resolution errors. List the affected files and ask whether to proceed anyway. Do not automatically remove the imports — that is the user's decision.
+**Dangling import check.** Search only the selected source for imports of the
+dependency before removal. If still used, explain the affected resources and
+resolve the user's intended change before proceeding. In mode `codebase`, list
+the affected files as well. Do not silently remove resource declarations or
+leave an invalid document merely to complete the dependency edit.
 
 After deleting from `PklProject`, run `pkl project resolve` (see Step 2c) to update the lockfile.
 
@@ -83,5 +102,5 @@ If the user actually needs the resource plugin to **run** (i.e., to execute `app
 
 - **Schema deps only.** This skill does not install resource plugins on the agent, does not modify `formae root`, and makes no changes to the agent or running infrastructure.
 - **Never silently add an unverified-originator plugin.** If `originatorVerified` is false, surface the originator domain and get explicit user confirmation before adding the dependency.
-- **Use `pkl project resolve`** to update `PklProject.deps.json` — `formae project resolve` does not exist (`formae project` only has `init`). Show the command before running it.
+- **Use `pkl project resolve`** to update `PklProject.deps.json` — `formae project resolve` does not exist. Show commands for maintained-codebase work; keep them internal for mode `none`.
 - **Never skip the dangling-import check on removal.** Always scan `.pkl` files before confirming a dependency removal.

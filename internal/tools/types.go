@@ -396,8 +396,8 @@ type CommandDesiredDeltaInput struct {
 
 type PrepareAuthoringInput struct {
 	TemporaryDirectory string   `json:"temporary_directory" jsonschema:"required,Absolute canonical path to an existing empty caller-owned disposable directory. Keep source and dependencies until command outcome is known, then remove the directory."`
-	Stacks             []string `json:"stacks,omitempty" jsonschema:"Exact existing managed stack labels to retrieve as complete desired declarations. No resource filters; empty stacks are supported."`
-	NewStacks          []string `json:"new_stacks,omitempty" jsonschema:"Exact new stack labels to scaffold after checking current absence. This check is not a concurrency lock; review the final simulation."`
+	Stacks             []string `json:"stacks,omitempty" jsonschema:"Exact existing managed stack labels to retrieve as complete desired declarations. No resource filters; empty stacks are supported. Omit both stacks and new_stacks for stackless authoring such as initial target setup; that workspace cannot contain stacks, resources or generators."`
+	NewStacks          []string `json:"new_stacks,omitempty" jsonschema:"Exact new stack labels to scaffold after checking current absence. Omit with stacks for stackless target setup. This check is not a concurrency lock; review the final simulation."`
 	Targets            []string `json:"targets,omitempty" jsonschema:"Configured target labels to include for new resources. Retrieved through this call's resolved installation."`
 	Profile            string   `json:"profile,omitempty" jsonschema:"Installation profile for this call; its resolved identity is bound to the disposable workspace."`
 }

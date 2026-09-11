@@ -19,6 +19,16 @@ Pkl remains the code interface in both modes. Use `formae eval --output-schema j
 
 ## Workflow
 
+For mode `none`, use the MCP conversation contract throughout: progress and
+confirmation describe targets, stacks, resources and before/after values;
+results describe actual outcomes and command IDs. Temporary source, filenames,
+diffs, extraction queries and cleanup stay internal. Ask "Apply these changes?"
+about the infrastructure plan, not approval to edit or synchronize files.
+For `codebase`, retain relevant source reporting and selected-project catch-up.
+Use the launcher-selected executable reported in MCP initialization for local
+`formae eval`; it normally lives at `~/.formae-ai/opt/bin/formae` and need not be
+on the harness PATH. Tool calls remain preferred where available.
+
 1. Prepare the complete declaration, preserving every existing resource, target, policy, reference and generator in each affected stack unless its change/removal is intended.
 2. Call `apply_forma` with the selected `context`, `mode: reconcile`, `simulate: true`, and no force.
 3. If rejected for actionable drift, follow `formae-fix-code-drift`: use the initial `ObservationID`, all explicit absorb/revert choices, final composed simulation `ReviewID`, then confirmed real submission with a stable `IdempotencyKey`. Do not pre-edit the source to absorb drift. A stale review requires a fresh review and confirmation.

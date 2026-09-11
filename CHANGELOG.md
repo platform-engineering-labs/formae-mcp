@@ -12,6 +12,12 @@ Install via the
 
 ## [Unreleased]
 
+### Fixed
+
+- Without a maintained codebase, setup and infrastructure workflows describe resources, changes and outcomes while keeping disposable source preparation internal. Initial target creation no longer requires a persistent project or placeholder stack. Maintained-codebase workflows continue to report source changes and conflicts.
+- Drift prompts distinguish changes detected outside formae from temporary patches made through formae, and separate keep/revert decisions from newly requested changes.
+- The MCP reports its selected formae executable to the assistant, including managed installations outside the shell PATH. Schema lookup guidance uses exact installed versions instead of broad searches through local caches.
+
 ### Added
 
 - Work with infrastructure without maintaining a local IaC project. Hosted authoring uses disposable complete desired Pkl source and schema dependencies; keeping a project is an explicit opt-in. Local project registration and per-call selection keep concurrent projects and installations independent.

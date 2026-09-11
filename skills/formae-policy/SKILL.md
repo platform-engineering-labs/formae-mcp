@@ -12,6 +12,11 @@ Use this skill to manage formae stack policies via natural language. Two policy 
 
 ## Source and installation context
 
+For mode `none`, the user-facing plan contains stack names, policy behavior,
+duration, affected resources and outcomes. Treat file paths, snippets, anchors
+and edits in the steps below as internal authoring details; ask about policy
+choices rather than files. Mode `codebase` retains selected-source reporting.
+
 Pass the chosen `profile` on every policy planner and agent call. Call `get_codebase_context` with the actual harness working directory or reuse the selected context. For `none`, use `prepare_authoring` to retrieve the complete affected stacks into an empty disposable directory, preserving existing policies, targets, references and generators. A maintained project is optional.
 
 Every planner call carries the selected `context` plus explicit `forma_file` inside that project or disposable directory, including `delete_standalone_policy`. Planners return snippets and anchors; the harness edits those files. Scans stay in that one selected root. Always pass that context on later apply/destroy calls. For shared policies affecting multiple stacks, prepare the complete set and review all affected stacks. Never switch global profiles or search the MCP process directory.
@@ -138,7 +143,10 @@ User asks "what policies are on lifeline?".
 - NEVER apply without simulating first.
 - NEVER apply without explicit user confirmation.
 - Pkl is the code interface in both maintained and disposable workspaces. Central accepted desired intent is recorded by real reconcile; an edit or preview alone is not acceptance.
-- When the tool returns multiple candidate files (ambiguous stack), present the list to the user and ask which file to edit. Do not guess.
+- When a planner returns ambiguous source candidates, resolve within the selected
+  source. In mode `codebase`, ask which candidate file to edit if needed. In mode
+  `none`, reprepare the complete requested stack or ask which infrastructure
+  stack/policy the user means; never make them choose a temporary file.
 - A stack holds at most one policy per type. Never work around a conflict error by editing the PKL directly — resolve it by removing or detaching the conflicting policy.
 - Standalone policies are created and deleted, never updated in place. To change one, delete it and recreate it, or convert the stack to an inline policy.
 - If a tool reports the project's formae PKL schema is too old for policies, relay the version numbers and stop. Bumping the schema pin is a separate decision the user must make.

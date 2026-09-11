@@ -25,6 +25,10 @@ Reuse the selected `get_codebase_context` result. For `codebase`, keep the incid
 
 ## Workflow
 
+In mode `none`, present the targeted infrastructure change and its actual
+outcome. Temporary files, source diffs and cleanup stay internal; use the
+launcher-selected formae executable from MCP initialization for local CLI work.
+
 1. Help the user identify the resource(s) to modify
 2. Create or locate a minimal forma file with only the targeted change
 3. **Always simulate first**: call `apply_forma` with `mode: patch`, `simulate: true`
@@ -41,7 +45,11 @@ Reuse the selected `get_codebase_context` result. For `codebase`, keep the incid
 
 After a successful patch, always remind the user:
 
-> This patch remains **drift** until an explicit later reconcile accepts or reverts it. When the incident is resolved, use `formae-fix-code-drift` to review that decision.
+> This change was made through formae as a temporary patch. After the incident,
+> decide whether to keep it as the stack's desired state or revert it.
+
+Follow `formae-fix-code-drift` for that later decision. A patch is not a change
+made outside formae; use its recorded origin when explaining it.
 
 Do not automatically absorb the patch or update maintained desired source to make it permanent. Resolution controls apply only to soft reconcile, never patch.
 

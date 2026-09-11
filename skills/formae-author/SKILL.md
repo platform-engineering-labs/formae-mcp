@@ -9,6 +9,12 @@ This skill is a thin dispatcher. It triages the user's authoring intent, locates
 
 ## Step 1 — Select the source context
 
+Follow the MCP conversation contract: in mode `none`, talk about infrastructure
+design, planned changes and outcomes. Temporary files, schema wiring and cleanup
+are internal work, including during skill handoffs. Use a unique OS temporary
+directory, not a named project beneath the user's working directory. Only an
+explicit request to maintain IaC opts into a codebase.
+
 Call `get_codebase_context` with the chosen `profile` and the actual harness `working_directory`. Never assume the MCP process directory is the workspace. An explicit existing project supplied by the user is an opt-in: validate it and call `register_codebase`, then select its binding. An explicit `mode: none` wins even when projects are registered.
 
 Use the returned selection:
@@ -45,7 +51,10 @@ If the intent is "bring existing cloud resources under management", hand off to 
 
 **If a needed plugin is absent from the catalog** (self-hosted only): surface `formae-plugin-new` as the path forward. Add a context-window caution to the user: plugin building is a substantial task — it is best started in a fresh session or as a sub-agent to avoid context pressure mid-authoring. A failed plugin listing changes nothing in this branch.
 
-Make clear in both branches: these are **schema packages only** — they provide PKL types and IDE completion. They do not install resource plugins on the agent.
+These are **schema packages only** and do not install resource plugins on the
+agent. In mode `none`, handle compatible installed schema dependencies internally
+and describe the resulting infrastructure capability. For maintained-codebase
+dependency work, explain the schema/source changes.
 
 **Dependency wiring** — do not wire deps yourself:
 - Opted-in maintained project: `formae-project-init` sets up the initial schema package deps. Disposable project: use the files and installed schema metadata from `prepare_authoring`, adding needed dependencies with `formae-deps`.
@@ -78,7 +87,9 @@ Do not install resource plugins. That is an agent-side operation outside this sk
 
 ## Step 6 — Orient on structure and design stacks
 
-Read `formae://docs/forma-structure` to orient on the standard project layout before writing any files.
+For a maintained codebase, read `formae://docs/forma-structure` for its layout.
+In mode `none`, use the prepared complete source and dependencies internally;
+design stacks with the user without proposing a directory or file hierarchy.
 
 Then hand off to the `formae-stack-design` skill to decide how resources are grouped into stacks and which stacks map to which targets. Do not embed stack-design logic here.
 
@@ -106,5 +117,6 @@ Auto-activation from this skill's `description` field is a Claude Code behavior;
 - **Always use `formae eval --output-consumer machine`.** Never use `pkl eval` — forma files use formae-specific extensions that only the formae CLI resolves correctly, and `--output-consumer machine` produces parseable output.
 - **This skill dispatches — it does not duplicate.** The full procedures for init, deps, stack design, import, policy, and apply live in their respective skills. Stay thin: triage, confirm, hand off.
 - **Use explicit context.** Discover only registered projects using the supplied harness directory; never scan arbitrary disk or invent paths.
+- **Use the resolved executable.** MCP initialization reports the launcher-selected formae path; use it as one quoted executable for local evaluation. The usual managed path is `~/.formae-ai/opt/bin/formae`, even when the harness PATH has no formae. Locate schemas from exact reported package coordinates and the selected dependency lock; never recursively search the user's home or unrelated caches.
 - **Never silently depend on unverified plugins** (self-hosted). Always surface `originatorVerified: false` and get explicit user confirmation. On hosted formae the question does not arise: the set is first-party and already installed.
 - **Never offer a hosted user a plugin their installation does not have.** Not from the hub, and not by authoring one. The reported set is the catalogue, and anything outside it cannot be applied.

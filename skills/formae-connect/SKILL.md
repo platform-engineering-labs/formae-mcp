@@ -223,12 +223,11 @@ nothing to do: the agent cannot discover or manage anything until a
 every apply both run against. Explain that in a sentence or two, then ask
 whether to create one now.
 
-This step writes a forma and applies it, and that is worth saying out loud to
-someone seeing formae for the first time, because it is not a detour: in formae
-everything is created by declaring it and applying — resources, stacks, targets,
-policies alike. There is no verb that creates a target, in the same way there is
-no verb that creates a bucket. So the first thing this journey produces is a
-small project the user owns, and the target is the first thing declared in it.
+Select the source context with `get_codebase_context`, or reuse the selection
+already made for this session. In mode `none`, describe the target's account,
+region and discovery setting, then preview and confirm that infrastructure
+change. Pkl preparation is internal work; the user is not creating a project.
+In mode `codebase`, use the selected maintained project and keep it updated.
 
 **If they decline, go straight to step 7.**
 
@@ -243,23 +242,23 @@ target names the subscription and authenticates through the tenant and client
 id from the registration, and the config carries no region field the way AWS's
 and GCP's do.
 
-Ask for the directory to create the project in, proposing the current
-directory by name as the default — the same thing `git init`, `npm init`,
-and `cargo init` do.
+**Mode `none`:** create a unique empty directory under the OS temporary directory
+and call `prepare_authoring` with that `temporary_directory` and `profile`,
+omitting `stacks` and `new_stacks`. It returns an empty complete-stack scope for
+target-only authoring. Use its `main.pkl`, `PklProject` and returned `context`;
+add only the target and its schema dependency. Do not add a placeholder stack.
+Keep its generated core schema pin. The templates below describe internal Pkl
+construction, not files to list or ask the user to place. Keep the directory
+through outcome/retry inspection and remove it afterward.
 
-**Unless the current directory is `/` or the user's home directory itself.**
-Neither is a place to scatter a project's three files, and a harness that
-started in one chose it for the user rather than the user choosing it — which
-is what separates this from `git init`, where they cd'd there and typed the
-command. Propose `~/<label>` in that case, reusing the target label they gave
-a moment ago rather than asking a second naming question. They can still name
-any path instead.
+**Mode `codebase`:** use the selected registered project, preserving its files
+and abstractions. Incorporate the target into its existing structure; avoid
+overwriting `vars.pkl` or `targets.pkl`. If the user explicitly wants a new
+maintained project, follow `formae-project-init` and register it after success.
 
-**If that directory already contains a `PklProject`, say so and stop.** This
-flow creates a fresh project; it does not merge into an existing one. Then go
-to step 7.
-
-Otherwise, write three files with the harness's own file tools.
+The following templates show the target declarations and dependencies. Use the
+exact schema versions reported by `list_agent_plugins`; version numbers below
+are examples, not pins to copy over a prepared project.
 
 `PklProject`, pinning `formae` and the cloud's plugin schema by canonical
 semver. **AWS:**
@@ -374,7 +373,8 @@ would silently carry, the same reasoning that governs the account id on the
 local-credentials path in step 3. It is long and easy to mistype, which makes
 copying it rather than retyping it worth insisting on.
 
-`targets.pkl`, the file that gets applied:
+`targets.pkl` in a maintained project, or the returned `main.pkl` in mode `none`,
+is the file that gets applied:
 
 ```pkl
 amends "@formae/forma.pkl"
@@ -387,17 +387,17 @@ forma {
 
 For GCP, spread `vars.gcpTarget` instead; for Azure, `vars.azureTarget`.
 
-Apply `targets.pkl` the way `/formae:apply` does, because this is the user's
-first apply and it should look like every one after it: call `apply_forma` with
-`mode: reconcile` and `simulate: true`, show them what it will do, then apply
-for real.
+Follow `formae-apply` using the selected file and explicit `context`: simulate,
+present the target/account/region/discovery plan and optional message, obtain
+confirmation, then apply and wait for the outcome. In mode `none`, say for
+example: "Create target dev in GCP project example, region us-west2, with
+discovery enabled. Apply?" Report the target result and command ID; keep file
+paths, source changes and dependency commands internal.
 
-Simulating matters more here than the tiny forma suggests. Reconcile destroys
-deployed resources that the file does not declare, so a forma holding only a
-target is a claim about everything in scope, not just about the target. On a
-fresh installation there is nothing to destroy and the simulation says so in one
-line, which is exactly the point: the user sees the shape of an apply while the
-stakes are zero.
+Always review the simulation. Reconcile omission applies within the declared
+stacks; the no-codebase target-only workspace has an empty stack scope and must
+remain stackless. A maintained project's selected entrypoint may include stacks,
+so preserve their complete declarations and review all planned operations.
 
 **Do not add a separate "resolve the project" step:** formae's evaluation
 already runs `pkl project resolve` when `PklProject.deps.json` is absent,
