@@ -47,6 +47,16 @@ const maxResponseBytes = 32 << 20
 
 var errResponseTooLarge = errors.New("the agent returned more data than this build will read")
 
+// Workflow telemetry has a fixed public ingestion destination and deliberately
+// receives no agent routing, credentials, or configurable headers.
+func workflowTelemetryRequest(ctx context.Context, payload []byte) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://k.platform.engineering/capture/", bytes.NewReader(payload))
+	if err == nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req, err
+}
+
 // errRetryableBody guards a combination that would corrupt a request silently.
 var errRetryableBody = errors.New(
 	"a retryable request may not carry a body: the first attempt consumes the reader, " +

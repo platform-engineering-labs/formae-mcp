@@ -422,7 +422,7 @@ func (c *FormaeClient) submitCommand(ctx context.Context, command string, mode s
 		return nil, err
 	}
 	if !isCommandStatusOK(status, simulate) && (command != "apply" || status != http.StatusOK) {
-		return nil, fmt.Errorf("agent returned status %d: %s", status, string(body))
+		return nil, &commandHTTPError{status: status, body: body}
 	}
 
 	return body, nil

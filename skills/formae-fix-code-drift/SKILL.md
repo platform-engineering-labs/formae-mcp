@@ -17,7 +17,7 @@ For mode `codebase`, read the selected main forma and preserve its original decl
 
 ## Observe, decide, review, submit
 
-In mode `none`, explain the infrastructure decision, using the pinned observed
+In both codebase modes, explain the infrastructure decision, using the pinned observed
 origin rather than treating every difference as external:
 
 Read each resource's `ObservedCommand`, `ObservedMode`, `ObservedSource` and
@@ -31,7 +31,7 @@ necessarily every earlier contribution to a cumulative diff. Do not attribute
 all properties to its latest command when multiple changes may have accumulated;
 explain mixed or unavailable history accurately.
 
-- **Sync:** "The bucket's oob label was added outside formae. Keep it or revert it?"
+- **Proven external changes:** "The bucket's oob label was added outside formae. Keep it or revert it?" A latest sync alone does not prove every cumulative change was external.
 - **Patch:** "An earlier formae patch changed the bucket's labels. Keep that
   change as the stack's desired state or revert it?"
 - **Mixed/unknown:** describe the known contributions together; when origin is
@@ -46,9 +46,10 @@ a change as adding it to a Pkl file. Mode `codebase` still synchronizes the
 selected maintained project after central acceptance.
 
 1. Call `apply_forma` with the original complete declaration, selected `context`, `mode: reconcile`, `simulate: true`, and no force or resolution. Inspect the structured rejection's `ObservationID`, stable `ResourceID`, and pinned observed origin. Present current actionable changes grouped by stack. Historical unavailable inputs or provenance remain unavailable.
-2. Obtain exactly one explicit `absorb` or `revert` choice for every actionable `ResourceID` in the observation. Coupled properties are one resource choice. There is no skip within that stack's resolution; the user can abandon the operation without submitting.
+2. Read the current `workflow.drift_preference` on the rejection (or `get_codebase_context`). Default/unset means ask: "A change was made outside formae: oob=drift was added to this bucket. Keep it or revert it?" An instruction to add another label does not answer this question. Only when `explicit: false` and preference storage is available, offer alongside the first external-change decision to ask each time or automatically keep future nonconflicting external changes. A saved explicit `prompt` choice means ask about each change without repeating the preference offer. If preference storage is unavailable, ask about the current change and explain that the preference could not be read; do not overwrite it. Call `set_drift_preference` only with the user's explicit choice; silence keeps the default. This preference belongs to the local user and resolved installation, across sessions/codebases.
+   With `auto_absorb_external`, choose `absorb` automatically only for resources marked `ExternalChangesOnly: true` by the agent. The agent checks the complete interval since the desired baseline; the latest sync alone is insufficient. Patches, mixed/unknown history and missing proof still require a keep/revert decision. Every actionable resource still needs one choice; no skip. Use the final resolution simulation's three-way merge to check conflicts. On `decision-edit-conflict`, ask the user; never discard the requested edit or pre-absorb source to manufacture success. Automatic acceptance does not bypass ordinary confirmation of cloud writes.
 3. Simulate the same original complete declaration with `resolution: {ObservationID, Decisions: [{ResourceID, Action}, ...]}`. Show the final combined plan: acceptance records, provider writes for reverts, compatible user edits/additions/deletions, dependency propagation, and warnings. Absorb can coexist with required provider work; never label the whole plan write-free just because it contains acceptance.
-4. Present a factual suggested `message` with the final plan and ask for confirmation. The user may accept, edit or clear the message in that same confirmation; clearing means `message: ""` and needs no separate approval. Do not include secrets.
+4. Present a factual suggested `message` with the final plan and ask for confirmation. For example: "Keep external oob label and add app=demo. Suggested message: Accept external bucket label and add application label. Apply? You can edit or omit the message." Include automatic acceptance in both the preview and message. The user may accept, edit or clear the message in that same confirmation; clearing means `message: ""` and needs no separate approval. Do not include secrets.
 5. After confirmation, submit the same original declaration and decisions with `simulate: false`, the returned `ReviewID`, and a caller-generated stable `IdempotencyKey`. Retain the exact input, final message and key until outcome is known. Retry an uncertain request with that identical submission and key; changing it causes an idempotency conflict. Never silently retry with force.
 6. Use `get_command_status` with `wait: true`. Report the durable central outcome and command ID, distinguishing acceptance from provider changes. A terminal Failed command can contain desired contributions; report the actual failures.
 

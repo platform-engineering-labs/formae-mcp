@@ -38,8 +38,9 @@ type Binding struct {
 // Registry owns no active project. Each operation selects its own binding.
 type Registry struct{ Path string }
 type document struct {
-	Version  int       `json:"version"`
-	Bindings []Binding `json:"bindings"`
+	Version     int                     `json:"version"`
+	Bindings    []Binding               `json:"bindings"`
+	Preferences []driftPreferenceRecord `json:"preferences,omitempty"`
 }
 
 func Default() (Registry, error) {
@@ -145,6 +146,17 @@ func (r Registry) read() (document, error) {
 		return empty, errors.New("invalid or unsupported codebase registry format")
 	}
 	ids := map[string]bool{}
+	preferenceIdentities := map[Identity]bool{}
+	if len(d.Preferences) > 1024 {
+		return empty, errors.New("too many workflow preferences")
+	}
+	for _, p := range d.Preferences {
+		identity, err := normalizeIdentity(p.Identity)
+		if err != nil || identity != p.Identity || preferenceIdentities[identity] || !validDriftMode(p.Mode) {
+			return empty, errors.New("invalid workflow preference")
+		}
+		preferenceIdentities[identity] = true
+	}
 	pairs := map[string]bool{}
 	for _, b := range d.Bindings {
 		id, err := hex.DecodeString(b.ID)
