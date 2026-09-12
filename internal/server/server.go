@@ -946,7 +946,7 @@ func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return attribute(reached(ec, c), s.applyErrorResult(ctx, ec, err)), nil, nil
 	}
-	reply := jsonResult(result)
+	reply := withNotice(jsonResult(result), s.keepPreferenceNotice(ctx, ec, input, result))
 	if input.Simulate && input.Message == nil {
 		reply = withNotice(reply, "In the final apply confirmation, suggest a concise factual command message describing the requested change and any accepted or reverted drift. The user can accept, edit or omit it in that same response. Pass the agreed message on real submission; an explicitly omitted message is an empty string. Do not infer apply confirmation solely from a message edit.")
 	}

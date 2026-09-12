@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/platform-engineering-labs/formae-mcp/internal/codebase"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
+	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
 
 type commandHTTPError struct {
@@ -37,6 +38,23 @@ func (s *Server) applyErrorResult(ctx context.Context, ec execctx.Context, err e
 		return result
 	}
 	observation, _ := data["ObservationID"].(string)
+	preference, preferenceError := s.currentDriftPreference(ctx, ec)
+	workflow := map[string]any{"drift_preference": preference, "resolution_available": observation != "", "preference_unavailable": preferenceError}
+	envelope["workflow"] = workflow
+	result.StructuredContent = envelope
+	guidance := driftDecisionGuidance
+	if observation == "" {
+		guidance += " This response has no ObservationID: the connected agent has not supplied the recorded resolution protocol. Check its capabilities/version and explain the limitation; do not retry with force or claim a local source edit has accepted the drift."
+	} else if preference.Mode == "auto_absorb_external" {
+		guidance += " The user opted into automatically keeping nonconflicting external changes. Only resources with ExternalChangesOnly=true are eligible. False/missing means ask: it can include a patch or incomplete history, even when the latest command is sync. For eligible resources, propose absorb through the same resolution simulation; the agent's three-way merge decides conflicts. On decision-edit-conflict ask the user; never change their edit to manufacture a conflict-free result. Show automatic acceptance in the final combined preview and message, explicitly including any externally deleted resource leaving desired state. Patches always require a decision."
+	} else if !preference.Explicit && !preferenceError {
+		guidance += " First ask only the current keep/revert question. " + afterKeepPreferenceGuidance
+	}
+	return withNotice(result, guidance)
+}
+
+// Read consent again at preview time: another session may have saved a choice.
+func (s *Server) currentDriftPreference(ctx context.Context, ec execctx.Context) (codebase.DriftPreference, bool) {
 	preference := codebase.DriftPreference{Mode: "prompt"}
 	preferenceError := false
 	id, idErr := codebase.IdentityForConnection(ec.Conn)
@@ -51,16 +69,34 @@ func (s *Server) applyErrorResult(ctx context.Context, ec execctx.Context, err e
 	if preferenceError {
 		preference = codebase.DriftPreference{Mode: "prompt"}
 	}
-	workflow := map[string]any{"drift_preference": preference, "resolution_available": observation != "", "preference_unavailable": preferenceError}
-	envelope["workflow"] = workflow
-	result.StructuredContent = envelope
-	guidance := driftDecisionGuidance
-	if observation == "" {
-		guidance += " This response has no ObservationID: the connected agent has not supplied the recorded resolution protocol. Check its capabilities/version and explain the limitation; do not retry with force or claim a local source edit has accepted the drift."
-	} else if preference.Mode == "auto_absorb_external" {
-		guidance += " The user opted into automatically keeping nonconflicting external changes. Only resources with ExternalChangesOnly=true are eligible. False/missing means ask: it can include a patch or incomplete history, even when the latest command is sync. For eligible resources, propose absorb through the same resolution simulation; the agent's three-way merge decides conflicts. On decision-edit-conflict ask the user; never change their edit to manufacture a conflict-free result. Show automatic acceptance in the final combined preview and message, explicitly including any externally deleted resource leaving desired state. Patches always require a decision."
-	} else if !preference.Explicit && !preferenceError {
-		guidance += " At the first external change, also offer whether to ask in future or automatically keep nonconflicting external changes, including external deletions; patches always remain manual. Save only the user's explicit choice with set_drift_preference. No answer leaves prompt as the default."
+	return preference, preferenceError
+}
+
+const afterKeepPreferenceGuidance = `Only after the user explicitly chose keep for an external change whose original observation has ExternalChangesOnly=true, and only if you have not already asked this preference question during this operation, ask: "For future changes made outside formae, should I keep asking, or automatically keep changes that do not conflict with your requested edits? This includes external deletions; patches and conflicts still require your decision." Patches, mixed/unknown history, and a revert-only decision do not trigger this offer. Do not infer external origin from an absorb decision or the latest sync alone. Save only an explicit answer with set_drift_preference: prompt for keep asking, auto_absorb_external for automatically keep. Keeping this change is not consent to future automatic acceptance. No answer leaves prompt as the default; do not save a choice or block the current apply on an unanswered preference question. Ordinary apply confirmation remains required.`
+
+func (s *Server) keepPreferenceNotice(ctx context.Context, ec execctx.Context, input tools.ApplyFormaInput, result []byte) string {
+	if !input.Simulate || input.Mode != "reconcile" || input.Resolution == nil {
+		return ""
 	}
-	return withNotice(result, guidance)
+	kept := false
+	for _, decision := range input.Resolution.Decisions {
+		if decision.Action == "absorb" {
+			kept = true
+			break
+		}
+	}
+	if !kept {
+		return ""
+	}
+	var response struct{ Review struct{ ReviewID string } }
+	if json.Unmarshal(result, &response) != nil || response.Review.ReviewID == "" {
+		return ""
+	}
+	preference, unavailable := s.currentDriftPreference(ctx, ec)
+	if unavailable || preference.Explicit {
+		return ""
+	}
+	// The review does not repeat ExternalChangesOnly, so this is conditional
+	// harness guidance, not a server assertion of external origin or consent.
+	return afterKeepPreferenceGuidance
 }
