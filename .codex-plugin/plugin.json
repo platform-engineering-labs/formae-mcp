@@ -1,6 +1,6 @@
 {
   "name": "formae",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "MCP server and skills for formae infrastructure-as-code: manage cloud resources, handle drift, discover infrastructure, and build plugins",
   "skills": "./skills",
   "mcpServers": "./.codex-plugin/mcp.json"
