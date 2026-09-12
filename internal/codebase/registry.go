@@ -152,7 +152,7 @@ func (r Registry) read() (document, error) {
 	}
 	for _, p := range d.Preferences {
 		identity, err := normalizeIdentity(p.Identity)
-		if err != nil || identity != p.Identity || preferenceIdentities[identity] || !validDriftMode(p.Mode) {
+		if err != nil || identity != p.Identity || preferenceIdentities[identity] {
 			return empty, errors.New("invalid workflow preference")
 		}
 		preferenceIdentities[identity] = true

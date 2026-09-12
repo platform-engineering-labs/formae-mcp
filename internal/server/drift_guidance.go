@@ -44,7 +44,7 @@ func (s *Server) applyErrorResult(ctx context.Context, ec execctx.Context, err e
 	if idErr == nil && registryErr == nil {
 		var readErr error
 		preference, readErr = registry.DriftPreference(ctx, id)
-		preferenceError = readErr != nil
+		preferenceError = readErr != nil || preference.Unavailable
 	} else {
 		preferenceError = true
 	}
@@ -58,9 +58,9 @@ func (s *Server) applyErrorResult(ctx context.Context, ec execctx.Context, err e
 	if observation == "" {
 		guidance += " This response has no ObservationID: the connected agent has not supplied the recorded resolution protocol. Check its capabilities/version and explain the limitation; do not retry with force or claim a local source edit has accepted the drift."
 	} else if preference.Mode == "auto_absorb_external" {
-		guidance += " The user opted into automatically keeping nonconflicting external changes. Only resources with ExternalChangesOnly=true are eligible. False/missing means ask: it can include a patch or incomplete history, even when the latest command is sync. For eligible resources, propose absorb through the same resolution simulation; the agent's three-way merge decides conflicts. On decision-edit-conflict ask the user; never change their edit to manufacture a conflict-free result. Show automatic acceptance in the final combined preview and message. Patches always require a decision."
+		guidance += " The user opted into automatically keeping nonconflicting external changes. Only resources with ExternalChangesOnly=true are eligible. False/missing means ask: it can include a patch or incomplete history, even when the latest command is sync. For eligible resources, propose absorb through the same resolution simulation; the agent's three-way merge decides conflicts. On decision-edit-conflict ask the user; never change their edit to manufacture a conflict-free result. Show automatic acceptance in the final combined preview and message, explicitly including any externally deleted resource leaving desired state. Patches always require a decision."
 	} else if !preference.Explicit && !preferenceError {
-		guidance += " At the first external change, also offer whether to ask in future or automatically keep nonconflicting external changes; patches always remain manual. Save only the user's explicit choice with set_drift_preference. No answer leaves prompt as the default."
+		guidance += " At the first external change, also offer whether to ask in future or automatically keep nonconflicting external changes, including external deletions; patches always remain manual. Save only the user's explicit choice with set_drift_preference. No answer leaves prompt as the default."
 	}
 	return withNotice(result, guidance)
 }

@@ -3,13 +3,15 @@ package codebase
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // DriftPreference is local user consent, scoped to the resolved installation.
 // It never permits automatic acceptance of firefighting patches.
 type DriftPreference struct {
-	Mode     string `json:"mode"`
-	Explicit bool   `json:"explicit"`
+	Mode        string `json:"mode"`
+	Explicit    bool   `json:"explicit"`
+	Unavailable bool   `json:"unavailable,omitempty"`
 }
 
 type driftPreferenceRecord struct {
@@ -18,6 +20,12 @@ type driftPreferenceRecord struct {
 }
 
 func validDriftMode(mode string) bool { return mode == "prompt" || mode == "auto_absorb_external" }
+
+// Keep preferences beside, not inside, the strict version-1 codebase file so
+// older concurrent MCP builds can continue selecting maintained projects.
+func (r Registry) preferencesRegistry() Registry {
+	return Registry{Path: strings.TrimSuffix(r.Path, ".json") + ".preferences.json"}
+}
 
 func (r Registry) DriftPreference(ctx context.Context, identity Identity) (DriftPreference, error) {
 	initial := DriftPreference{Mode: "prompt"}
@@ -28,12 +36,15 @@ func (r Registry) DriftPreference(ctx context.Context, identity Identity) (Drift
 	if err != nil {
 		return initial, err
 	}
-	d, err := r.read()
+	d, err := r.preferencesRegistry().read()
 	if err != nil {
 		return initial, err
 	}
 	for _, p := range d.Preferences {
 		if p.Identity == identity {
+			if !validDriftMode(p.Mode) {
+				return DriftPreference{Mode: "prompt", Explicit: true, Unavailable: true}, nil
+			}
 			return DriftPreference{Mode: p.Mode, Explicit: true}, nil
 		}
 	}
@@ -48,7 +59,7 @@ func (r Registry) SetDriftPreference(ctx context.Context, identity Identity, mod
 	if err != nil {
 		return DriftPreference{}, err
 	}
-	err = r.update(ctx, func(d *document) error {
+	err = r.preferencesRegistry().update(ctx, func(d *document) error {
 		for i, p := range d.Preferences {
 			if p.Identity == identity {
 				d.Preferences[i].Mode = mode

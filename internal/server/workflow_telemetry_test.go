@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -23,6 +24,7 @@ func TestWorkflowTelemetryOptOutAndCategoricalPayload(t *testing.T) {
 	enabled := false
 	calls := 0
 	reporter := newWorkflowTelemetry()
+	reporter.clientID = func() (string, error) { return "test-client", nil }
 	reporter.enabled = func(context.Context, execctx.Context) bool { return enabled }
 	reporter.client.Transport = workflowTransport(func(r *http.Request) (*http.Response, error) {
 		calls++
@@ -54,6 +56,49 @@ func TestWorkflowTelemetryOptOutAndCategoricalPayload(t *testing.T) {
 	reporter.capture(context.Background(), execctx.Context{}, id, "none", pref, "mcp_workflow_context")
 	if calls != 1 {
 		t.Fatalf("duplicate contexts counted: %d", calls)
+	}
+}
+
+func TestWorkflowTelemetryOfflineDoesNotRetryEachContext(t *testing.T) {
+	reporter := newWorkflowTelemetry()
+	reporter.clientID = func() (string, error) { return "test-client", nil }
+	checks, calls := 0, 0
+	reporter.enabled = func(context.Context, execctx.Context) bool { checks++; return true }
+	reporter.client.Transport = workflowTransport(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("offline") })
+	for i := 0; i < 3; i++ {
+		reporter.capture(context.Background(), execctx.Context{}, codebase.Identity{Kind: "classic", Endpoint: "http://localhost"}, "none", codebase.DriftPreference{Mode: "prompt"}, "mcp_workflow_context")
+	}
+	if checks != 1 || calls != 1 {
+		t.Fatalf("repeated reporting work: checks=%d calls=%d", checks, calls)
+	}
+}
+
+func TestWorkflowTelemetrySeparatesLocalhostOnDifferentMachines(t *testing.T) {
+	w := newWorkflowTelemetry()
+	w.enabled = func(context.Context, execctx.Context) bool { return true }
+	client := "first-machine"
+	w.clientID = func() (string, error) { return client, nil }
+	ids := map[string]bool{}
+	w.client.Transport = workflowTransport(func(r *http.Request) (*http.Response, error) {
+		raw, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(raw), client) {
+			t.Fatal("reported raw client identity")
+		}
+		var event struct {
+			DistinctID string `json:"distinct_id"`
+		}
+		if err := json.Unmarshal(raw, &event); err != nil {
+			t.Fatal(err)
+		}
+		ids[event.DistinctID] = true
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
+	})
+	for _, value := range []string{"first-machine", "second-machine"} {
+		client = value
+		w.capture(context.Background(), execctx.Context{}, codebase.Identity{Kind: "classic", Endpoint: "http://localhost:49684"}, "none", codebase.DriftPreference{Mode: "prompt"}, "mcp_workflow_context")
+	}
+	if len(ids) != 2 || ids[""] {
+		t.Fatalf("different machines collapsed: %#v", ids)
 	}
 }
 

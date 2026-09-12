@@ -12,27 +12,31 @@ import (
 	"sync"
 	"time"
 
+	"github.com/platform-engineering-labs/formae-mcp/internal/clientid"
 	"github.com/platform-engineering-labs/formae-mcp/internal/codebase"
 	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 )
 
 type workflowTelemetry struct {
-	mu      sync.Mutex
-	seen    map[string]bool
-	client  *http.Client
-	enabled func(context.Context, execctx.Context) bool
+	mu       sync.Mutex
+	seen     map[string]bool
+	client   *http.Client
+	enabled  func(context.Context, execctx.Context) bool
+	clientID func() (string, error)
 }
 
 func newWorkflowTelemetry() *workflowTelemetry {
-	return &workflowTelemetry{seen: map[string]bool{}, client: &http.Client{Timeout: time.Second, CheckRedirect: refuseRedirects}, enabled: workflowUsageEnabled}
+	return &workflowTelemetry{seen: map[string]bool{}, client: &http.Client{Timeout: time.Second, CheckRedirect: refuseRedirects}, enabled: workflowUsageEnabled, clientID: clientid.NewResolver().Resolve}
 }
 
 // Reporting is best effort and never changes the outcome of a local preference
 // or source selection. Each categorical combination is emitted once per process.
-// Distinct IDs represent installations, not individual people in a team.
+// Hosted distinct IDs represent installations, not individual people in a team.
+// Classic IDs also include the existing local CLI client ID, so localhost on
+// unrelated machines does not collapse into one installation.
 func (w *workflowTelemetry) capture(ctx context.Context, ec execctx.Context, id codebase.Identity, mode string, pref codebase.DriftPreference, event string) {
-	if w == nil || !w.enabled(ctx, ec) {
+	if w == nil {
 		return
 	}
 	if event != "mcp_workflow_context" && event != "mcp_drift_preference_changed" {
@@ -47,6 +51,13 @@ func (w *workflowTelemetry) capture(ctx context.Context, ec execctx.Context, id 
 		return
 	}
 	identity, _ := json.Marshal(id)
+	if id.Kind == "classic" {
+		clientID, err := w.clientID()
+		if err != nil {
+			return
+		}
+		identity, _ = json.Marshal([]any{id, clientID})
+	}
 	hash := sha256.Sum256(identity)
 	distinct := "mcp-installation-" + hex.EncodeToString(hash[:])
 	properties := map[string]any{"$process_person_profile": false, "connection_mode": id.Kind, "drift_preference": pref.Mode, "drift_preference_explicit": pref.Explicit, "mcp_version": implementation().Version}
@@ -64,16 +75,19 @@ func (w *workflowTelemetry) capture(ctx context.Context, ec execctx.Context, id 
 	if len(w.seen) >= 1024 {
 		w.seen = map[string]bool{}
 	}
+	w.mu.Unlock()
+	if !w.enabled(ctx, ec) {
+		return
+	}
+	w.mu.Lock()
+	if w.seen[key] {
+		w.mu.Unlock()
+		return
+	}
 	w.seen[key] = true
 	w.mu.Unlock()
-	sent := false
-	defer func() {
-		if !sent {
-			w.mu.Lock()
-			delete(w.seen, key)
-			w.mu.Unlock()
-		}
-	}()
+	// One bounded attempt per combination. Offline/blocked telemetry must not
+	// delay every subsequent context call or retry an infrastructure operation.
 	requestCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	req, err := workflowTelemetryRequest(requestCtx, payload)
@@ -86,7 +100,6 @@ func (w *workflowTelemetry) capture(ctx context.Context, ec execctx.Context, id 
 	}
 	defer func() { _ = response.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-	sent = response.StatusCode >= 200 && response.StatusCode < 300
 }
 
 // Read the existing non-secret CLI setting, using the resolved profile rather
