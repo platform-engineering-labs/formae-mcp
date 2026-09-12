@@ -19,6 +19,8 @@ Install via the
 
 ### Fixed
 
+- Disposable authoring uses the published X.Y.Z schema coordinate for resource plugins installed from a dev build, matching `list_agent_plugins`. Returned metadata retains the actual installed version.
+
 - Drift rejections now include keep/revert guidance and the current local preference in the tool response, in both codebase modes. Adding a resource property does not imply acceptance of unrelated drift. Combined changes use reviewed reconciliation; agents without that protocol produce an explicit limitation rather than a force workaround. Successful previews remind the harness to offer an editable or empty command message.
 
 - Inventory Pkl exports now carry explicit actual-state/partial-source metadata and a warning alongside the unchanged raw Pkl. Existing-stack authoring points to complete desired extraction, preserving unabsorbed drift as an explicit reconcile decision.

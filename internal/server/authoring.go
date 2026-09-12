@@ -72,9 +72,21 @@ func (c *FormaeClient) renderingPlugins(ctx context.Context) (json.RawMessage, [
 	if err := json.Unmarshal(doc.Plugins, &plugins); err != nil {
 		return nil, nil, err
 	}
-	// Render remote dependencies from the exact installed namespace/version. Local
-	// paths in this metadata belong to the agent, never to the caller's machine.
-	return doc.Plugins, plugins, nil
+	// The offline renderer consumes schema coordinates through InstalledVersion.
+	// Dev builds publish schemas at X.Y.Z, as list_agent_plugins already reports.
+	// Keep actual installed versions in the authoring summary. Unknown prerelease
+	// forms remain literal: never guess another schema for them.
+	rendering := slices.Clone(plugins)
+	for i := range rendering {
+		if rendering[i].Type == "resource" {
+			if version, ok := canonicalSchemaVersion(rendering[i].InstalledVersion); ok {
+				rendering[i].InstalledVersion = version
+			}
+		}
+	}
+	// Agent-side local paths are deliberately absent from remote rendering metadata.
+	raw, err := json.Marshal(rendering)
+	return raw, plugins, err
 }
 
 func (c *FormaeClient) desiredStacks(ctx context.Context, stacks []string) (json.RawMessage, error) {
@@ -282,7 +294,7 @@ func (s *Server) prepareAuthoring(ctx context.Context, ec execctx.Context, c *Fo
 	if err := os.Rename(ready.Name(), filepath.Join(directory, authoringMetadataName)); err != nil {
 		return nil, err
 	}
-	return &authoringResult{FilePath: path, ProjectPath: filepath.Join(directory, "PklProject"), Context: tools.SourceContext{Mode: codebase.ModeNone, TemporaryDirectory: directory}, CompleteStacks: labels, SchemaPlugins: summary, Diagnostics: extracted.Extraction.Diagnostics, Warnings: safeSubprocessOutput(output, ec.Credential), Instructions: "This is mode none: follow the server instructions and discuss infrastructure outcomes and user choices; keep temporary paths, source files and dependency work internal. With no complete stacks selected, this workspace supports stackless declarations such as initial targets only; prepare a fresh workspace with explicit stack scope before adding stacks, resources or generators. Read the diagnostics and complete main.pkl. Unresolved desired references are repair placeholders: explain the failure and use the user's intended change to remove the owning declaration, rewire its reference, or explicitly restore its dependency before evaluation. Ask when that choice is unclear; never silently drop declarations or bind to a same-name replacement. A complete reconcile can withdraw failed-create intent with zero cloud operations; that does not confirm cloud absence. Read and edit the complete main.pkl; preserve all existing stack declarations, policies, targets, references and generators. Add schema dependencies for new resource namespaces using the reported installed versions, then resolve PklProject dependencies. Simulate soft reconcile with this exact context; resolve all actionable drift and confirm the final combined plan before submitting. Keep the directory and exact submission until outcome/retry inspection is complete. After terminal outcome, or abandoning a preview with no real submission, the harness removes this disposable directory. It is never a maintained project or automatically registered."}, nil
+	return &authoringResult{FilePath: path, ProjectPath: filepath.Join(directory, "PklProject"), Context: tools.SourceContext{Mode: codebase.ModeNone, TemporaryDirectory: directory}, CompleteStacks: labels, SchemaPlugins: summary, Diagnostics: extracted.Extraction.Diagnostics, Warnings: safeSubprocessOutput(output, ec.Credential), Instructions: "This is mode none: follow the server instructions and discuss infrastructure outcomes and user choices; keep temporary paths, source files and dependency work internal. With no complete stacks selected, this workspace supports stackless declarations such as initial targets only; prepare a fresh workspace with explicit stack scope before adding stacks, resources or generators. Read the diagnostics and complete main.pkl. Unresolved desired references are repair placeholders: explain the failure and use the user's intended change to remove the owning declaration, rewire its reference, or explicitly restore its dependency before evaluation. Ask when that choice is unclear; never silently drop declarations or bind to a same-name replacement. A complete reconcile can withdraw failed-create intent with zero cloud operations; that does not confirm cloud absence. Read and edit the complete main.pkl; preserve all existing stack declarations, policies, targets, references and generators. For new resource namespaces, call list_agent_plugins and use its explicit schema package coordinates, not schema_plugins.installedVersion (dev build suffixes are not schema coordinates). If it cannot name a schema coordinate, stop and report the limitation. Then resolve PklProject dependencies. Simulate soft reconcile with this exact context; resolve all actionable drift and confirm the final combined plan before submitting. Keep the directory and exact submission until outcome/retry inspection is complete. After terminal outcome, or abandoning a preview with no real submission, the harness removes this disposable directory. It is never a maintained project or automatically registered."}, nil
 }
 
 func augmentAuthoring(ctx context.Context, c *FormaeClient, raw json.RawMessage, input tools.PrepareAuthoringInput) (json.RawMessage, error) {

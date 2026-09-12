@@ -67,6 +67,7 @@ if args[0]=='extract':
  assert '--profile' not in args and '--config' not in args, args
  bundle=json.load(sys.stdin)
  assert bundle['Plugins'][0]['namespace']=='test', bundle
+ assert bundle['Plugins'][0]['installedVersion']=='1.2.3', bundle
  assert bundle['Forma']['Extraction']['CompleteStacks'][0]['Label']=='owned'
  assert bundle['Forma']['Targets'][0]['Config']['number']==9007199254740993
  path=pathlib.Path(args[-1]);path.write_text(json.dumps(bundle['Forma']))
@@ -98,7 +99,7 @@ func TestDisposableAuthoringSurvivesFreshServerAndRejectsWrongInstallation(t *te
 			_, _ = fmt.Fprint(w, `{"Stacks":[{"Label":"owned"}],"Targets":[{"Label":"target","Config":{"number":9007199254740993}}],"Resources":[],"Extraction":{"CompleteStacks":[{"Label":"owned"}]}}`)
 		},
 		"GET /api/v1/plugins": func(w http.ResponseWriter, r *http.Request) {
-			_, _ = fmt.Fprint(w, `{"plugins":[{"type":"resource","namespace":"test","name":"test","installedVersion":"1.2.3","localPath":"/remote/never-local"}]}`)
+			_, _ = fmt.Fprint(w, `{"plugins":[{"type":"resource","namespace":"test","name":"test","installedVersion":"1.2.3-dev.0","localPath":"/remote/never-local"}]}`)
 		},
 		"POST /api/v1/commands": func(w http.ResponseWriter, r *http.Request) {
 			posts++
@@ -717,6 +718,36 @@ else:
 			}
 			if posts != 2 {
 				t.Fatalf("expanded scope reached the agent: %d posts", posts)
+			}
+		})
+	}
+}
+
+func TestRenderingPluginsUsesPublishedSchemaCoordinates(t *testing.T) {
+	for _, tc := range []struct{ kind, installed, want string }{
+		{"resource", "0.1.15-dev.0", "0.1.15"},
+		{"resource", "0.1.15", "0.1.15"},
+		{"resource", "0.1.15-rc.1", "0.1.15-rc.1"},
+		{"auth", "0.1.15-dev.0", "0.1.15-dev.0"},
+	} {
+		t.Run(tc.kind+tc.installed, func(t *testing.T) {
+			agent := mockAgent(t, map[string]http.HandlerFunc{"GET /api/v1/plugins": func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"plugins":[{"type":%q,"namespace":"GCP","name":"gcp","installedVersion":%q}]}`, tc.kind, tc.installed)
+			}})
+			defer agent.Close()
+			raw, summary, err := NewFormaeClient(agent.URL).renderingPlugins(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var rendered []schemaPlugin
+			if err := json.Unmarshal(raw, &rendered); err != nil {
+				t.Fatal(err)
+			}
+			if rendered[0].InstalledVersion != tc.want {
+				t.Fatalf("rendering coordinate = %q, want %q", rendered[0].InstalledVersion, tc.want)
+			}
+			if summary[0].InstalledVersion != tc.installed {
+				t.Fatal("installed version changed in authoring metadata")
 			}
 		})
 	}
