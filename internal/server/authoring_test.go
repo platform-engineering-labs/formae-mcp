@@ -732,7 +732,7 @@ func TestRenderingPluginsUsesPublishedSchemaCoordinates(t *testing.T) {
 	} {
 		t.Run(tc.kind+tc.installed, func(t *testing.T) {
 			agent := mockAgent(t, map[string]http.HandlerFunc{"GET /api/v1/plugins": func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, `{"plugins":[{"type":%q,"namespace":"GCP","name":"gcp","installedVersion":%q}]}`, tc.kind, tc.installed)
+				_, _ = fmt.Fprintf(w, `{"plugins":[{"type":%q,"namespace":"GCP","name":"gcp","installedVersion":%q}]}`, tc.kind, tc.installed)
 			}})
 			defer agent.Close()
 			raw, summary, err := NewFormaeClient(agent.URL).renderingPlugins(context.Background())
