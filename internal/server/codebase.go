@@ -68,10 +68,13 @@ func (s *Server) handleCodebaseContext(ctx context.Context, _ *mcp.CallToolReque
 		return codebaseReply(ec, nil, err)
 	}
 	preference, err := registry.DriftPreference(ctx, identity)
-	if err == nil {
+	if err != nil {
+		preference = codebase.DriftPreference{Mode: "prompt", Unavailable: true}
+	}
+	if err == nil && !preference.Unavailable {
 		s.workflowTelemetry.capture(ctx, ec, identity, selection.Mode, preference, "mcp_workflow_context")
 	}
-	return codebaseReply(ec, codebaseContextResult{Identity: identity, Selection: selection, DriftPreference: preference}, err)
+	return codebaseReply(ec, codebaseContextResult{Identity: identity, Selection: selection, DriftPreference: preference}, nil)
 }
 
 func (s *Server) handleSetDriftPreference(ctx context.Context, _ *mcp.CallToolRequest, input tools.DriftPreferenceInput) (*mcp.CallToolResult, any, error) {

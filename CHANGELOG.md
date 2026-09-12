@@ -14,8 +14,8 @@ Install via the
 
 ### Added
 
-- Local installation-scoped drift preferences: ask each time (default), or automatically keep nonconflicting external changes. Intentional patches and uncertain history still require a decision. The agent must supply proof of external-only history; older agents continue to prompt.
-- MCP workflow analytics for effective codebase mode and drift preference, using the existing PostHog destination and honoring the CLI usage-reporting opt-out. Events contain categorical settings and an installation-derived identifier, not source paths, resource properties or command messages.
+- Local installation-scoped drift preferences: ask each time (default), or automatically keep nonconflicting external changes. Intentional patches and uncertain history still require a decision. The agent must supply proof of external-only history; older agents continue to prompt. Keeping an external deletion removes the resource from desired state and is shown in the combined preview. Changes first observed by an apply pre-read, or following failed desired work, remain manual when their history cannot prove external-only origin.
+- MCP workflow analytics for effective codebase mode and drift preference, using the existing PostHog destination and honoring the CLI usage-reporting opt-out. Events contain categorical settings and an anonymous connection identifier (including the local CLI client ID for classic connections), not source paths, resource properties or command messages.
 
 ### Fixed
 
