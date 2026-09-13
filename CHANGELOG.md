@@ -14,12 +14,12 @@ Install via the
 
 ### Added
 
-- Local installation-scoped drift preferences: ask each time (default), or automatically keep nonconflicting external changes. Intentional patches and uncertain history still require a decision. The agent must supply proof of external-only history; older agents continue to prompt. Keeping an external deletion removes the resource from desired state and is shown in the combined preview. Changes first observed by an apply pre-read, or following failed desired work, remain manual when their history cannot prove external-only origin.
+- Local installation-scoped drift preferences: ask each time (default), or automatically keep nonconflicting external changes and formae patches, including deletions. Conflicts still require a decision, and the combined apply still requires confirmation. Previously saved external-only choices keep their narrower scope until the user explicitly changes them.
 - MCP workflow analytics for effective codebase mode and drift preference, using the existing PostHog destination and honoring the CLI usage-reporting opt-out. Events contain categorical settings and an anonymous connection identifier (including the local CLI client ID for classic connections), not source paths, resource properties or command messages.
 
 ### Fixed
 
-- Offer the future external-drift preference after an explicit keep decision, with a conditional reminder in successful resolution previews. Saved choices suppress the offer; keeping one change never opts into future automatic acceptance.
+- Offer the future drift preference after an explicit keep decision, with a reminder in successful resolution previews. Saved choices suppress the offer; keeping one change never opts into future automatic acceptance.
 
 - Disposable authoring uses the published X.Y.Z schema coordinate for resource plugins installed from a dev build, matching `list_agent_plugins`. Returned metadata retains the actual installed version.
 

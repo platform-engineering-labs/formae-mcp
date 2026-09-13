@@ -45,6 +45,8 @@ func (s *Server) applyErrorResult(ctx context.Context, ec execctx.Context, err e
 	guidance := driftDecisionGuidance
 	if observation == "" {
 		guidance += " This response has no ObservationID: the connected agent has not supplied the recorded resolution protocol. Check its capabilities/version and explain the limitation; do not retry with force or claim a local source edit has accepted the drift."
+	} else if preference.Mode == "auto_absorb" {
+		guidance += " The user opted into automatically keeping nonconflicting changes, including formae patches, external changes and mixed history. Propose absorb for every actionable resource in this observation through the same resolution simulation; ExternalChangesOnly is descriptive, not an eligibility restriction for this preference. The agent three-way merge checks conflicts. On decision-edit-conflict ask the user; never discard their requested edit to manufacture success. Show automatic acceptance in the final combined preview and message, including deletions leaving desired state. Ordinary apply confirmation remains required."
 	} else if preference.Mode == "auto_absorb_external" {
 		guidance += " The user opted into automatically keeping nonconflicting external changes. Only resources with ExternalChangesOnly=true are eligible. False/missing means ask: it can include a patch or incomplete history, even when the latest command is sync. For eligible resources, propose absorb through the same resolution simulation; the agent's three-way merge decides conflicts. On decision-edit-conflict ask the user; never change their edit to manufacture a conflict-free result. Show automatic acceptance in the final combined preview and message, explicitly including any externally deleted resource leaving desired state. Patches always require a decision."
 	} else if !preference.Explicit && !preferenceError {
@@ -72,7 +74,7 @@ func (s *Server) currentDriftPreference(ctx context.Context, ec execctx.Context)
 	return preference, preferenceError
 }
 
-const afterKeepPreferenceGuidance = `Only after the user explicitly chose keep for an external change whose original observation has ExternalChangesOnly=true, and only if you have not already asked this preference question during this operation, ask: "For future changes made outside formae, should I keep asking, or automatically keep changes that do not conflict with your requested edits? This includes external deletions; patches and conflicts still require your decision." Patches, mixed/unknown history, and a revert-only decision do not trigger this offer. Do not infer external origin from an absorb decision or the latest sync alone. Save only an explicit answer with set_drift_preference: prompt for keep asking, auto_absorb_external for automatically keep. Keeping this change is not consent to future automatic acceptance. No answer leaves prompt as the default; do not save a choice or block the current apply on an unanswered preference question. Ordinary apply confirmation remains required.`
+const afterKeepPreferenceGuidance = `Only after the user explicitly chose keep, and only if you have not already asked this preference question during this operation, ask: "For future changes, should I keep asking, or automatically keep changes that do not conflict with your requested edits? This includes changes made outside formae, formae patches, and deletions; only conflicts require a keep/revert decision." A revert-only decision does not trigger this offer. Save only an explicit answer with set_drift_preference: prompt for keep asking, auto_absorb for automatically keep. Keeping this change is not consent to future automatic acceptance. No answer leaves prompt as the default; do not save a choice or block the current apply on an unanswered preference question. Ordinary apply confirmation remains required.`
 
 func (s *Server) keepPreferenceNotice(ctx context.Context, ec execctx.Context, input tools.ApplyFormaInput, result []byte) string {
 	if !input.Simulate || input.Mode != "reconcile" || input.Resolution == nil {
@@ -96,7 +98,7 @@ func (s *Server) keepPreferenceNotice(ctx context.Context, ec execctx.Context, i
 	if unavailable || preference.Explicit {
 		return ""
 	}
-	// The review does not repeat ExternalChangesOnly, so this is conditional
-	// harness guidance, not a server assertion of external origin or consent.
+	// The harness must distinguish an explicit keep from automatically chosen absorb.
+	// A successful preview alone is not consent to future acceptance.
 	return afterKeepPreferenceGuidance
 }

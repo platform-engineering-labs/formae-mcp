@@ -40,13 +40,13 @@ func TestWorkflowTelemetryOptOutAndCategoricalPayload(t *testing.T) {
 			t.Fatalf("private data: %s", raw)
 		}
 		props := event["properties"].(map[string]any)
-		if props["codebase_mode"] != "none" || props["drift_preference"] != "auto_absorb_external" || props["drift_preference_explicit"] != true {
+		if props["codebase_mode"] != "none" || props["drift_preference"] != "auto_absorb" || props["drift_preference_explicit"] != true {
 			t.Fatalf("properties: %#v", props)
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 	})
 	id := codebase.Identity{Kind: "classic", Endpoint: "https://private.example"}
-	pref := codebase.DriftPreference{Mode: "auto_absorb_external", Explicit: true}
+	pref := codebase.DriftPreference{Mode: "auto_absorb", Explicit: true}
 	reporter.capture(context.Background(), execctx.Context{}, id, "none", pref, "mcp_workflow_context")
 	if calls != 0 {
 		t.Fatal("reported while opted out")

@@ -71,3 +71,17 @@ func TestUnknownFuturePreferencePreservesSourceSelection(t *testing.T) {
 		t.Fatalf("preference blocked source: %+v %v", selection, err)
 	}
 }
+
+func TestAutomaticAcceptanceIncludingPatchesPersistsSeparatelyFromExternalOnly(t *testing.T) {
+	r := Registry{Path: filepath.Join(t.TempDir(), "codebases.json")}
+	id := hosted("000000000000000000000000001")
+	for _, mode := range []string{"auto_absorb_external", "auto_absorb"} {
+		if _, err := r.SetDriftPreference(context.Background(), id, mode); err != nil {
+			t.Fatal(err)
+		}
+		got, err := (Registry{Path: r.Path}).DriftPreference(context.Background(), id)
+		if err != nil || got.Mode != mode || !got.Explicit {
+			t.Fatalf("consent scope changed: %+v %v", got, err)
+		}
+	}
+}
