@@ -52,7 +52,8 @@ func TestResolutionPreviewOffersPreferenceOnlyWhenUnset(t *testing.T) {
 	}{
 		{"unset keep", "", "absorb", true, true, true},
 		{"explicit prompt", "prompt", "absorb", true, true, false},
-		{"explicit auto", "auto_absorb_external", "absorb", true, true, false},
+		{"legacy external-only", "auto_absorb_external", "absorb", true, true, false},
+		{"explicit auto", "auto_absorb", "absorb", true, true, false},
 		{"revert", "", "revert", true, true, false},
 		{"submission", "", "absorb", false, true, false},
 		{"no review", "", "absorb", true, false, false},
@@ -97,11 +98,11 @@ func TestResolutionPreviewOffersPreferenceOnlyWhenUnset(t *testing.T) {
 				t.Fatalf("unexpected error: %+v", result)
 			}
 			raw, _ := json.Marshal(result)
-			if got := strings.Contains(string(raw), "For future changes made outside formae"); got != tc.want {
+			if got := strings.Contains(string(raw), "For future changes,"); got != tc.want {
 				t.Fatalf("offer=%v want=%v: %s", got, tc.want, raw)
 			}
 			if tc.want {
-				for _, required := range []string{"ExternalChangesOnly=true", "explicitly chose keep", "set_drift_preference", "external deletions", "Patches", "No answer"} {
+				for _, required := range []string{"explicitly chose keep", "set_drift_preference", "deletions", "formae patches", "auto_absorb", "No answer"} {
 					if !strings.Contains(string(raw), required) {
 						t.Errorf("missing %q", required)
 					}
@@ -133,7 +134,28 @@ func TestInitialDriftPreferenceOfferWaitsForKeep(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ = json.Marshal(s.applyErrorResult(context.Background(), ec, remote))
-	if strings.Contains(string(raw), "For future changes made outside formae") {
+	if strings.Contains(string(raw), "For future changes,") {
 		t.Fatal("repeated preference offer for explicit prompt")
+	}
+}
+
+func TestAutomaticAcceptanceIncludesPatchAndMixedObservations(t *testing.T) {
+	s := New("")
+	registry := codebase.Registry{Path: filepath.Join(t.TempDir(), "codebases.json")}
+	s.codebaseRegistry = func() (codebase.Registry, error) { return registry, nil }
+	ec := execctx.Context{Conn: config.Classic{URL: "http://localhost", Port: 1234}}
+	id, _ := codebase.IdentityForConnection(ec.Conn)
+	if _, err := registry.SetDriftPreference(context.Background(), id, "auto_absorb"); err != nil {
+		t.Fatal(err)
+	}
+	remote := &commandHTTPError{status: 409, body: []byte(`{"error":"ReconcileRejected","data":{"ObservationID":"o","ModifiedStacks":{"s":{"ModifiedResources":[{"ResourceID":"r","ExternalChangesOnly":false,"ObservedCommand":"apply","ObservedMode":"patch"}]}}}}`)}
+	raw, _ := json.Marshal(s.applyErrorResult(context.Background(), ec, remote))
+	for _, part := range []string{"including formae patches", "decision-edit-conflict", "final combined preview"} {
+		if !strings.Contains(string(raw), part) {
+			t.Errorf("missing %q: %s", part, raw)
+		}
+	}
+	if strings.Contains(string(raw), "Patches always require a decision") {
+		t.Fatal("patches excluded from broad consent")
 	}
 }

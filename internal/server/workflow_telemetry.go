@@ -47,7 +47,7 @@ func (w *workflowTelemetry) capture(ctx context.Context, ec execctx.Context, id 
 	default:
 		return
 	}
-	if pref.Mode != "prompt" && pref.Mode != "auto_absorb_external" {
+	if pref.Mode != "prompt" && pref.Mode != "auto_absorb" && pref.Mode != "auto_absorb_external" {
 		return
 	}
 	identity, _ := json.Marshal(id)

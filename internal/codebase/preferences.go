@@ -7,7 +7,7 @@ import (
 )
 
 // DriftPreference is local user consent, scoped to the resolved installation.
-// It never permits automatic acceptance of firefighting patches.
+// auto_absorb includes patches; auto_absorb_external preserves older, narrower consent.
 type DriftPreference struct {
 	Mode        string `json:"mode"`
 	Explicit    bool   `json:"explicit"`
@@ -19,7 +19,9 @@ type driftPreferenceRecord struct {
 	Mode     string   `json:"mode"`
 }
 
-func validDriftMode(mode string) bool { return mode == "prompt" || mode == "auto_absorb_external" }
+func validDriftMode(mode string) bool {
+	return mode == "prompt" || mode == "auto_absorb" || mode == "auto_absorb_external"
+}
 
 // Keep preferences beside, not inside, the strict version-1 codebase file so
 // older concurrent MCP builds can continue selecting maintained projects.
@@ -53,7 +55,7 @@ func (r Registry) DriftPreference(ctx context.Context, identity Identity) (Drift
 
 func (r Registry) SetDriftPreference(ctx context.Context, identity Identity, mode string) (DriftPreference, error) {
 	if !validDriftMode(mode) {
-		return DriftPreference{}, fmt.Errorf("drift preference must be prompt or auto_absorb_external")
+		return DriftPreference{}, fmt.Errorf("drift preference must be prompt, auto_absorb, or auto_absorb_external")
 	}
 	identity, err := normalizeIdentity(identity)
 	if err != nil {
