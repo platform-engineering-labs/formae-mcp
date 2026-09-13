@@ -69,14 +69,15 @@
     "forbidden": []
   },
   {
-    "scenario": "Incident patch must remain unaccepted until a later explicit decision",
+    "scenario": "Incident patch defers reconciliation; later reconciliation honors the saved preference",
     "skill": "formae-patch",
     "required": [
-      "Do not automatically absorb",
+      "Do not immediately reconcile",
+      "auto_absorb",
       "never patch",
       "context"
     ],
-    "forbidden": []
+    "forbidden": ["Do not automatically absorb the patch"]
   },
   {
     "scenario": "Policy planner must edit complete selected temporary source and never force",

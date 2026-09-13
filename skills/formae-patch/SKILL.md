@@ -18,7 +18,7 @@ Patch only applies the changes explicitly specified in the forma file. Other res
 - Urgent security fixes
 - An explicit request to use patch mode and defer reconciliation
 
-For ordinary configuration changes, prepare the complete affected stack and use reconcile without force. Never choose patch to avoid resolving drift or because only a partial file is currently available. Keep the selected source context on both preview and real submission. Explain the temporary nature of a patch in its confirmation; do not automatically absorb it afterward.
+For ordinary configuration changes, prepare the complete affected stack and use reconcile without force. Never choose patch to avoid resolving drift or because only a partial file is currently available. Keep the selected source context on both preview and real submission. Explain the temporary nature of a patch in its confirmation. Do not immediately reconcile merely to make the patch permanent; this incident operation deliberately defers reconciliation. On the next requested reconcile, follow the saved drift preference.
 
 ## Source context
 
@@ -47,12 +47,13 @@ launcher-selected formae executable from MCP initialization for local CLI work.
 After a successful patch, always remind the user:
 
 > This change was made through formae as a temporary patch. When reviewing this temporary intervention,
-> decide whether to keep it as the stack's desired state or revert it.
+> reconcile it into the stack's desired state or revert it. With automatic acceptance enabled,
+> the next requested reconcile keeps nonconflicting patch changes and shows them in its preview.
 
 Follow `formae-fix-code-drift` for that later decision. A patch is not a change
 made outside formae; use its recorded origin when explaining it.
 
-Do not automatically absorb the patch or update maintained desired source to make it permanent. Resolution controls apply only to soft reconcile, never patch.
+Do not immediately reconcile or update maintained desired source merely to make this patch permanent. At the next requested soft reconcile, `auto_absorb` covers nonconflicting patches as well as external changes; only conflicts need a keep/revert decision. Default `prompt` and legacy `auto_absorb_external` still ask about patches. Follow `formae-fix-code-drift` for the combined preview and ordinary apply confirmation. Resolution controls apply only to soft reconcile, never patch.
 
 ## Important
 
