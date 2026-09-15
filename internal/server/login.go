@@ -483,8 +483,12 @@ func describeLoginFailure(code, pluginCode string) string {
 			"Your sign-in is not lost: run `formae login --hosted` to see the reason, and once it is " +
 			"fixed run login again (it will find the open session and go straight to writing profiles)"
 	case "plugin_missing":
-		return "signing in to the hosted platform needs the oidc auth plugin, which is not installed. " +
-			"Install it with `pelmgr install oidc`, then try again"
+		// The launcher installs the plugin when the server starts, for its own
+		// formae and for one the user already had. Naming the package manager
+		// instead sends them to a tool the launcher never leaves on PATH.
+		return "signing in to the hosted platform needs the oidc auth plugin, which formae could not load. " +
+			"The plugin is installed when this server starts, so restart the assistant and try again; " +
+			"if it still fails, the server's startup log says why the install did not happen"
 	case "auth_failed":
 		switch pluginCode {
 		case "session_expired":
