@@ -14,7 +14,7 @@
 #   The binary lands at ~/.formae-ai/opt/bin/<pkg>.
 #   Returns non-zero on failure; progress is written to stderr.
 #
-#   Every installer invocation below is redirected to stderr, and that is a
+#   Every installer invocation in install_pkg is redirected to stderr, and that is a
 #   protocol requirement rather than tidiness. This file is sourced by
 #   start-mcp.sh, whose stdout IS the MCP stdio stream, so anything an installer
 #   prints there lands in the middle of the JSON-RPC framing. Both pelmgr and the
@@ -36,15 +36,42 @@ provision_pkg() {
         return 0
     fi
 
+    install_pkg "$_tree" "$_pchan" "$_ppkg"
+}
+
+# provision_plugin <name> <channel> <tree>
+#   Installs the formae plugin <name> into <tree> unless it is already there.
+#   A plugin has no binary under bin/ for provision_pkg's fast path to see, so
+#   the check is on the plugin directory itself; without it the plugin was
+#   reinstalled on every launch.
+provision_plugin() {
+    _plname="$1"
+    _plchan="$2"
+    _pltree="$3"
+
+    if [ -d "$_pltree/formae/plugins/$_plname" ]; then
+        echo "provision_plugin: $_plname already in $_pltree, skipping" >&2
+        return 0
+    fi
+    install_pkg "$_pltree" "$_plchan" "$_plname"
+}
+
+# install_pkg <tree> <channel> <pkg>
+#   Runs the package manager. Everything that downloads goes through here.
+install_pkg() {
+    _iptree="$1"
+    _ipchan="$2"
+    _ippkg="$3"
+
     # Orbital walks up only one directory level when deciding whether sudo is
-    # needed. If ~/.formae-ai is missing it cannot find the existing tree root
-    # and wrongly demands privilege escalation. Create the parent first.
-    mkdir -p "$HOME/.formae-ai"
+    # needed. If the tree's parent is missing it cannot find the existing tree
+    # root and wrongly demands privilege escalation. Create the parent first.
+    mkdir -p "$(dirname -- "$_iptree")"
 
     if command -v pelmgr >/dev/null 2>&1; then
         # pelmgr is already on PATH — invoke it directly.
-        echo "provision_pkg: installing $_ppkg (channel: $_pchan) via pelmgr" >&2
-        pelmgr --install-path "$_tree" install --channel "$_pchan" --yes "$_ppkg" >&2
+        echo "install_pkg: installing $_ippkg (channel: $_ipchan) into $_iptree via pelmgr" >&2
+        pelmgr --install-path "$_iptree" install --channel "$_ipchan" --yes "$_ippkg" >&2
     else
         # Bootstrap pelmgr via the hub setup script.
         # The `--` after the inline script string is bash's $0 placeholder, NOT
@@ -53,13 +80,13 @@ provision_pkg() {
         # bash itself; the setup.sh one-liner reads them as its own arguments.
         # Do NOT write `bash setup.sh -- install …` — that passes literal `--`
         # to pelmgr and breaks flag parsing.
-        echo "provision_pkg: pelmgr not found, bootstrapping via hub setup.sh" >&2
+        echo "install_pkg: pelmgr not found, bootstrapping via hub setup.sh" >&2
         bash -c "$(curl -fsSL https://hub.platform.engineering/get/setup.sh)" \
             -- install \
-            --install-path "$_tree" \
-            --channel "$_pchan" \
+            --install-path "$_iptree" \
+            --channel "$_ipchan" \
             --yes \
-            "$_ppkg" >&2
+            "$_ippkg" >&2
     fi
 }
 
@@ -139,6 +166,19 @@ resolve_formae() {
             FORMAE_BIN="$_rcand"
             FORMAE_BIN_MANAGED=0
             echo "resolve_formae: using your formae at $FORMAE_BIN" >&2
+            # Their formae still needs the auth plugin a hosted sign-in drives,
+            # and a formae installed by name has a bundle without it (see the
+            # managed case below). Its own plugin directory sits beside a binary
+            # we do not own, root-owned for a system install, so the plugin goes
+            # to the one other place formae looks: ~/.pel/formae/plugins, the
+            # user-writable directory formae itself defaults pluginDir to.
+            #
+            # The package depends on formae, so the install also lays a formae
+            # and a pkl under ~/.pel/bin. Neither is on PATH or in the probe list
+            # above, so nothing ever runs them; they are the price of a package
+            # manager that cannot install a plugin alone.
+            provision_plugin oidc "$_rchan" "$HOME/.pel" \
+                || echo "provision_plugin: oidc not installed; a hosted sign-in will say so" >&2
             return 0
         fi
     done
@@ -162,7 +202,8 @@ resolve_formae() {
     # Best-effort. A failure here leaves a working formae that cannot sign in to
     # the hosted platform, which is exactly what it could do before, and the
     # sign-in path names the remedy.
-    provision_pkg oidc "$_rchan" || echo "provision_pkg: oidc not installed; a hosted sign-in will say so" >&2
+    provision_plugin oidc "$_rchan" "$HOME/.formae-ai/opt" \
+        || echo "provision_plugin: oidc not installed; a hosted sign-in will say so" >&2
     FORMAE_BIN="$_rmanaged"
     FORMAE_BIN_MANAGED=1
     return 0

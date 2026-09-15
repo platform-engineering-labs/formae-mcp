@@ -12,6 +12,10 @@ Install via the
 
 ## [Unreleased]
 
+### Fixed
+
+- A hosted sign-in works with a formae that was already installed before the plugin. The launcher adopts an existing `formae` rather than downloading its own, but only installed the `oidc` auth plugin beside a copy it had downloaded itself, so on a machine with its own formae the sign-in failed and told the user to run `pelmgr install oidc`: a tool the launcher never leaves on PATH, against a plugin directory that needs sudo for a system install. The launcher now installs the plugin into `~/.pel/formae/plugins`, the user-writable directory formae also searches, and the sign-in failure says to restart the assistant instead of naming a command. The plugin is also no longer reinstalled on every launch of a downloaded formae.
+
 ### Changed
 
 - Hosted bug reports use the support recipient configured by the formae console (default `support@platform.engineering`). The MCP shows that destination before authorization and refuses to send if it changes after preparation.

@@ -316,3 +316,28 @@ func TestLogin_DeviceFlowReturnsTheCode(t *testing.T) {
 		}
 	}
 }
+
+// A missing auth plugin is reported without naming the package manager. The
+// launcher installs the plugin at startup and never leaves that tool on PATH,
+// so the remedy is to restart, not to run a command the user does not have.
+func TestLogin_AMissingAuthPluginSaysRestartNotPelmgr(t *testing.T) {
+	env := `{"schemaVersion":1,"code":"plugin_missing","message":"install it with pelmgr install oidc",` +
+		`"details":{"plugin":"oidc","install":"pelmgr install oidc"}}`
+	bin := loginStub(t, fmt.Sprintf("echo '%s'\nexit 1\n", env))
+	s := serverWithLoginBin(t, bin)
+
+	res, _, err := s.handleLogin(context.Background(), nil, tools.LoginInput{})
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if !isError(res) {
+		t.Fatal("a sign-in without its plugin reported success")
+	}
+	text := resultText(res)
+	if strings.Contains(text, "pelmgr") {
+		t.Errorf("the result names a tool the launcher never puts on PATH: %s", text)
+	}
+	if !strings.Contains(text, "restart") {
+		t.Errorf("the result does not say to restart so the launcher installs the plugin: %s", text)
+	}
+}
