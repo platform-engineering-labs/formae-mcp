@@ -118,11 +118,11 @@ func TestResolutionPreviewOffersPreferenceOnlyWhenUnset(t *testing.T) {
 				t.Fatalf("unexpected error: %+v", result)
 			}
 			raw, _ := json.Marshal(result)
-			if got := strings.Contains(string(raw), "For future changes,"); got != tc.want {
+			if got := strings.Contains(string(raw), "For future changes made"); got != tc.want {
 				t.Fatalf("offer=%v want=%v: %s", got, tc.want, raw)
 			}
 			if tc.want {
-				for _, required := range []string{"explicitly chose keep", "set_drift_preference", "deletions", "formae patches", "auto_absorb", "No answer"} {
+				for _, required := range []string{"explicitly chose keep", "set_drift_preference", "Changes made by other tools and formae updates", "conflicts and removals", "No answer"} {
 					if !strings.Contains(string(raw), required) {
 						t.Errorf("missing %q", required)
 					}
@@ -180,7 +180,7 @@ func TestInitialDriftPreferenceOfferWaitsForKeep(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ = json.Marshal(s.applyErrorResult(context.Background(), ec, remote))
-	if strings.Contains(string(raw), "For future changes,") {
+	if strings.Contains(string(raw), "For future changes made") {
 		t.Fatal("repeated preference offer for explicit prompt")
 	}
 }
