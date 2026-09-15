@@ -25,7 +25,12 @@ A rename can ride along with a property change in the same apply (one update car
 
 ## Workflow
 
-1. **Locate the resource in the codebase.** Find the `label` the user wants to change in their forma/PKL files. Confirm the current label and the desired new label with the user.
+Use `formae-author` to select context and prepare the complete affected stack.
+For mode `none`, use its disposable source internally; discuss the old/new
+resource labels and actual infrastructure effect, not filenames or alias syntax.
+For mode `codebase`, preserve and update the selected maintained project.
+
+1. **Locate the resource in the selected source.** Confirm the current label and the desired new label with the user.
 2. **Edit the resource.** Set `alias` to the current label, change `label` to the new name. Leave properties untouched unless the user also asked for a change.
 3. **Simulate**: call `apply_forma` with `mode: reconcile` (or `patch`), `simulate: true`.
 4. **Check the simulation** against the cases in "Reading the simulation" below. A pure rename is a single `update` with a `change label from "<old>" to "<new>"` line and nothing else. **If the simulation shows a `replace`, stop** — an immutable field changed alongside the rename, and applying will destroy and recreate the cloud object.
@@ -33,7 +38,8 @@ A rename can ride along with a property change in the same apply (one update car
 6. **Monitor** with `get_command_status`:
    - Wait 5 seconds between polls (`sleep 5`). Do NOT poll in a tight loop.
    - Only report state transitions. Summarize what changed rather than dumping JSON.
-7. **Report** the result. Mention the `alias` can now stay or be removed (re-applies match by the new label first, so the alias is dead-but-harmless).
+7. **Report** the renamed resource and command outcome. For a maintained codebase,
+   mention the `alias` can stay or be removed (re-applies match the new label first).
 
 ## Reading the simulation
 

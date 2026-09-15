@@ -1,0 +1,78 @@
+package codebase
+
+import (
+	"context"
+	"fmt"
+	"strings"
+)
+
+// DriftPreference is local user consent, scoped to the resolved installation.
+// auto_absorb includes patches; auto_absorb_external preserves older, narrower consent.
+type DriftPreference struct {
+	Mode        string `json:"mode"`
+	Explicit    bool   `json:"explicit"`
+	Unavailable bool   `json:"unavailable,omitempty"`
+}
+
+type driftPreferenceRecord struct {
+	Identity Identity `json:"identity"`
+	Mode     string   `json:"mode"`
+}
+
+func validDriftMode(mode string) bool {
+	return mode == "prompt" || mode == "auto_absorb" || mode == "auto_absorb_external"
+}
+
+// Keep preferences beside, not inside, the strict version-1 codebase file so
+// older concurrent MCP builds can continue selecting maintained projects.
+func (r Registry) preferencesRegistry() Registry {
+	return Registry{Path: strings.TrimSuffix(r.Path, ".json") + ".preferences.json"}
+}
+
+func (r Registry) DriftPreference(ctx context.Context, identity Identity) (DriftPreference, error) {
+	initial := DriftPreference{Mode: "prompt"}
+	if err := ctx.Err(); err != nil {
+		return initial, err
+	}
+	identity, err := normalizeIdentity(identity)
+	if err != nil {
+		return initial, err
+	}
+	d, err := r.preferencesRegistry().read()
+	if err != nil {
+		return initial, err
+	}
+	for _, p := range d.Preferences {
+		if p.Identity == identity {
+			if !validDriftMode(p.Mode) {
+				return DriftPreference{Mode: "prompt", Explicit: true, Unavailable: true}, nil
+			}
+			return DriftPreference{Mode: p.Mode, Explicit: true}, nil
+		}
+	}
+	return initial, nil
+}
+
+func (r Registry) SetDriftPreference(ctx context.Context, identity Identity, mode string) (DriftPreference, error) {
+	if !validDriftMode(mode) {
+		return DriftPreference{}, fmt.Errorf("drift preference must be prompt, auto_absorb, or auto_absorb_external")
+	}
+	identity, err := normalizeIdentity(identity)
+	if err != nil {
+		return DriftPreference{}, err
+	}
+	err = r.preferencesRegistry().update(ctx, func(d *document) error {
+		for i, p := range d.Preferences {
+			if p.Identity == identity {
+				d.Preferences[i].Mode = mode
+				return nil
+			}
+		}
+		if len(d.Preferences) >= 1024 {
+			return fmt.Errorf("too many workflow preferences")
+		}
+		d.Preferences = append(d.Preferences, driftPreferenceRecord{Identity: identity, Mode: mode})
+		return nil
+	})
+	return DriftPreference{Mode: mode, Explicit: true}, err
+}

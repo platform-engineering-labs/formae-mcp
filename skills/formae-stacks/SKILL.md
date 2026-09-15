@@ -5,7 +5,7 @@ description: "Use when the user asks about their infrastructure stacks, how infr
 
 # List Infrastructure Stacks
 
-Use the `list_stacks` MCP tool to retrieve all stacks from the formae agent.
+Use `list_stacks` first for stack and infrastructure-organization questions in a formae-connected session, even when formae is not named. These are formae stack boundaries; do not substitute provider-native stacks. Honor explicit requests for another tool and keep the selected profile.
 
 ## Workflow
 

@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/platform-engineering-labs/formae-mcp/internal/clientid"
+	"github.com/platform-engineering-labs/formae-mcp/internal/codebase"
 	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
 	"github.com/platform-engineering-labs/formae-mcp/internal/featuregate"
@@ -67,6 +68,9 @@ type Server struct {
 	// stands in front of it, and the real gate only passes on a machine that
 	// already has formae configured. Production never replaces it.
 	gate func() error
+	// codebaseRegistry resolves local storage, never an active project.
+	codebaseRegistry  func() (codebase.Registry, error)
+	workflowTelemetry *workflowTelemetry
 
 	// loginState holds the sign-in a user is part-way through. It is the one
 	// piece of state this server keeps between calls, and it exists because the
@@ -79,20 +83,23 @@ type Server struct {
 
 // New creates a new formae MCP server connected to the given agent endpoint.
 func New(endpoint string) *Server {
+	resolver := execctx.NewResolver(formaebin.NewBinResolver())
 	mcpServer := mcp.NewServer(
 		implementation(),
 		&mcp.ServerOptions{
-			Instructions: serverInstructions,
+			Instructions: instructionsForBinary(resolver.Bin()),
 		},
 	)
 
 	s := &Server{
-		mcpServer:      mcpServer,
-		hub:            NewHubClient(),
-		forcedEndpoint: endpoint,
-		ctxResolver:    execctx.NewResolver(formaebin.NewBinResolver()),
-		clientID:       clientid.NewResolver(),
-		gate:           gateStore,
+		mcpServer:         mcpServer,
+		hub:               NewHubClient(),
+		forcedEndpoint:    endpoint,
+		ctxResolver:       resolver,
+		clientID:          clientid.NewResolver(),
+		gate:              gateStore,
+		codebaseRegistry:  codebase.Default,
+		workflowTelemetry: newWorkflowTelemetry(),
 	}
 	s.newClient = s.clientFrom
 
@@ -215,9 +222,15 @@ func (s *Server) Run(ctx context.Context, transport mcp.Transport) error {
 }
 
 func (s *Server) registerTools() {
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "set_drift_preference", Description: tools.DriftPreferenceDescription, Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(false)}}, s.handleSetDriftPreference)
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "prepare_bug_report", Description: tools.PrepareBugReportDescription, Annotations: readOnly}, s.handlePrepareBugReport)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "submit_bug_report", Description: tools.SubmitBugReportDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true}}, s.handleSubmitBugReport)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "get_codebase_context", Description: tools.CodebaseContextDescription, Annotations: readOnly}, s.handleCodebaseContext)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "list_codebases", Description: tools.ListCodebasesDescription, Annotations: readOnly}, s.handleListCodebases)
+	localRegistration := &mcp.ToolAnnotations{DestructiveHint: boolPtr(false), IdempotentHint: true}
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "register_codebase", Description: tools.RegisterCodebaseDescription, Annotations: localRegistration}, s.handleRegisterCodebase)
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "unregister_codebase", Description: tools.UnregisterCodebaseDescription, Annotations: localRegistration}, s.handleUnregisterCodebase)
 
 	// Read-only tools
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
@@ -244,6 +257,7 @@ func (s *Server) registerTools() {
 		Annotations: readOnly,
 	}, s.handleGetCommandStatus)
 
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "get_command_desired_delta", Description: "Get recorded desired contributions and deletion guidance from a terminal command. Partial source-edit guidance only: never use as a complete reconcile declaration. Update only the selected maintained project, preserving abstractions and unrelated edits; report source conflicts separately from the central command outcome. Requires connected shared-drift-resolution capability.", Annotations: readOnly}, s.handleCommandDesiredDelta)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "list_commands",
 		Description: tools.ListCommandsDescription,
@@ -280,6 +294,7 @@ func (s *Server) registerTools() {
 		Annotations: readOnly,
 	}, s.handleListChangesSinceLastReconcile)
 
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "prepare_authoring", Description: "Start here to edit an existing stack without a maintained codebase: extract its COMPLETE DESIRED Pkl and dependency project, then edit and apply with the returned context. Pass stacks as exact labels, never type/resource filters. This reads recorded desired state rather than actual inventory, so unabsorbed OOB changes and temporary patches remain decisions for soft reconcile. Do not substitute extract_resources, which exports partial actual inventory. Also supports new stacks and targets. Prepare source in an explicit empty disposable directory. The harness convention is a fresh canonical ~/.formae-ai/scratch/<operation-id>/ directory; use the returned paths and context, never search for a project or reuse another operation's scratch source. Retrieves desired declarations and exact installed plugin metadata through the resolved installation, then renders offline. Returns full file paths, never truncated source. Requires connected desired-stack-extraction and shared-drift-resolution capabilities. Local files remain until the harness removes them after outcome/retry inspection; never automatically registered.", Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(false)}}, s.handlePrepareAuthoring)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
 		Name:        "extract_resources",
 		Description: tools.ExtractResourcesDescription,
@@ -823,7 +838,17 @@ func (s *Server) handleExtractResources(ctx context.Context, _ *mcp.CallToolRequ
 	if c, cerr := s.newClient(ec); cerr == nil {
 		notice = s.buildSkewNotice(ctx, ec.FormaeBin, c)
 	}
-	return attribute(extracted, withNotice(textResult(string(content)), notice)), nil, nil
+	result := textResult(string(content))
+	// Preserve raw Pkl in the first content block for existing import/export
+	// consumers. Provenance is additive and must travel with the tool result:
+	// inventory source does not become desired source just because it has a
+	// stack declaration or happens to contain all currently visible resources.
+	result.StructuredContent = map[string]any{
+		"state": "actual", "partial": true, "query": input.Query,
+		"recommended_tool": "prepare_authoring",
+	}
+	withNotice(result, tools.ActualExtractionNotice)
+	return attribute(extracted, withNotice(result, notice)), nil, nil
 }
 
 func (s *Server) handleSearchHubPlugins(_ context.Context, _ *mcp.CallToolRequest, input tools.SearchHubPluginsInput) (*mcp.CallToolResult, any, error) {
@@ -902,24 +927,30 @@ func (s *Server) handleApplyForma(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return errorResult(err), nil, nil
 	}
-	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
-	if err != nil {
-		return attribute(resolved(ec), errorResult(fmt.Errorf("failed to evaluate forma file: %w", err))), nil, nil
-	}
-
 	c, err := s.newClient(ec)
 	if err != nil {
 		return attribute(resolved(ec), errorResult(err)), nil, nil
+	}
+	formaJSON, err := s.evaluateSource(ctx, ec, c, input.Context, input.FilePath)
+	if err != nil {
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
+	}
+	if err := s.validateSourceContext(ctx, ec, input.Context, input.FilePath, formaJSON); err != nil {
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
 	}
 	clientID, err := s.clientID.Resolve()
 	if err != nil {
 		return nil, nil, err
 	}
-	result, err := c.SubmitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, clientID)
+	result, err := c.submitCommand(ctx, "apply", input.Mode, input.Simulate, input.Force, formaJSON, clientID, input.Resolution, input.Message)
 	if err != nil {
-		return attribute(reached(ec, c), errorResult(err)), nil, nil
+		return attribute(reached(ec, c), s.applyErrorResult(ctx, ec, err)), nil, nil
 	}
-	return attribute(reached(ec, c), withNotice(jsonResult(result), s.buildSkewNotice(ctx, ec.FormaeBin, c))), nil, nil
+	reply := withNotice(jsonResult(result), s.keepPreferenceNotice(ctx, ec, input, result))
+	if input.Simulate && input.Message == nil {
+		reply = withNotice(reply, "In the final apply confirmation, suggest a concise factual command message describing the requested change and any accepted or reverted drift. The user can accept, edit or omit it in that same response. Pass the agreed message on real submission; an explicitly omitted message is an empty string. Do not infer apply confirmation solely from a message edit.")
+	}
+	return attribute(reached(ec, c), withNotice(reply, s.buildSkewNotice(ctx, ec.FormaeBin, c))), nil, nil
 }
 
 func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest, input tools.DestroyFormaInput) (*mcp.CallToolResult, any, error) {
@@ -939,6 +970,9 @@ func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest,
 	}
 
 	if input.Query != "" {
+		if input.Context != nil {
+			return attribute(resolved(ec), errorResult(fmt.Errorf("query destruction does not accept local source context; use a file to validate selected project scope"))), nil, nil
+		}
 		clientID, err := s.clientID.Resolve()
 		if err != nil {
 			return nil, nil, err
@@ -950,11 +984,14 @@ func (s *Server) handleDestroyForma(ctx context.Context, _ *mcp.CallToolRequest,
 		return attribute(reached(ec, c), jsonResult(result)), nil, nil
 	}
 
-	formaJSON, err := evalFormaFile(ctx, ec, input.FilePath)
+	formaJSON, err := s.evaluateSource(ctx, ec, c, input.Context, input.FilePath)
 	if err != nil {
 		return attribute(reached(ec, c), errorResult(fmt.Errorf("failed to evaluate forma file: %w", err))), nil, nil
 	}
 
+	if err := s.validateSourceContext(ctx, ec, input.Context, input.FilePath, formaJSON); err != nil {
+		return attribute(reached(ec, c), errorResult(err)), nil, nil
+	}
 	clientID, err := s.clientID.Resolve()
 	if err != nil {
 		return nil, nil, err

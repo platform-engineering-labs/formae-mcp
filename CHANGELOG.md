@@ -12,9 +12,43 @@ Install via the
 
 ## [Unreleased]
 
+### Added
+
+- Local installation-scoped drift preferences: ask each time (default), or automatically keep nonconflicting external changes and formae patches, including deletions. Conflicts still require a decision, and the combined apply still requires confirmation. Previously saved external-only choices keep their narrower scope until the user explicitly changes them.
+- MCP workflow analytics for effective codebase mode and drift preference, using the existing PostHog destination and honoring the CLI usage-reporting opt-out. Events contain categorical settings and an anonymous connection identifier (including the local CLI client ID for classic connections), not source paths, resource properties or command messages.
+
 ### Fixed
 
-- A hosted sign-in works with a formae that was already installed before the plugin. The launcher adopts an existing `formae` rather than downloading its own, but only installed the `oidc` auth plugin beside a copy it had downloaded itself, so on a machine with its own formae the sign-in failed and told the user to run `pelmgr install oidc`: a tool the launcher never leaves on PATH, against a plugin directory that needs sudo for a system install. The launcher now installs the plugin into `~/.pel/formae/plugins`, the user-writable directory formae also searches, and the sign-in failure says to restart the assistant instead of naming a command. The plugin is also no longer reinstalled on every launch of a downloaded formae.
+- No-code outside-change guidance now explains the protection in plain language, confirms saved preferences without internal mode names, and offers automatic reconciliation choices after a stack's first revert.
+
+- Offer the future drift preference after an explicit keep decision, with a reminder in successful resolution previews. Saved choices suppress the offer; keeping one change never opts into future automatic acceptance.
+
+- Disposable authoring uses the published X.Y.Z schema coordinate for resource plugins installed from a dev build, matching `list_agent_plugins`. Returned metadata retains the actual installed version.
+
+- Drift rejections now include keep/revert guidance and the current local preference in the tool response, in both codebase modes. Adding a resource property does not imply acceptance of unrelated drift. Combined changes use reviewed reconciliation; agents without that protocol produce an explicit limitation rather than a force workaround. Successful previews remind the harness to offer an editable or empty command message.
+
+- Inventory Pkl exports now carry explicit actual-state/partial-source metadata and a warning alongside the unchanged raw Pkl. Existing-stack authoring points to complete desired extraction, preserving unabsorbed drift as an explicit reconcile decision.
+
+- Source selection precedes IaC file access and is reused for the same installation/workspace. No-codebase authoring uses a fresh operation project under `~/.formae-ai/scratch/` and desired extraction instead of repeatedly searching for local projects or treating stale files as desired intent.
+
+- Cloud inventory questions default to formae queries even when the user names only a provider. Results include managed and discovered resources unless narrowed, and empty inventory is distinguished from an empty cloud account.
+
+- Ordinary resource edits, including a single label, consistently use complete-stack soft reconcile. Patch guidance now requires an explicit patch request or incident/hotfix intent, preserving drift decisions and selected source context.
+
+- Without a maintained codebase, setup and infrastructure workflows describe resources, changes and outcomes while keeping disposable source preparation internal. Initial target creation no longer requires a persistent project or placeholder stack. Maintained-codebase workflows continue to report source changes and conflicts.
+- Drift prompts distinguish changes detected outside formae from temporary patches made through formae, and separate keep/revert decisions from newly requested changes.
+- The MCP reports its selected formae executable to the assistant, including managed installations outside the shell PATH. Schema lookup guidance uses exact installed versions instead of broad searches through local caches.
+
+### Added
+
+- Work with infrastructure without maintaining a local IaC project. Hosted authoring uses disposable complete desired Pkl source and schema dependencies; keeping a project is an explicit opt-in. Local project registration and per-call selection keep concurrent projects and installations independent.
+- Resolve drift centrally with explicit absorb/revert choices, a combined final preview, recorded review identity and idempotent submission. Maintained-source catch-up uses the command's recorded desired contributions and reports local conflicts separately from the infrastructure outcome. These workflows require support from the connected agent.
+- Policy planners accept a per-call profile and selected source context, including disposable Pkl workspaces. Command intent messages can be edited or deliberately cleared during ordinary final confirmation.
+
+### Fixed
+
+- A hosted sign-in works with a formae that was already installed before the plugin. The launcher adopts an existing `formae` rather than downloading its own, but only installed the `oidc` auth plugin beside a copy it had downloaded itself. The launcher now installs the plugin into the user-writable plugin directory and tells the user to restart the assistant.
+- Real apply commands with a synchronous no-change response are accepted instead of reported as failures.
 
 ### Changed
 

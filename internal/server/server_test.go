@@ -77,6 +77,18 @@ func textContent(t *testing.T, result *mcp.CallToolResult) string {
 	return tc.Text
 }
 
+func allTextContent(t *testing.T, result *mcp.CallToolResult) string {
+	t.Helper()
+	var b strings.Builder
+	for _, content := range result.Content {
+		if tc, ok := content.(*mcp.TextContent); ok {
+			b.WriteString(tc.Text)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
 // --- Read-only tool tests ---
 
 func TestCheckHealth(t *testing.T) {

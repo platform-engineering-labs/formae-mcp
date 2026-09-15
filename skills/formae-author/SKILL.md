@@ -5,25 +5,44 @@ description: "Use when the user wants to start authoring formae infrastructure o
 
 # formae-author — Authoring Front Door
 
-This skill is a thin dispatcher. It triages the user's authoring intent, locates (or creates) the code workspace, infers the right schema plugins, and hands off to the focused skills that carry the deep procedures. Do not duplicate those procedures here.
+This skill is a thin dispatcher. It triages the user's authoring intent, selects the source context and prepares source within it, infers the right schema plugins, and hands off to the focused skills that carry the deep procedures. Do not duplicate those procedures here.
 
-## Step 1 — Locate the code
+## Step 1 — Select the source context
 
-Determine where the authoring will happen. Three branches:
+For infrastructure apply/authoring, resolve source context before any IaC file search or read: reuse the explicit selection already made for this installation and workspace, or call get_codebase_context with the actual harness working_directory and selected profile. This tool consults the registry; do not replace it with rg/find/glob scans. Mode none is a complete selection, not a missing project to recover. Keep that selection for subsequent operations; do not search again merely because the user asks for another resource change. Resolve again when the installation/workspace changes, the user changes their codebase choice, or a context-validation error requires it. In none mode, locate the affected stack through formae inventory if needed, then prepare_authoring for its complete desired declaration in a fresh disposable directory. Ignore old/unregistered Pkl folders, remembered paths, previous temporary files and Git status. A value in an unselected local file does not establish pending desired intent; inspect formae desired extraction and recorded commands. In codebase mode, read/search only the selected registered root; a missing file or source conflict is an error to resolve there, not permission to search elsewhere. Never register a discovered folder without explicit user opt-in. If selection is required, present registered candidates; do not search for additional candidates. A source-only question about a user-supplied local file can read that exact file without resolving or adopting an infrastructure context; do not broaden that into a project search.
 
-**(a) Already in a formae project** — if the current working directory or any ancestor contains a `PklProject` that declares a `@formae/` dependency, OR a `.pkl` file that starts with `extends "@formae/forma.pkl"` (or the legacy `amends "@formae/forma.pkl"`), work in place. Confirm the project root to the user and continue to Step 2.
+Follow the MCP conversation contract: in mode `none`, talk about infrastructure
+design, planned changes and outcomes. Temporary files, schema wiring and cleanup
+are internal work, including during skill handoffs. Use a unique operation directory under `~/.formae-ai/scratch/`,
+not a named project beneath the user's working directory. Only an
+explicit request to maintain IaC opts into a codebase.
 
-**(b) User knows a path** — if there is no formae project here, ask: *"Do you have an existing formae project elsewhere?"* If the user provides a path, verify it is a real formae project (same checks as above). If it is, `cd` there and continue to Step 2. If it is not a formae project, say so and ask whether to create a new project there instead (offer Step 1c).
+Scratch-project convention: use ~/.formae-ai/scratch/<operation-id>/ for disposable authoring. Resolve the scratch root to a canonical absolute path, create it privately, and create a new unique empty operation directory (for example with mkdtemp); never reuse a fixed main.pkl across operations or search scratch siblings. Pass that exact directory to prepare_authoring, then use its returned file_path, project_path and context to work only inside that operation directory. Additional patch Pkl or evaluated JSON retry files may be created inside that same directory. Keep those paths with the current operation through edit, preview, confirmation, submission and uncertain-outcome retries. A later independent operation creates a fresh directory and extracts desired state again; scratch contents are never the system of record, a Git project, or a codebase registration. Delete only the current operation directory after terminal outcome/retry inspection or abandonment before submission. Do not sweep other sessions or tell no-codebase users about these files unless they ask. If scratch preparation fails, report that concrete failure; do not fall back to home/Library/Documents/Desktop scans or request broad filesystem access to locate IaC. Existing explicit temporary-directory callers remain supported.
 
-If the user is **unsure** whether a project exists, offer to scan `~/dev` for `PklProject` files that declare a formae dependency. Present only verified hits from that scan — never invent or guess paths.
+When no valid selection is already available for this installation/workspace, call `get_codebase_context` with the chosen `profile` and the actual harness `working_directory`. Never assume the MCP process directory is the workspace. An explicit existing project supplied by the user is an opt-in: validate it and call `register_codebase`, then select its binding. An explicit `mode: none` wins even when projects are registered.
 
-**(c) No project exists** — hand off to the `formae-project-init` skill. That skill handles directory selection, collision safety, running `formae project init`, and scaffolding. Return here after init completes.
+Use the returned selection:
+
+- `codebase`: work only in that selected registered project; carry `context: {mode: "codebase", binding_id: ...}` on apply and policy planning calls. Preserve its abstractions and unrelated edits. Profile names can change; bindings identify the resolved installation.
+- `none`: hosted users with no registered codebase start here naturally. Continue authoring without asking for a project directory. Pkl is still the code interface: create a harness-owned empty disposable directory, call `prepare_authoring` with complete existing `stacks` and/or `new_stacks`, plus configured `targets` needed for new resources. Use returned full source files, PklProject and `context`. For any new namespace, call `list_agent_plugins` and use its explicit schema package coordinate, never the raw `schema_plugins.installedVersion` (dev suffixes are not schema coordinates). If no coordinate can be named, stop and report the limitation. Resolve the project dependencies. Keep the directory through preview, decisions and command outcome; remove after terminal outcome or abandoning a preview with no real submission. Never create a persistent hidden project or register this temporary directory.
+- `selection_required`: present the registered candidates once and let the user choose one or explicitly choose none. Missing directories remain visible; never silently switch away and claim source synchronization.
+- `unconfigured`: classic installations preserve the choice of an existing project or explicit none. The latter requires connected `desired-stack-extraction` and `shared-drift-resolution` capabilities.
+
+For ordinary no-codebase changes, extract_resources is the wrong source: it returns PARTIAL ACTUAL inventory, including unabsorbed drift, and can omit failed desired declarations. Never call its output a complete desired stack, even if it contains a Stack object or only one resource is currently visible. Use prepare_authoring with exact stack labels and its complete returned source, dependencies and context. A type-filtered export is for inspection or explicitly selected import, never a shortcut to full-stack reconcile. Do not copy observed OOB values into the prepared desired baseline before the keep/revert review.
+
+Inspect `prepare_authoring` diagnostics before changing the extracted source. Desired declarations can retain failed intent and broken references. Explain unresolved references and repair them according to the user's request: remove the owning declaration, rewire its reference, or explicitly restore its dependency. Ask when the intended repair is unclear. Preserve original resource identity; never bind a broken reference to a same-name replacement automatically. Repair placeholders deliberately prevent Pkl evaluation until resolved. Keep unrelated declarations and drift unchanged.
+
+A corrupt registry is an actionable error, not an empty registry. Do not scan arbitrary directories for projects. A server lacking the new capabilities requires an existing complete codebase; a newer local CLI alone does not establish capability.
+
+If the user says they want to keep IaC locally, hand off to `formae-project-init`. This opt-in can happen at any time. Initialize their selected project, extract selected managed stacks completely (or initialize with the target on an empty installation), verify it and register it only after successful initialization. Do not ask about a maintained project as a prerequisite for hosted authoring.
+
+For ordinary resource edits, continue through `formae-apply` with the complete affected stack and selected context, even when editing one property. A small or quick edit does not select patch. Patch is reserved for an explicit patch request or stated incident/hotfix intent; drift leads to keep/revert decisions.
 
 ## Step 2 — Existing-cloud-resources branch (orthogonal to Step 1)
 
 Before authoring new resources, ask: is the intent to bring **existing** cloud resources under management (resources that already exist in the cloud), or to author new ones?
 
-If the intent is "bring existing cloud resources under management", hand off to the `formae-import` skill. That skill still needs a code location — complete Step 1 first. After import, return here if the user also wants to author additional new resources.
+If the intent is "bring existing cloud resources under management", hand off to the `formae-import` skill. Carry the selected context; a disposable workspace also supports explicit import. After import, return here if the user also wants to author additional new resources.
 
 ## Step 3 — Establish what plugins are available
 
@@ -40,10 +59,13 @@ If the intent is "bring existing cloud resources under management", hand off to 
 
 **If a needed plugin is absent from the catalog** (self-hosted only): surface `formae-plugin-new` as the path forward. Add a context-window caution to the user: plugin building is a substantial task — it is best started in a fresh session or as a sub-agent to avoid context pressure mid-authoring. A failed plugin listing changes nothing in this branch.
 
-Make clear in both branches: these are **schema packages only** — they provide PKL types and IDE completion. They do not install resource plugins on the agent.
+These are **schema packages only** and do not install resource plugins on the
+agent. In mode `none`, handle compatible installed schema dependencies internally
+and describe the resulting infrastructure capability. For maintained-codebase
+dependency work, explain the schema/source changes.
 
 **Dependency wiring** — do not wire deps yourself:
-- New project: `formae-project-init` sets up the initial schema package deps.
+- Opted-in maintained project: `formae-project-init` sets up the initial schema package deps. Disposable project: use the files and installed schema metadata from `prepare_authoring`, adding needed dependencies with `formae-deps`.
 - Existing project needing additional packages: hand off to the `formae-deps` skill to add them.
 
 ## Step 4 — Trust gate (self-hosted only)
@@ -73,7 +95,9 @@ Do not install resource plugins. That is an agent-side operation outside this sk
 
 ## Step 6 — Orient on structure and design stacks
 
-Read `formae://docs/forma-structure` to orient on the standard project layout before writing any files.
+For a maintained codebase, read `formae://docs/forma-structure` for its layout.
+In mode `none`, use the prepared complete source and dependencies internally;
+design stacks with the user without proposing a directory or file hierarchy.
 
 Then hand off to the `formae-stack-design` skill to decide how resources are grouped into stacks and which stacks map to which targets. Do not embed stack-design logic here.
 
@@ -100,6 +124,7 @@ Auto-activation from this skill's `description` field is a Claude Code behavior;
 - **Never write the flat forma form.** Do not write `stack = ...`, `targets = ...`, `resources = ...` at the top level. Always use the `forma {}` block pattern.
 - **Always use `formae eval --output-consumer machine`.** Never use `pkl eval` — forma files use formae-specific extensions that only the formae CLI resolves correctly, and `--output-consumer machine` produces parseable output.
 - **This skill dispatches — it does not duplicate.** The full procedures for init, deps, stack design, import, policy, and apply live in their respective skills. Stay thin: triage, confirm, hand off.
-- **Never invent project paths.** Only present `~/dev` scan results that are verified formae projects. Never guess or fabricate paths.
+- **Use explicit context.** Discover only registered projects using the supplied harness directory; never scan arbitrary disk or invent paths.
+- **Use the resolved executable.** MCP initialization reports the launcher-selected formae path; use it as one quoted executable for local evaluation. The usual managed path is `~/.formae-ai/opt/bin/formae`, even when the harness PATH has no formae. Locate schemas from exact reported package coordinates and the selected dependency lock; never recursively search the user's home or unrelated caches.
 - **Never silently depend on unverified plugins** (self-hosted). Always surface `originatorVerified: false` and get explicit user confirmation. On hosted formae the question does not arise: the set is first-party and already installed.
 - **Never offer a hosted user a plugin their installation does not have.** Not from the hub, and not by authoring one. The reported set is the catalogue, and anything outside it cannot be applied.

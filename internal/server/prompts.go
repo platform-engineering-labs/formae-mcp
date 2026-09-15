@@ -9,25 +9,22 @@ import (
 func (s *Server) registerPrompts() {
 	s.mcpServer.AddPrompt(&mcp.Prompt{
 		Name:        "check_drift",
-		Description: "Check for infrastructure drift and help resolve it. Shows sync drift (out-of-band changes) and patch drift (unreconciled patches).",
+		Description: "Check for infrastructure changes made outside formae and help resolve them.",
 	}, func(_ context.Context, _ *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		return &mcp.GetPromptResult{
 			Description: "Check for infrastructure drift",
 			Messages: []*mcp.PromptMessage{
 				{
 					Role: "user",
-					Content: &mcp.TextContent{Text: `Check my infrastructure for drift. First use list_resources to get an overview of managed resources, then use get_agent_stats to see resource counts.
+					Content: &mcp.TextContent{Text: `Check my infrastructure for changes made outside formae. First use list_resources to get an overview of managed resources, then use get_agent_stats to see resource counts.
 
 Show me:
-1. Any out-of-band changes detected by the agent's continuous synchronization
+1. Any changes made outside formae detected by the agent's continuous synchronization
 2. Any patches that haven't been reconciled yet
 
-For each piece of drift found, help me decide whether to:
-- Overwrite: undo the change by force-reconciling
-- Absorb: incorporate the change into my IaC codebase
-- Extract to file: save the current state as PKL for manual review
+Select local source with get_codebase_context using the harness workspace. Hosted users can work without a maintained codebase using prepare_authoring and its complete desired Pkl files. Observe with a soft reconcile simulation, choose absorb or revert for every actionable ResourceID, simulate all Decisions for the final ReviewID, then confirm the combined plan and optional editable message before submitting with a stable IdempotencyKey. A stale review needs a fresh review and confirmation. After terminal central acceptance, automatically catch up only the selected maintained project using partial get_command_desired_delta guidance, preserving unrelated edits and reporting conflicts separately.
 
-Group drift by stack and process one stack at a time.`},
+Group changes by stack and process one stack at a time.`},
 				},
 			},
 		}, nil
@@ -81,7 +78,7 @@ For each resource or group of resources I select:
 1. Extract the resource as PKL infrastructure code
 2. Either:
    a. Help me incorporate it into my existing IaC codebase following its patterns and conventions
-   b. Or save it as a standalone forma file
+   b. Or merge it into the complete desired disposable workspace from prepare_authoring, carrying its context. Never reconcile an import fragment alone.
 
 If incorporating into an existing codebase:
 - Assign to an appropriate stack

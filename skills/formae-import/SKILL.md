@@ -5,7 +5,7 @@ description: "Use when the user wants to bring unmanaged/discovered resources un
 
 # Import Unmanaged Resources
 
-Bring discovered (unmanaged) resources under formae management by incorporating them into an existing IaC codebase.
+Bring only explicitly selected discovered (unmanaged) resources under formae management using the selected maintained or disposable Pkl workspace.
 
 > **Routing note:** The `formae-author` router dispatches here when the user wants to bring EXISTING cloud resources under management (as opposed to authoring new infrastructure from scratch).
 
@@ -15,11 +15,9 @@ These tools hit the formae agent's API directly and take an optional `profile` a
 
 ## Workflow
 
-### 1. Identify the IaC codebase
+### 1. Select source context
 
-The target codebase is typically the current working directory (the git repo Claude was started from). Confirm with the user:
-- State the current working directory and ask if that's the right codebase
-- If not, ask them to specify the directory containing their forma/PKL files
+Call `get_codebase_context` with the chosen profile and actual harness working directory, or reuse the operation's selection. Follow `formae-author` for candidate selection and missing/corrupt registry handling. For `none`, prepare a complete destination-stack workspace with `prepare_authoring`; a new destination uses `new_stacks` and its configured `targets`. Hosted users do not need to opt into a maintained project. Carry the returned `context` on every apply. For `codebase`, use only the selected project's complete main forma.
 
 ### 2. Discover unmanaged resources
 
@@ -37,7 +35,7 @@ Call `extract_resources` with a query that matches the selected resources. This 
 
 ### 5. Read the existing IaC codebase
 
-Read the user's existing forma files to understand:
+For a maintained codebase, read the selected project's forma files to understand:
 - **Module composition**: which file is the main forma file (it `extends "@formae/forma.pkl"`, or the legacy `amends "@formae/forma.pkl"`, and has the `forma {}` block), and how helper modules are imported and spread into it
 - **File organization**: how resources are grouped into files
 - **Naming conventions**: variable names, labels, prefixes
@@ -46,6 +44,8 @@ Read the user's existing forma files to understand:
 - **Import patterns**: `@formae/`, `@aws/`, local imports
 
 For the conventions behind this layout, see `formae://docs/forma-structure`.
+
+For a disposable workspace, read the complete prepared main forma and PklProject. Merge only the selected import declarations into that full destination scope, adding pinned schema dependencies when necessary. Preserve existing targets, policies, references and generators. The resource extraction is an import fragment, never a full reconcile replacement.
 
 ### 6. Confirm stack assignment
 
@@ -110,8 +110,10 @@ Loop until the simulation shows only "bring under management" for the imported r
 Once the simulation looks correct:
 - Present the simulation results to the user
 - **Ask for explicit confirmation** before proceeding
-- Call `apply_forma` with `mode: reconcile`, `simulate: false`
+- Follow `formae-apply`, carrying the selected `context`, optional editable message and any final drift review controls
 - Monitor with `get_command_status` and report the result
+
+If unrelated actionable drift blocks the import simulation, follow `formae-fix-code-drift` for all absorb/revert decisions and final combined review; do not force. After terminal outcome, clean up the disposable directory when no retry needs it. Import remains an explicit management choice, never an automatic consequence of desired extraction.
 
 ## Important
 

@@ -9,6 +9,11 @@ Use the `destroy_forma` MCP tool to remove infrastructure resources.
 
 ## Targeting an environment (`profile`)
 
+In mode `none`, describe the affected resources/stacks, destructive effects,
+warnings, confirmation and confirmed outcomes. Keep disposable files, source
+edits, extraction and cleanup internal. Maintained-codebase mode still reports
+source catch-up and conflicts separately from the destruction outcome.
+
 `destroy_forma` (and `get_command_status`) hit the formae agent's API directly and take an optional `profile` argument. If the user is working against a specific environment (e.g. `prod`, `staging`), pass that profile name as `profile` on the `destroy_forma` call and any `get_command_status` follow-up so it targets that environment — for this session only, without changing global state. Destroying the wrong environment is especially damaging, so be strict here. If which environment they mean is unclear and `list_profiles` shows more than one, ask first. Never use `use_profile` to "set up" this session — the active profile is global and shared with the user's CLI and any other open sessions. When no profile is named, the active profile is used. Requires formae >= 0.87.0.
 
 ## Destroy Modes
@@ -16,6 +21,12 @@ Use the `destroy_forma` MCP tool to remove infrastructure resources.
 Destruction can be specified two ways (mutually exclusive):
 - **By file**: Destroys all resources declared in a forma file
 - **By query**: Destroys resources matching a query
+
+## Source context
+
+Use `get_codebase_context` to identify any selected maintained source. File-based destruction carries the selected `context` and uses a file inside that project or the prepared disposable directory. For no-codebase file work, use `prepare_authoring` and keep its PklProject/dependencies available. Query destruction has no local source context; do not pass `context` with `query`. Its explicit query and final simulation define the operation.
+
+After terminal destruction, remove only the corresponding declarations from the selected maintained project, preserving unrelated edits and reporting conflicts separately. A disposable workspace can be removed after outcome/retry inspection. A failed-create desired-intent diagnostic requires investigation/recovery; never infer successful deletion or remove its source merely from missing inventory.
 
 ## Workflow
 
