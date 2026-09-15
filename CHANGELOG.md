@@ -60,7 +60,7 @@ Requires formae 0.90.0 or newer.
 
 ### Added
 
-- Hosted formae users can ask their assistant to prepare and submit bug reports to support@formae.ai for likely formae, plugin, or MCP defects in any workflow. Reports include the identifiers support needs to find hosted logs and relevant sanitized local CLI diagnostics, including failures before a command reaches the agent. The assistant shows the report before sending unless the user has already authorized reporting for the session. Self-hosted users are directed to GitHub or Discord.
+- Hosted formae users can ask their assistant to prepare and submit bug reports to support@platform.engineering for likely formae, plugin, or MCP defects in any workflow. Reports include the identifiers support needs to find hosted logs and relevant sanitized local CLI diagnostics, including failures before a command reaches the agent. The assistant shows the report before sending unless the user has already authorized reporting for the session. Self-hosted users are directed to GitHub or Discord.
 
 ### Fixed
 
