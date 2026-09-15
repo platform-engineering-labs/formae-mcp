@@ -16,6 +16,7 @@ import (
 	"github.com/platform-engineering-labs/formae-mcp/internal/codebase"
 	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
+	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
 
 func TestCodebaseContextToolIsLocalAndExplicit(t *testing.T) {
@@ -45,6 +46,19 @@ func TestCodebaseContextToolIsLocalAndExplicit(t *testing.T) {
 	}
 	if got.Selection.Mode != "none" {
 		t.Fatalf("selection = %q, want explicit none", got.Selection.Mode)
+	}
+}
+
+func TestCodebaseOptInUsesProjectInitGuidance(t *testing.T) {
+	for _, want := range []string{
+		"ask for the destination directory",
+		"formae-project-init",
+		"formae://docs/forma-structure",
+		"Never register the disposable prepare_authoring directory",
+	} {
+		if !strings.Contains(tools.RegisterCodebaseDescription, want) && !strings.Contains(serverInstructions, want) {
+			t.Fatalf("codebase opt-in guidance missing %q", want)
+		}
 	}
 }
 
