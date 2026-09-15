@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
-## [Unreleased]
+## [0.9.11]
+
+Requires formae 0.90.0 or newer.
 
 ### Added
 
