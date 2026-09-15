@@ -19,6 +19,8 @@ Install via the
 
 ### Fixed
 
+- No-code outside-change guidance now explains the protection in plain language, confirms saved preferences without internal mode names, and offers automatic reconciliation choices after a stack's first revert.
+
 - Offer the future drift preference after an explicit keep decision, with a reminder in successful resolution previews. Saved choices suppress the offer; keeping one change never opts into future automatic acceptance.
 
 - Disposable authoring uses the published X.Y.Z schema coordinate for resource plugins installed from a dev build, matching `list_agent_plugins`. Returned metadata retains the actual installed version.

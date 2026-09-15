@@ -58,8 +58,8 @@ func TestGetPrompt_CheckDrift(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected TextContent, got %T", result.Messages[0].Content)
 	}
-	if !strings.Contains(tc.Text, "drift") {
-		t.Error("expected prompt to mention drift")
+	if !strings.Contains(tc.Text, "changes made outside formae") {
+		t.Error("expected prompt to mention changes made outside formae")
 	}
 }
 

@@ -86,7 +86,11 @@ func (s *Server) handleSetDriftPreference(ctx context.Context, _ *mcp.CallToolRe
 	if err == nil {
 		s.workflowTelemetry.capture(ctx, ec, identity, "", preference, "mcp_drift_preference_changed")
 	}
-	return codebaseReply(ec, preference, err)
+	result, _, replyErr := codebaseReply(ec, preference, err)
+	if replyErr == nil && err == nil {
+		result = withNotice(result, "Your preference for handling changes made outside formae is saved.")
+	}
+	return result, nil, replyErr
 }
 
 func (s *Server) handleListCodebases(ctx context.Context, _ *mcp.CallToolRequest, input tools.ProfileInput) (*mcp.CallToolResult, any, error) {

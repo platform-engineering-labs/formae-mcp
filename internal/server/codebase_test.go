@@ -67,6 +67,26 @@ func TestDriftPreferenceToolPersistsExplicitChoice(t *testing.T) {
 	}
 }
 
+func TestDriftPreferenceToolUsesPlainLanguageConfirmation(t *testing.T) {
+	session := codebaseTestSession(t, config.Classic{URL: "http://localhost", Port: 49684}, filepath.Join(t.TempDir(), "registry.json"))
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "set_drift_preference", Arguments: map[string]any{"mode": "auto_absorb"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatal(textContent(t, result))
+	}
+	text := allTextContent(t, result)
+	if !strings.Contains(text, "preference for handling changes made outside formae is saved") {
+		t.Fatalf("missing plain-language confirmation: %s", text)
+	}
+	if len(result.Content) < 2 || strings.Contains(result.Content[1].(*mcp.TextContent).Text, "auto_absorb") {
+		t.Fatalf("confirmation exposes internal preference mode: %s", text)
+	}
+}
+
 func codebaseTestSession(t *testing.T, conn config.Connection, registryPath string) *mcp.ClientSession {
 	t.Helper()
 	s := New("")

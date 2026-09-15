@@ -14,6 +14,7 @@ import (
 	"github.com/platform-engineering-labs/formae-mcp/internal/codebase"
 	"github.com/platform-engineering-labs/formae-mcp/internal/config"
 	"github.com/platform-engineering-labs/formae-mcp/internal/execctx"
+	"github.com/platform-engineering-labs/formae-mcp/internal/tools"
 )
 
 func TestDriftGuidanceRefreshesPreferenceAndRequiresPinnedResolution(t *testing.T) {
@@ -41,6 +42,25 @@ func TestDriftGuidanceRefreshesPreferenceAndRequiresPinnedResolution(t *testing.
 		}
 		if workflow["resolution_available"] != (observation != "") {
 			t.Fatalf("wrong resolution availability: %#v", workflow)
+		}
+	}
+}
+
+func TestDriftGuidanceUsesPlainLanguageForNoCodeUsers(t *testing.T) {
+	s := New("")
+	r := codebase.Registry{Path: filepath.Join(t.TempDir(), "codebases.json")}
+	s.codebaseRegistry = func() (codebase.Registry, error) { return r, nil }
+	ec := execctx.Context{Conn: config.Classic{URL: "http://localhost", Port: 1234}}
+	err := &commandHTTPError{status: 409, body: []byte(`{"error":"ReconcileRejected","data":{"ObservationID":"o","ModifiedStacks":{"blog":{"ModifiedResources":[{"ResourceID":"r"}]}}}}`)}
+	text := allTextContent(t, s.applyErrorResult(context.Background(), ec, err))
+	for _, unwanted := range []string{"since the last reconcile", "drift preference", "auto_absorb"} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("user-facing guidance exposes internal term %q: %s", unwanted, text)
+		}
+	}
+	for _, wanted := range []string{"changed outside formae", "protects the user from overwriting", "keep this change or revert it"} {
+		if !strings.Contains(text, wanted) {
+			t.Fatalf("missing plain-language guidance %q: %s", wanted, text)
 		}
 	}
 }
@@ -113,6 +133,32 @@ func TestResolutionPreviewOffersPreferenceOnlyWhenUnset(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestResolutionPreviewOffersAutomaticReconcileAfterFirstRevert(t *testing.T) {
+	s := New("")
+	registry := codebase.Registry{Path: filepath.Join(t.TempDir(), "registry.json")}
+	s.codebaseRegistry = func() (codebase.Registry, error) { return registry, nil }
+	ec := execctx.Context{Conn: config.Classic{URL: "http://localhost", Port: 1234}}
+	input := tools.ApplyFormaInput{Mode: "reconcile", Simulate: true, Context: &tools.SourceContext{Mode: "none"}, Resolution: &tools.DriftResolution{Decisions: []tools.DriftDecision{{ResourceID: "r", Action: "revert"}}}}
+	result := s.keepPreferenceNotice(context.Background(), ec, input, []byte(`{"Review":{"ReviewID":"review"}}`))
+	text := result
+	for _, wanted := range []string{"automatically keep this stack aligned", "this stack", "all stacks", "decide separately for each stack", "create_inline_policy", "auto_reconcile"} {
+		if !strings.Contains(text, wanted) {
+			t.Fatalf("missing first-revert policy guidance %q: %s", wanted, text)
+		}
+	}
+}
+
+func TestResolutionPreviewDoesNotOfferNoCodePolicyForMaintainedCodebase(t *testing.T) {
+	s := New("")
+	registry := codebase.Registry{Path: filepath.Join(t.TempDir(), "registry.json")}
+	s.codebaseRegistry = func() (codebase.Registry, error) { return registry, nil }
+	ec := execctx.Context{Conn: config.Classic{URL: "http://localhost", Port: 1234}}
+	input := tools.ApplyFormaInput{Mode: "reconcile", Simulate: true, Context: &tools.SourceContext{Mode: "codebase", BindingID: "binding"}, Resolution: &tools.DriftResolution{Decisions: []tools.DriftDecision{{ResourceID: "r", Action: "revert"}}}}
+	if got := s.keepPreferenceNotice(context.Background(), ec, input, []byte(`{"Review":{"ReviewID":"review"}}`)); strings.Contains(got, "automatically keep this stack aligned") {
+		t.Fatal("maintained codebase received no-code policy guidance")
 	}
 }
 

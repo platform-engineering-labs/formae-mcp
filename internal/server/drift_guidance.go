@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/platform-engineering-labs/formae-mcp/internal/codebase"
@@ -21,7 +22,7 @@ func (e *commandHTTPError) Error() string {
 	return fmt.Sprintf("agent returned status %d: %s", e.status, e.body)
 }
 
-const driftDecisionGuidance = `Describe the infrastructure decision in either codebase mode: "A change was made outside formae. Do you want to keep it or revert it?" Identify the resource and actionable properties. For a patch say "An earlier formae patch changed this resource; keep that change as desired state or revert it?" Do not infer permission to accept unrelated drift from "add", "update", or "preserve existing labels". Keep requested edits separate and retain the original full declaration for resolution; do not edit source to pre-absorb drift. Use one combined soft reconcile with ObservationID and all absorb/revert Decisions, simulate to obtain ReviewID, then submit after ordinary confirmation with a stable IdempotencyKey. Never substitute force. Suggest an optional factual message in that final confirmation, e.g. "Keep external bucket label and add application label"; the user can accept, edit or clear it. Acceptance is recorded centrally; update a selected maintained codebase afterward.`
+const driftDecisionGuidance = `Before making the requested change, formae found that managed infrastructure changed outside formae. This guardrail protects the user from overwriting a change they may want to keep. Explain the affected resource and properties, then ask: "Do you want to keep this change or revert it?" For a formae patch say: "An earlier formae update changed this resource; should that change remain or should it be reverted?" Do not infer permission to accept unrelated changes from "add", "update", or "preserve existing labels". Keep requested edits separate and retain the original full declaration for resolution; do not edit source to pre-accept the change. Use one combined soft reconcile with ObservationID and all absorb/revert Decisions, simulate to obtain ReviewID, then submit after ordinary confirmation with a stable IdempotencyKey. Never substitute force. Suggest an optional factual message in that final confirmation, e.g. "Keep the existing label and add the application label"; the user can accept, edit or clear it. Acceptance is recorded centrally; update a selected maintained codebase afterward.`
 
 func (s *Server) applyErrorResult(ctx context.Context, ec execctx.Context, err error) *mcp.CallToolResult {
 	result := errorResult(err)
@@ -74,20 +75,24 @@ func (s *Server) currentDriftPreference(ctx context.Context, ec execctx.Context)
 	return preference, preferenceError
 }
 
-const afterKeepPreferenceGuidance = `Only after the user explicitly chose keep, and only if you have not already asked this preference question during this operation, ask: "For future changes, should I keep asking, or automatically keep changes that do not conflict with your requested edits? This includes changes made outside formae, formae patches, and deletions; only conflicts require a keep/revert decision." A revert-only decision does not trigger this offer. Save only an explicit answer with set_drift_preference: prompt for keep asking, auto_absorb for automatically keep. Keeping this change is not consent to future automatic acceptance. No answer leaves prompt as the default; do not save a choice or block the current apply on an unanswered preference question. Ordinary apply confirmation remains required.`
+const afterKeepPreferenceGuidance = `Only after the user explicitly chose keep, and only if you have not already asked this preference question during this operation, ask: "For future changes made outside formae, should I keep asking, or automatically keep changes that do not conflict with your requested edits? Changes made by other tools and formae updates are included; conflicts and removals still need your decision." A revert-only decision does not trigger this offer. Save only an explicit answer with set_drift_preference. Keeping this change is not consent to future automatic acceptance. No answer leaves the current setting unchanged; do not save a choice or block the current apply on an unanswered preference question. Ordinary apply confirmation remains required.`
+
+const afterRevertPolicyGuidance = `After the user explicitly chooses to revert a change, and only when this is the first such decision for that stack, ask: "Would you like formae to automatically keep this stack aligned with its intended state in the future?" Offer three choices: install it for this stack, install it for all stacks, or decide separately for each stack. Explain that automatic reconciliation periodically restores a stack when something changes outside formae; conflicts and the current apply still require confirmation. If the user chooses a policy, use create_inline_policy with policy_type=auto_reconcile and the normal policy workflow; do not install it without explicit confirmation. This policy question does not replace confirmation of the current apply, and do not repeat it for a stack that already has the policy or where this offer was already made.`
 
 func (s *Server) keepPreferenceNotice(ctx context.Context, ec execctx.Context, input tools.ApplyFormaInput, result []byte) string {
 	if !input.Simulate || input.Mode != "reconcile" || input.Resolution == nil {
 		return ""
 	}
-	kept := false
+	kept, reverted := false, false
 	for _, decision := range input.Resolution.Decisions {
 		if decision.Action == "absorb" {
 			kept = true
-			break
+		}
+		if decision.Action == "revert" {
+			reverted = true
 		}
 	}
-	if !kept {
+	if !kept && !reverted {
 		return ""
 	}
 	var response struct{ Review struct{ ReviewID string } }
@@ -95,10 +100,12 @@ func (s *Server) keepPreferenceNotice(ctx context.Context, ec execctx.Context, i
 		return ""
 	}
 	preference, unavailable := s.currentDriftPreference(ctx, ec)
-	if unavailable || preference.Explicit {
-		return ""
+	var notices []string
+	if kept && !unavailable && !preference.Explicit {
+		notices = append(notices, afterKeepPreferenceGuidance)
 	}
-	// The harness must distinguish an explicit keep from automatically chosen absorb.
-	// A successful preview alone is not consent to future acceptance.
-	return afterKeepPreferenceGuidance
+	if reverted && input.Context != nil && input.Context.Mode == "none" {
+		notices = append(notices, afterRevertPolicyGuidance)
+	}
+	return strings.Join(notices, " ")
 }
