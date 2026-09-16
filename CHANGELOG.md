@@ -14,6 +14,12 @@ Install via the
 
 ### Fixed
 
+- No-codebase responses now keep internal infrastructure terminology out of
+  user-facing explanations of changes made outside formae. The first notice
+  presents this as a positive safety guardrail, and follow-up apply and
+  preference messages describe the outcome without exposing implementation
+  steps or command modes.
+
 - The launcher now silently refreshes the `formae` binary it provisioned under
   `~/.formae-ai/opt` on startup, so managed MCP installations catch up to a
   newer agent without an interactive upgrade. Binaries found in `PATH`,

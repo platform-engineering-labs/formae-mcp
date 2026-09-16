@@ -47,3 +47,8 @@ on the harness PATH. Tool calls remain preferred where available.
 A Failed command remains in history with its recorded outcome. Diagnose outstanding failures before preparing a corrective reconcile. The user may retain intent for retry, revise the declaration, or abandon it. Explicitly omitting a failed-create declaration from a complete reconcile withdraws that intent even when there are zero cloud operations; the recorded reconcile prevents it returning on the next desired extraction. Withdrawal does not prove cloud absence or undo partial effects: preserve uncertainty and investigate the provider outcome separately. Do not remove a declaration merely because its creation failed.
 
 An unavailable literal secret cannot be reconstructed from history. Preserve its classification and the hashed-value error; obtain plaintext from an authorized source or keep a valid reference/generator expression. Never substitute a digest or write secrets to the local registry.
+
+
+## No-codebase language
+
+When working in no-codebase mode, keep apply updates in product language. Say “changes made outside formae” and “current setup”; do not expose drift, reconcile, absorb, force-sync, or internal command modes to the user. If an outside change requires a separate operation before the requested update, say “I’ll record that outside change, then apply your requested update,” rather than describing multiple reconciles or a drift decision. The first detection should explain formae’s positive safety guardrail: it checks for outside changes so they are not overwritten unexpectedly, while leaving the choice of keeping or restoring them with the user. Internal terms are for tool calls and private reasoning only.
