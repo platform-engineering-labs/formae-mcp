@@ -180,6 +180,11 @@ resolve_formae() {
             provision_plugin oidc "$_rchan" "$HOME/.pel" \
                 || echo "provision_plugin: oidc not installed; a hosted sign-in will say so" >&2
             return 0
+        elif [ -n "${FORMAE_AUTO_UPDATE_MANAGED:-}" ]; then
+            # The launcher owns this copy, so refresh it silently on startup.
+            # Keep the normal provisioning path below so the auth plugin is
+            # still ensured for a managed installation.
+            FORMAE_FORCE_PROVISION=1 provision_pkg formae "$_rchan" || return 1
         fi
     done
 

@@ -14,6 +14,12 @@ Install via the
 
 ### Fixed
 
+- The launcher now silently refreshes the `formae` binary it provisioned under
+  `~/.formae-ai/opt` on startup, so managed MCP installations catch up to a
+  newer agent without an interactive upgrade. Binaries found in `PATH`,
+  `~/.local/bin`, `~/bin`, or supplied through `FORMAE_BIN` remain user-owned
+  and are never replaced by the plugin.
+
 - Assistants now recognize a `Rejected` resource update as protection against a newly detected out-of-band cloud change, even when the command reports `Failed`. Guidance directs them to review the refreshed state, simulate again, and resolve whether to absorb or overwrite the change before retrying. A successful simulation does not replace that decision. Dependents skipped because of the rejection are distinguished from independent failures, avoiding unnecessary troubleshooting.
 
 ## [0.9.1]
@@ -59,7 +65,7 @@ Requires formae 0.89.0 or newer.
 
 - `get_command_status` can wait for a command to finish instead of returning whatever its state is at that instant, so asking what happened after an apply no longer means polling.
 
-- The MCP now warns when the connected formae agent is newer than your local `formae`, so you can tell when authoring may not reflect the agent's latest capabilities. The notice points at `/formae:upgrade`, which fetches the newer `formae` after you confirm (never silently in classic mode).
+- The MCP now warns when the connected formae agent is newer than your local `formae`, so you can tell when authoring may not reflect the agent's latest capabilities. Managed installations refresh on the next launch; `/formae:upgrade` remains available for an explicit refresh.
 
 ### Changed
 
@@ -79,7 +85,7 @@ Requires formae 0.89.0 or newer.
 
 - Every agent request is built by one internal executor, so cancellation and timeouts apply uniformly across every tool.
 
-- The plugin no longer installs a second `formae` alongside one you already have. On launch it looks for yours (`PATH`, then `/opt/pel/bin`, `/usr/local/bin`, `~/.local/bin`, `~/bin`) and uses it; it downloads one into `~/.formae-ai/opt` only when the machine has none. Previously it downloaded a copy on every launch and then ran whichever `formae` came first on `PATH`, so the downloaded one was usually dead weight, and `/formae:upgrade` could upgrade a copy the plugin was not running. Installs are compared by their resolved location, so a symlink pointing into the managed tree, or a home directory that is itself a symlink, is not mistaken for a second install that the plugin then declines to upgrade.
+- The plugin no longer installs a second `formae` alongside one you already have. On launch it looks for yours (`PATH`, then `/opt/pel/bin`, `/usr/local/bin`, `~/.local/bin`, `~/bin`) and uses it; it downloads one into `~/.formae-ai/opt` only when the machine has none, and silently refreshes that managed copy on subsequent launches. Previously it downloaded a copy on every launch and then ran whichever `formae` came first on `PATH`, so the downloaded one was usually dead weight, and `/formae:upgrade` could upgrade a copy the plugin was not running. Installs are compared by their resolved location, so a symlink pointing into the managed tree, or a home directory that is itself a symlink, is not mistaken for a second install that the plugin then declines to upgrade.
 
 - The version-skew notice now says which upgrade applies: `/formae:upgrade` for the copy the plugin installed, or the path of your own install, which the plugin will not change.
 
