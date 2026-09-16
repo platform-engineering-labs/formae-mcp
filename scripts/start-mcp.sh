@@ -37,7 +37,7 @@ add_formae_bin_to_path() {
 if [ -n "${FORMAE_MCP_DEV:-}" ]; then
     echo "start-mcp: FORMAE_MCP_DEV set — building from source" >&2
     ( cd "$ROOT" && go build -o "$ROOT/bin/formae-mcp" ./cmd/formae-mcp )
-    resolve_formae "$channel"
+    FORMAE_AUTO_UPDATE_MANAGED=1 resolve_formae "$channel"
     export FORMAE_BIN FORMAE_BIN_MANAGED
     add_formae_bin_to_path
     exec "$ROOT/bin/formae-mcp" "$@"
@@ -46,8 +46,8 @@ fi
 # Plugin-version marker: if the plugin version has changed since the last
 # launch, force a refresh of the MCP binary so an updated plugin release is
 # not blocked by the existence fast-path in provision_pkg.
-# The marker is intentionally NOT used for formae itself — that binary is only
-# upgraded via an explicit /formae:upgrade invocation (pinned-CLI policy).
+# The marker is intentionally NOT used for formae itself — managed formae is
+# refreshed on every launch, while user-owned installs remain untouched.
 _plugin_version="$(grep -m1 '"version"' "$ROOT/.claude-plugin/plugin.json" \
     | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
 _marker="$HOME/.formae-ai/opt/.formae-mcp.plugin-version"
@@ -69,7 +69,7 @@ if [ ! -x "$FORMAE_MCP_BIN" ]; then
     exit 1
 fi
 
-resolve_formae "$channel"
+FORMAE_AUTO_UPDATE_MANAGED=1 resolve_formae "$channel"
 export FORMAE_BIN FORMAE_BIN_MANAGED
 
 # formae's own bin directory goes on PATH, and this is not cosmetic.

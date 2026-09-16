@@ -196,9 +196,10 @@ longer read. Configure a profile instead.
 There is exactly one `formae` per machine. On launch the plugin looks for yours
 (on `PATH`, then `/opt/pel/bin`, then `/usr/local/bin`) and uses it; only when it
 finds none does it download one into `~/.formae-ai/opt`. It never installs a
-second copy alongside yours, and it never upgrades an install it did not create —
-`/formae:upgrade` tells you which case you are in and, for your own install, gives
-you the command to run.
+second copy alongside yours. A copy it provisioned under `~/.formae-ai/opt` is
+silently refreshed on launch; an install it did not create is never upgraded by
+the plugin. `/formae:upgrade` tells you which case you are in and, for your own
+install, gives you the command to run.
 
 To point the plugin at a specific build, set `FORMAE_BIN` to its path; it is used
 verbatim and treated as your own install. `FORMAE_MCP_CHANNEL` (`stable` by

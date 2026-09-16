@@ -31,13 +31,12 @@ func TestSkewNotice(t *testing.T) {
 	}
 }
 
-// An upgrade instruction is only actionable if it matches where formae lives.
-// The managed copy is ours and upgrades without sudo; the user's own install
-// does not, and telling them otherwise sends them at a command that fails.
+// The notice explains the automatic managed refresh and distinguishes it from
+// a user-owned install that the plugin will not touch.
 func TestSkewNoticeTellsThemWhichUpgradeTheyNeed(t *testing.T) {
 	managed := skewNotice("0.92.0", "0.88.0", "/home/u/.formae-ai/opt/bin/formae", true)
-	if !strings.Contains(managed, "/formae:upgrade") {
-		t.Errorf("managed notice should point at the sudo-free upgrade: %q", managed)
+	if !strings.Contains(managed, "next launch") {
+		t.Errorf("managed notice should explain the automatic refresh: %q", managed)
 	}
 	if strings.Contains(managed, "sudo") {
 		t.Errorf("managed notice should not mention sudo: %q", managed)

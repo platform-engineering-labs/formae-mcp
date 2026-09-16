@@ -70,6 +70,10 @@ Keep temporary Pkl/JSON files, project directories, source diffs, cache paths, e
 
 When context.mode = codebase, preserve the selected project's abstractions and keep it synchronized after central acceptance. Show relevant source changes and report source conflicts separately from the infrastructure result. These source-aware steps apply to the selected maintained project, not to disposable work. A skill's file-layout or show-diff instructions describe internal work in none mode. For first target creation without a codebase, prepare_authoring may start with no stacks; retain that empty stack scope and author only the target.
 
+## No-codebase presentation
+
+When assisting a user who is not maintaining an infrastructure codebase, keep internal implementation details out of the conversation. Say **changes made outside formae** instead of drift, and **bring the current setup up to date** instead of reconcile or force-sync. Do not expose internal terms such as drift, reconcile, force-sync, absorb, Rejected, or command modes in user-facing explanations. On the first detection, explain the positive **safety guardrail**: formae checks for changes made outside it so another person's work is not overwritten unexpectedly, and the user chooses whether to keep or restore those changes. If the choice requires two operations, describe the outcome in plain language (for example, “I’ll record that outside change, then make your requested update”), never as two reconciles or a drift decision. After completion, say that the outside change is now part of the current setup or was restored, and that the requested change was applied. Describe a saved preference as “your preference for handling changes made outside formae has been saved.”
+
 ## The IaC Language
 
 Formae uses PKL (Apple's configuration language) for forma files. If you need to write or read a forma file:

@@ -106,6 +106,12 @@ run_case "existing managed copy stays managed" \
     'stub_bin "$managed"' \
     1 '$HOME/.formae-ai/opt:oidc' '$managed'
 
+# A managed copy is refreshed silently when the launcher enables its automatic
+# update policy.
+run_case "managed copy is refreshed when auto-update is enabled" \
+    'stub_bin "$managed"; PATH="$HOME/.formae-ai/opt/bin:$PATH"; FORMAE_AUTO_UPDATE_MANAGED=1' \
+    1 '$HOME/.formae-ai/opt:formae $HOME/.formae-ai/opt:oidc' '$managed'
+
 # The managed copy appearing on PATH must not be mistaken for a user install,
 # or we would report it as needing sudo to upgrade.
 run_case "managed copy on PATH is still managed" \

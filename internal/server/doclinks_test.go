@@ -122,3 +122,16 @@ func TestServerInstructionsAuthoringSection(t *testing.T) {
 		}
 	}
 }
+
+func TestServerInstructionsNoCodebaseLanguage(t *testing.T) {
+	for _, want := range []string{
+		"No-codebase presentation",
+		"changes made outside formae",
+		"safety guardrail",
+		"Do not expose internal terms",
+	} {
+		if !strings.Contains(serverInstructions, want) {
+			t.Errorf("server instructions missing no-codebase language rule %q", want)
+		}
+	}
+}

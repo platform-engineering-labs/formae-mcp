@@ -3,9 +3,9 @@ name: upgrade
 description: Use to upgrade the local formae when the connected agent is newer (classic mode) — always confirms before touching anything and warns that it may move a pinned formae.
 ---
 
-# Upgrade formae (channel-aware, non-silent)
+# Upgrade formae (channel-aware)
 
-Triggered when `check_health` or a version-skew notice reports that the connected agent is newer than the local `formae` binary.
+Triggered when `check_health` or a version-skew notice reports that the connected agent is newer than the local `formae` binary. The launcher refreshes its own managed copy on startup; this skill is for an explicit refresh or for an install outside the managed tree.
 
 ## Step 1 — Show the situation and get confirmation
 
@@ -19,7 +19,7 @@ Before doing anything:
    ```
 3. State the plan: "I will upgrade your local formae to match the agent."
 4. Warn the user: upgrading may move a `formae` they deliberately pinned to an older version in order to stay compatible with a specific agent. If they are running a self-managed agent they want to keep in sync at a specific version, they should upgrade the agent first or decline here.
-5. **Ask for explicit confirmation.** Do NOT proceed without it. Never upgrade silently in classic mode.
+5. **Ask for explicit confirmation** before this explicit upgrade. Do NOT proceed without it.
 
 ## Step 2 — Determine where formae lives
 

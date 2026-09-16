@@ -21,6 +21,8 @@ Requires formae 0.90.0 or newer.
 
 ### Fixed
 
+- No-codebase follow-up apply messages now keep internal infrastructure terminology out of the conversation and describe multi-step outside-change handling in plain language.
+
 - No-code outside-change guidance now explains the protection in plain language, confirms saved preferences without internal mode names, and offers automatic reconciliation choices after a stack's first revert.
 
 - Offer the future drift preference after an explicit keep decision, with a reminder in successful resolution previews. Saved choices suppress the offer; keeping one change never opts into future automatic acceptance.
