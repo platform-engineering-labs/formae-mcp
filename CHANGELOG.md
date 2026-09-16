@@ -10,23 +10,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
-## [0.9.2]
+## [0.9.11]
+
+Requires formae 0.90.0 or newer.
+
+### Added
+
+- Local installation-scoped drift preferences: ask each time (default), or automatically keep nonconflicting external changes and formae patches, including deletions. Conflicts still require a decision, and the combined apply still requires confirmation. Previously saved external-only choices keep their narrower scope until the user explicitly changes them.
+- MCP workflow analytics for effective codebase mode and drift preference, using the existing PostHog destination and honoring the CLI usage-reporting opt-out. Events contain categorical settings and an anonymous connection identifier (including the local CLI client ID for classic connections), not source paths, resource properties or command messages.
 
 ### Fixed
 
-- No-codebase responses now keep internal infrastructure terminology out of
-  user-facing explanations of changes made outside formae. The first notice
-  presents this as a positive safety guardrail, and follow-up apply and
-  preference messages describe the outcome without exposing implementation
-  steps or command modes.
+- No-codebase follow-up apply messages now keep internal infrastructure terminology out of the conversation and describe multi-step outside-change handling in plain language.
 
-- The launcher now silently refreshes the `formae` binary it provisioned under
-  `~/.formae-ai/opt` on startup, so managed MCP installations catch up to a
-  newer agent without an interactive upgrade. Binaries found in `PATH`,
-  `~/.local/bin`, `~/bin`, or supplied through `FORMAE_BIN` remain user-owned
-  and are never replaced by the plugin.
+- No-code outside-change guidance now explains the protection in plain language, confirms saved preferences without internal mode names, and offers automatic reconciliation choices after a stack's first revert.
+
+- Offer the future drift preference after an explicit keep decision, with a reminder in successful resolution previews. Saved choices suppress the offer; keeping one change never opts into future automatic acceptance.
+
+- Disposable authoring uses the published X.Y.Z schema coordinate for resource plugins installed from a dev build, matching `list_agent_plugins`. Returned metadata retains the actual installed version.
+
+- Drift rejections now include keep/revert guidance and the current local preference in the tool response, in both codebase modes. Adding a resource property does not imply acceptance of unrelated drift. Combined changes use reviewed reconciliation; agents without that protocol produce an explicit limitation rather than a force workaround. Successful previews remind the harness to offer an editable or empty command message.
+
+- Inventory Pkl exports now carry explicit actual-state/partial-source metadata and a warning alongside the unchanged raw Pkl. Existing-stack authoring points to complete desired extraction, preserving unabsorbed drift as an explicit reconcile decision.
+
+- Source selection precedes IaC file access and is reused for the same installation/workspace. No-codebase authoring uses a fresh operation project under `~/.formae-ai/scratch/` and desired extraction instead of repeatedly searching for local projects or treating stale files as desired intent.
+
+- Cloud inventory questions default to formae queries even when the user names only a provider. Results include managed and discovered resources unless narrowed, and empty inventory is distinguished from an empty cloud account.
+
+- Ordinary resource edits, including a single label, consistently use complete-stack soft reconcile. Patch guidance now requires an explicit patch request or incident/hotfix intent, preserving drift decisions and selected source context.
+
+- Without a maintained codebase, setup and infrastructure workflows describe resources, changes and outcomes while keeping disposable source preparation internal. Initial target creation no longer requires a persistent project or placeholder stack. Maintained-codebase workflows continue to report source changes and conflicts.
+- Drift prompts distinguish changes detected outside formae from temporary patches made through formae, and separate keep/revert decisions from newly requested changes.
+- The MCP reports its selected formae executable to the assistant, including managed installations outside the shell PATH. Schema lookup guidance uses exact installed versions instead of broad searches through local caches.
+
+### Added
+
+- Work with infrastructure without maintaining a local IaC project. Hosted authoring uses disposable complete desired Pkl source and schema dependencies; keeping a project is an explicit opt-in. Local project registration and per-call selection keep concurrent projects and installations independent.
+- Resolve drift centrally with explicit absorb/revert choices, a combined final preview, recorded review identity and idempotent submission. Maintained-source catch-up uses the command's recorded desired contributions and reports local conflicts separately from the infrastructure outcome. These workflows require support from the connected agent.
+- Policy planners accept a per-call profile and selected source context, including disposable Pkl workspaces. Command intent messages can be edited or deliberately cleared during ordinary final confirmation.
+
+### Fixed
+
+- A hosted sign-in works with a formae that was already installed before the plugin. The launcher adopts an existing `formae` rather than downloading its own, but only installed the `oidc` auth plugin beside a copy it had downloaded itself. The launcher now installs the plugin into the user-writable plugin directory and tells the user to restart the assistant.
+- Real apply commands with a synchronous no-change response are accepted instead of reported as failures.
+
+### Changed
+
+- Hosted bug reports use the support recipient configured by the formae console (default `support@platform.engineering`). The MCP shows that destination before authorization and refuses to send if it changes after preparation.
+
+## [0.9.2]
+
+### Added
+
+- Hosted formae users can ask their assistant to prepare and submit bug reports to support@platform.engineering for likely formae, plugin, or MCP defects in any workflow. Reports include the identifiers support needs to find hosted logs and relevant sanitized local CLI diagnostics, including failures before a command reaches the agent. The assistant shows the report before sending unless the user has already authorized reporting for the session. Self-hosted users are directed to GitHub or Discord.
+
+### Fixed
 
 - Assistants now recognize a `Rejected` resource update as protection against a newly detected out-of-band cloud change, even when the command reports `Failed`. Guidance directs them to review the refreshed state, simulate again, and resolve whether to absorb or overwrite the change before retrying. A successful simulation does not replace that decision. Dependents skipped because of the rejection are distinguished from independent failures, avoiding unnecessary troubleshooting.
+
 
 ## [0.9.1]
 
@@ -71,7 +112,7 @@ Requires formae 0.89.0 or newer.
 
 - `get_command_status` can wait for a command to finish instead of returning whatever its state is at that instant, so asking what happened after an apply no longer means polling.
 
-- The MCP now warns when the connected formae agent is newer than your local `formae`, so you can tell when authoring may not reflect the agent's latest capabilities. Managed installations refresh on the next launch; `/formae:upgrade` remains available for an explicit refresh.
+- The MCP now warns when the connected formae agent is newer than your local `formae`, so you can tell when authoring may not reflect the agent's latest capabilities. The notice points at `/formae:upgrade`, which fetches the newer `formae` after you confirm (never silently in classic mode).
 
 ### Changed
 
@@ -91,7 +132,7 @@ Requires formae 0.89.0 or newer.
 
 - Every agent request is built by one internal executor, so cancellation and timeouts apply uniformly across every tool.
 
-- The plugin no longer installs a second `formae` alongside one you already have. On launch it looks for yours (`PATH`, then `/opt/pel/bin`, `/usr/local/bin`, `~/.local/bin`, `~/bin`) and uses it; it downloads one into `~/.formae-ai/opt` only when the machine has none, and silently refreshes that managed copy on subsequent launches. Previously it downloaded a copy on every launch and then ran whichever `formae` came first on `PATH`, so the downloaded one was usually dead weight, and `/formae:upgrade` could upgrade a copy the plugin was not running. Installs are compared by their resolved location, so a symlink pointing into the managed tree, or a home directory that is itself a symlink, is not mistaken for a second install that the plugin then declines to upgrade.
+- The plugin no longer installs a second `formae` alongside one you already have. On launch it looks for yours (`PATH`, then `/opt/pel/bin`, `/usr/local/bin`, `~/.local/bin`, `~/bin`) and uses it; it downloads one into `~/.formae-ai/opt` only when the machine has none. Previously it downloaded a copy on every launch and then ran whichever `formae` came first on `PATH`, so the downloaded one was usually dead weight, and `/formae:upgrade` could upgrade a copy the plugin was not running. Installs are compared by their resolved location, so a symlink pointing into the managed tree, or a home directory that is itself a symlink, is not mistaken for a second install that the plugin then declines to upgrade.
 
 - The version-skew notice now says which upgrade applies: `/formae:upgrade` for the copy the plugin installed, or the path of your own install, which the plugin will not change.
 
