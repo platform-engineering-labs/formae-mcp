@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Install via the
 [`platform-engineering-labs/formae-marketplace`](https://github.com/platform-engineering-labs/formae-marketplace).
 
+## [Unreleased]
+
+### Fixed
+
+- Command-history requests now query the agent-wide command list and explicitly route command log/history questions to `list_commands`.
+- Command history descriptions document that intent messages are optional and may be absent.
+
 ## [0.9.12]
 
 Requires formae 0.90.0 or newer.

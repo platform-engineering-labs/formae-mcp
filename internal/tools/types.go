@@ -34,7 +34,7 @@ type GetCommandStatusInput struct {
 
 // ListCommandsInput is the input for the list_commands tool.
 type ListCommandsInput struct {
-	Query      string `json:"query,omitempty" jsonschema:"Query to filter commands. Supported fields: id, client, command (apply/destroy), status (pending/in_progress/completed/failed), stack, managed. Use 'client:me' to filter to your own commands. Leave empty for most recent commands."`
+	Query      string `json:"query,omitempty" jsonschema:"Query to filter commands. Supported fields: id, client, command (apply/destroy), status (pending/in_progress/completed/failed), stack, managed. Use 'client:me' to filter to your own commands. Leave empty for the agent's recent command history."`
 	MaxResults string `json:"max_results,omitempty" jsonschema:"Maximum number of commands to return. Defaults to 10."`
 	Profile    string `json:"profile,omitempty" jsonschema:"Preferred way to target a named formae environment/agent for THIS call only, without changing global state. Use this in preference to use_profile for per-session targeting: the active profile is global and shared with the user's CLI and any other concurrent sessions, so switching it can hijack work elsewhere. Leave empty to use the active profile. See list_profiles for names. Requires formae >= 0.87.0."`
 }

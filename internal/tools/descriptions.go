@@ -48,9 +48,9 @@ Use this tool to check on the progress of a previously submitted apply or destro
 
 A resource update in state Rejected means the pre-update cloud read detected an out-of-band change not yet synchronized into inventory. The observed state has been saved and that update was stopped to protect it. The overall command can be Failed without a provider error. Compare refreshed resource state with the forma, re-simulate, and explicitly resolve drift before retrying: use the central absorb/revert review and submission workflow in apply_forma, retaining the original declaration through review and obtaining approval for overwrite. Catch up an explicitly selected maintained project only after central acceptance. A successful simulation does not establish approval; do not rely on a ReconcileRejected response to enforce the decision. Other resources may have succeeded; Failed dependents with empty errors may have been skipped due to the rejection. See formae://docs/troubleshooting.`
 
-const ListCommandsDescription = `List recent formae commands and their statuses. Returns command history with state, timestamps, and resource update summaries.
+const ListCommandsDescription = `List the formae command history and statuses. Returns recent commands from the agent with state, timestamps, optional user-provided intent messages, and resource update summaries. A command may have no message when its caller did not provide one.
 
-Use this tool when the user asks about running commands, recent deployments, command history, or what failed.
+Use this tool when the user asks about a command log, command history, recent deployments, what formae ran, or what failed. Do not use get_agent_stats or a single-command status lookup for a history request.
 
 A Failed command can contain Rejected resource updates: drift protection, not necessarily a provider failure. Use get_command_status to inspect resource states, then re-simulate and handle drift before retrying. See formae://docs/troubleshooting.
 
