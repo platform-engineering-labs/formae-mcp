@@ -12,6 +12,10 @@ Install via the
 
 ## [Unreleased]
 
+## [0.9.13]
+
+Requires formae 0.90.0 or newer.
+
 ### Fixed
 
 - Command-history requests now query the agent-wide command list and explicitly route command log/history questions to `list_commands`.
