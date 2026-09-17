@@ -389,6 +389,9 @@ func TestGetCommandStatus(t *testing.T) {
 func TestListCommands(t *testing.T) {
 	agent := mockAgent(t, map[string]http.HandlerFunc{
 		"GET /api/v1/commands/status": func(w http.ResponseWriter, r *http.Request) {
+			if got := r.URL.Query().Get("scope"); got != "agent" {
+				t.Fatalf("list_commands scope = %q, want agent", got)
+			}
 			_, _ = fmt.Fprint(w, `{"Commands":[{"id":"cmd-1","status":"completed"}]}`)
 		},
 	})

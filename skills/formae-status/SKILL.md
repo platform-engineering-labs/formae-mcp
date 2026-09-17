@@ -5,7 +5,7 @@ description: "Use when the user asks about running commands, deployment progress
 
 # Command Status and Monitoring
 
-Use `list_commands` and `get_command_status` MCP tools to monitor formae operations.
+Use `list_commands` and `get_command_status` MCP tools to monitor formae operations. `list_commands` is the command log/history view; it queries the agent-wide history by default.
 
 ## Targeting an environment (`profile`)
 
@@ -23,6 +23,8 @@ Use `list_commands` and `get_command_status` MCP tools to monitor formae operati
 |---|---|
 | "What's running?" | `list_commands` with `status:in_progress` |
 | "Show recent commands" | `list_commands` (no query, defaults to 10 most recent) |
+| "Show the command log/history" | `list_commands` (no query, agent-wide history) |
+| "What did formae run?" | `list_commands` (no query, agent-wide history) |
 | "What failed?" | `list_commands` with `status:failed` |
 | "Show my commands" | `list_commands` with `client:me` |
 | "Status of cmd-123" | `get_command_status` with `command_id: cmd-123` |

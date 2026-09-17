@@ -304,6 +304,11 @@ func (c *FormaeClient) GetCommandStatus(ctx context.Context, commandID string, c
 // ListCommands retrieves command statuses matching an optional query.
 func (c *FormaeClient) ListCommands(ctx context.Context, query string, maxResults string, clientID string) (json.RawMessage, error) {
 	q := url.Values{}
+	// The MCP history tool represents the agent-wide command history. The
+	// agent defaults an empty query to the caller's latest command, so make
+	// the intended multi-command scope explicit. Non-empty queries still use
+	// their own filters (the agent ignores scope in that case).
+	q.Set("scope", "agent")
 	if query != "" {
 		q.Set("query", query)
 	}
