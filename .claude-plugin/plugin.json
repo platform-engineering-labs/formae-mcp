@@ -1,6 +1,6 @@
 {
   "name": "formae",
-  "description": "MCP server and skills for formae infrastructure-as-code: manage cloud resources, handle drift, discover infrastructure, and build plugins",
+  "description": "MCP server and skills for formae: hosted or self-hosted, connect cloud accounts, manage resources, handle drift, and build plugins",
   "version": "0.9.13",
   "author": {
     "name": "Platform Engineering Labs"
@@ -15,7 +15,13 @@
     "cloud",
     "mcp",
     "drift",
-    "discovery"
+    "discovery",
+    "infrastructure-as-code",
+    "pkl",
+    "aws",
+    "azure",
+    "gcp",
+    "kubernetes"
   ],
   "mcpServers": {
     "formae": {
